@@ -1,8 +1,8 @@
-# Plateforme Web - Gestion des Pupilles de la Nation (DAPPN)
+# Plateforme Web - Orphelins et Enfants Vulnérables (OEV)
 
 ![Armoiries du Burkina Faso](public/assets/images/armoiries-1000x1174.png)
 
-Bienvenue sur la plateforme web officielle de la **Direction d'Accompagnement et de Prise en charge des Pupilles de la Nation (DAPPN)**. Cette application est développée avec le framework **Laravel** et intègre à la fois un **Portail Public Institutionnel** et un **Espace Administration / Agents DAPPN**.
+Bienvenue sur la plateforme web de prise en charge des **Orphelins et Enfants Vulnérables (OEV)**. Cette application est développée avec le framework **Laravel** et intègre un **Portail Public** ainsi qu'un **Espace Administration / Agents**.
 
 ---
 
@@ -11,19 +11,19 @@ Bienvenue sur la plateforme web officielle de la **Direction d'Accompagnement et
 ### 🟢 1. Portail Public (Usagers & Tuteurs)
 L'interface publique adopte la charte graphique institutionnelle verte avec l'armoirie officielle. Elle comprend :
 
-- **Accueil (`/`)** : Presentation globale, piliers d'accompagnement (Éducation, Santé, Protection sociale, Carte de Pupille), résumé du parcours utilisateur et statistiques d'impact.
+- **Accueil (`/`)** : Présentation globale, piliers d'accompagnement (Éducation, Santé, Protection sociale, Attestation OEV), résumé du parcours utilisateur et statistiques d'impact.
 - **Demande (`/demande`)** : Formulaire d'initiation et de soumission de demande de prise en charge en ligne avec dépôt de pièces justificatives (Acte de naissance, CNIB tuteur, etc.).
-- **Suivi de Récépissé (`/suivi`)** : Outil de suivi de dossier par numéro de récépissé (ex: `REC-2026-8942`) avec barre de progression de l'instruction en temps réel :
+- **Suivi de Récépissé (`/suivi`)** : Outil de suivi de dossier par numéro de récépissé (ex. `OEV-2026-8942`) avec barre de progression de l'instruction :
   1. *Soumission de la demande*
-  2. *Vérification des pièces par l'Agent DAPPN*
-  3. *Validation par le Responsable DAPPN*
-  4. *Émission de la Carte de Pupille & Prise en charge*
-- **À Propos (`/a-propos`)** : Présentation du cadre juridique, des décrets de référence, des critères d'éligibilité et foire aux questions (FAQ).
+  2. *Vérification des pièces par l'équipe OEV*
+  3. *Évaluation et validation de la prise en charge*
+  4. *Notification de la décision et accompagnement*
+- **À Propos (`/a-propos`)** : Présentation du programme OEV, des critères d'accès aux services et foire aux questions (FAQ).
 
 ---
 
 ### 🛡️ 2. Espace Administration & Agents (`/admin/*`)
-L'espace réservé aux agents et responsables DAPPN repose sur une architecture Blade modulaire (`layouts/app.blade.php`) :
+L'espace réservé aux agents et responsables OEV repose sur une architecture Blade modulaire (`layouts/app.blade.php`) :
 
 - **Dashboard (`/admin/dashboard`)** : Métriques clés, graphiques des ventes/allocations, activités récentes de l'équipe.
 - **Gestion des Utilisateurs & Rôles** :
@@ -38,7 +38,7 @@ L'espace réservé aux agents et responsables DAPPN repose sur une architecture 
 ## 🛠️ Structure du Projet
 
 ```text
-Pupilles/
+OEV/
 ├── app/
 ├── config/
 ├── public/
@@ -55,7 +55,7 @@ Pupilles/
 │       ├── layouts/
 │       │   ├── app.blade.php         # Master Layout Administration
 │       │   ├── guest.blade.php       # Layout Authentification & Erreurs
-│       │   └── public.blade.php      # Master Layout Portail Public
+│       │   └── public.blade.php      # Master Layout Portail OEV
 │       ├── public/
 │       │   ├── home.blade.php        # Page Accueil
 │       │   ├── demande.blade.php     # Page Demande en ligne
@@ -105,4 +105,4 @@ L'application sera accessible sur : `http://127.0.0.1:8000`
 ---
 
 ## 📄 Licence
-Ce projet est développé pour la **Direction d'Accompagnement et de Prise en charge des Pupilles de la Nation (DAPPN)**.
+Ce projet est développé pour l'accompagnement des **Orphelins et Enfants Vulnérables (OEV)**.
