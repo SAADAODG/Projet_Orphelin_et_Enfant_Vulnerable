@@ -1,6 +1,6 @@
 @extends('layouts.guest')
 
-@section('title', '404 Page Not Found | adminHMD')
+@section('title', 'Ministère de la Famille et de la Solidarité | Page introuvable')
 
 @section('content')
 <div class="error-page">

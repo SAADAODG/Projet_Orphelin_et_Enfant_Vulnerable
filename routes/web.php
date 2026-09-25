@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,76 +30,38 @@ Route::get('/a-propos', function () {
     return view('public.about');
 })->name('public.about');
 
+// --- Routes Authentification ---
+Route::middleware('guest')->group(function () {
+    Route::get('/login', function () {
+        return view('login');
+    })->name('login');
+
+    Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+
+Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->name('password.email');
+Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
+Route::post('/reset-password', [PasswordResetController::class, 'reset'])->name('password.update');
 
 // --- Routes Administration (Espace Agent & DAPPN) ---
-Route::prefix('admin')->group(function () {
+Route::middleware('auth')->prefix('admin')->group(function () {
     Route::get('/dashboard', function () {
         return view('index');
     })->name('dashboard');
 
-    Route::get('/users', function () {
-        return view('users');
-    })->name('users.index');
+    Route::resource('users', UserController::class)->except(['create', 'edit', 'show']);
+    Route::middleware('role:superAdmin|administrateur')->group(function () {
+        Route::get('/roles-permissions', [RolePermissionController::class, 'index'])->name('roles-permissions.index');
+        Route::post('/roles-permissions', [RolePermissionController::class, 'store'])->name('roles-permissions.store');
+        Route::put('/roles-permissions/{role}', [RolePermissionController::class, 'update'])->name('roles-permissions.update');
+        Route::delete('/roles-permissions/{role}', [RolePermissionController::class, 'destroy'])->name('roles-permissions.destroy');
+    });
 
-    Route::get('/users/create', function () {
-        return view('add-user');
-    })->name('users.create');
-
-    Route::get('/users/{id}', function ($id) {
-        return view('user-details', ['userId' => $id]);
-    })->name('users.show');
-
-    Route::get('/create-agent', function () {
-        return view('create-agent');
-    })->name('agents.create');
-
-    Route::get('/profile', function () {
-        return view('profile');
-    })->name('profile');
-
-    Route::get('/charts', function () {
-        return view('charts');
-    })->name('charts');
-
-    Route::get('/tables', function () {
-        return view('tables');
-    })->name('tables');
-
-    Route::get('/forms', function () {
-        return view('forms');
-    })->name('forms');
-
-    Route::get('/components', function () {
-        return view('components');
-    })->name('components');
-
-    Route::get('/alerts', function () {
-        return view('alerts');
-    })->name('alerts');
-
-    Route::get('/modals', function () {
-        return view('modals');
-    })->name('modals');
-
-    Route::get('/settings', function () {
-        return view('settings');
-    })->name('settings');
-
-    Route::get('/blank', function () {
-        return view('blank');
-    })->name('blank');
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/settings', [ProfileController::class, 'settings'])->name('settings');
+    Route::put('/settings/password', [ProfileController::class, 'updatePassword'])->name('settings.password.update');
 });
-
-
-// --- Routes Authentification ---
-Route::get('/login', function () {
-    return view('login');
-})->name('login');
-
-Route::get('/register', function () {
-    return view('register');
-})->name('register');
-
-Route::get('/forgot-password', function () {
-    return view('forgot-password');
-})->name('forgot-password');

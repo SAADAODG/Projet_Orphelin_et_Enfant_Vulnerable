@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Plateforme de prise en charge des Orphelins et Enfants Vulnérables (OEV)">
-  <title>@yield('title', 'OEV | Plateforme de prise en charge')</title>
+  <title>@yield('title', 'Ministère de la Famille et de la Solidarité')</title>
 
   <!-- Google Fonts Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,6 +13,7 @@
 
   <!-- Bootstrap 5 CSS & Icons -->
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ asset('assets/vendors/fontawesome/css/all.min.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/vendors/bootstrap-icons/bootstrap-icons.css') }}">
 
   <!-- Custom Public CSS -->
@@ -29,8 +30,8 @@
           <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries Officielles" style="height: 36px; width: auto; object-fit: contain;">
         </div>
         <div class="brand-text">
-          <span class="brand-title">ORPHELINS ET ENFANTS VULNÉRABLES</span>
-          <span class="brand-subtitle">Plateforme de prise en charge OEV</span>
+          <span class="brand-title">MINISTÈRE DE LA FAMILLE ET DE LA SOLIDARITÉ</span>
+          <span class="brand-subtitle">Programme OEV – Burkina Faso</span>
         </div>
       </a>
 
@@ -86,7 +87,7 @@
         <div class="col-12 col-lg-4">
           <div class="footer-brand d-flex align-items-center gap-2">
             <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" style="height: 38px; width: auto; object-fit: contain;">
-            <span>OEV</span>
+            <span>Ministère de la Famille et de la Solidarité</span>
           </div>
           <p class="footer-description">
             Plateforme de recensement, de protection et de suivi des droits des orphelins et enfants vulnérables au Burkina Faso.

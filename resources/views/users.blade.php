@@ -1,191 +1,34 @@
 @extends('layouts.app')
 
-@section('title', 'Users | adminHMD')
+@section('title', 'Gestion des utilisateurs | OEV')
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
   <div class="page-heading">
-    <div class="page-heading-copy">
-      <span class="page-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
-      <div>
-        <p class="eyebrow mb-1">Management</p>
-        <h1 class="h3 mb-1">Users</h1>
-        <p class="text-muted mb-0">Review accounts, roles, account status, and team ownership.</p>
-      </div>
-    </div>
-    <div class="heading-actions">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ route('tables') }}"><i class="bi bi-download" aria-hidden="true"></i> Export</a>
-      <a class="btn btn-primary btn-sm" href="{{ route('users.create') }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Add User</a>
-    </div>
+    <div class="page-heading-copy"><span class="page-icon"><i class="bi bi-people" aria-hidden="true"></i></span><div><p class="eyebrow mb-1">Administration</p><h1 class="h3 mb-1">Gestion des utilisateurs</h1><p class="text-muted mb-0">{{ $users->total() }} compte(s) trouvé(s).</p></div></div>
+    <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#ajouterUtilisateurModal" aria-label="Ajouter un utilisateur" title="Ajouter un utilisateur"><i class="fa-solid fa-user-plus" aria-hidden="true"></i></button>
   </div>
 
-  <section class="row g-3 mt-1" aria-label="User summary">
-    <div class="col-12 col-sm-6 col-xl-3">
-      <article class="metric-card metric-primary">
-        <div class="metric-top">
-          <span class="metric-label">Total Users</span>
-          <span class="metric-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
-        </div>
-        <div class="metric-value">8,742</div>
-        <div class="metric-meta">
-          <span class="text-success">+5.1%</span>
-          <span>this month</span>
-        </div>
-      </article>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-      <article class="metric-card metric-success">
-        <div class="metric-top">
-          <span class="metric-label">Active</span>
-          <span class="metric-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
-        </div>
-        <div class="metric-value">7,980</div>
-        <div class="metric-meta">
-          <span class="text-success">91%</span>
-          <span>healthy accounts</span>
-        </div>
-      </article>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-      <article class="metric-card metric-warning">
-        <div class="metric-top">
-          <span class="metric-label">Pending</span>
-          <span class="metric-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
-        </div>
-        <div class="metric-value">184</div>
-        <div class="metric-meta">
-          <span class="text-warning">12</span>
-          <span>need approval</span>
-        </div>
-      </article>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-      <article class="metric-card metric-danger">
-        <div class="metric-top">
-          <span class="metric-label">Suspended</span>
-          <span class="metric-icon"><i class="bi bi-slash-circle" aria-hidden="true"></i></span>
-        </div>
-        <div class="metric-value">38</div>
-        <div class="metric-meta">
-          <span class="text-danger">4</span>
-          <span>flagged today</span>
-        </div>
-      </article>
-    </div>
-  </section>
+  @if (session('success')) <div class="alert alert-success mt-3">{{ session('success') }}</div> @endif
+  @if ($errors->any()) <div class="alert alert-danger mt-3">{{ $errors->first() }}</div> @endif
 
   <section class="panel mt-3">
-    <div class="panel-header">
-      <div>
-        <h2 class="h5 mb-1 section-title"><i class="bi bi-table" aria-hidden="true"></i><span>User List</span></h2>
-        <p class="text-muted mb-0">Search, review, and manage team member accounts.</p>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
-        <input class="form-control form-control-sm table-search" type="search" placeholder="Search users" data-table-search="usersTable" aria-label="Search users">
-        <a class="btn btn-primary btn-sm" href="{{ route('users.create') }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Add User</a>
-      </div>
-    </div>
-    <div class="table-responsive">
-      <table class="table align-middle mb-0" id="usersTable" data-searchable-table>
-        <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Team</th><th scope="col">Status</th><th scope="col">Joined</th><th scope="col" class="text-end">Action</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <img class="avatar-img avatar-sm" src="{{ asset('assets/images/avatar/avatar-1.jpg') }}" alt="Sarah Ahmed">
-                <div>
-                  <p class="fw-semibold mb-0">Sarah Ahmed</p>
-                  <p class="text-muted small mb-0">sarah@example.com</p>
-                </div>
-              </div>
-            </td>
-            <td>Admin</td>
-            <td>Operations</td>
-            <td><span class="badge text-bg-success">Active</span></td>
-            <td>Jan 12, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 1) }}">View</a></td>
-          </tr>
-          <tr>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <img class="avatar-img avatar-sm" src="{{ asset('assets/images/avatar/avatar-2.jpg') }}" alt="Rafi Khan">
-                <div>
-                  <p class="fw-semibold mb-0">Rafi Khan</p>
-                  <p class="text-muted small mb-0">rafi@example.com</p>
-                </div>
-              </div>
-            </td>
-            <td>Manager</td>
-            <td>Sales</td>
-            <td><span class="badge text-bg-success">Active</span></td>
-            <td>Feb 03, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 2) }}">View</a></td>
-          </tr>
-          <tr>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <img class="avatar-img avatar-sm" src="{{ asset('assets/images/avatar/avatar-3.jpg') }}" alt="Nadia Islam">
-                <div>
-                  <p class="fw-semibold mb-0">Nadia Islam</p>
-                  <p class="text-muted small mb-0">nadia@example.com</p>
-                </div>
-              </div>
-            </td>
-            <td>Editor</td>
-            <td>Content</td>
-            <td><span class="badge text-bg-warning">Pending</span></td>
-            <td>Mar 18, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 3) }}">View</a></td>
-          </tr>
-          <tr>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <img class="avatar-img avatar-sm" src="{{ asset('assets/images/avatar/avatar-4.jpg') }}" alt="Mina Torres">
-                <div>
-                  <p class="fw-semibold mb-0">Mina Torres</p>
-                  <p class="text-muted small mb-0">mina@example.com</p>
-                </div>
-              </div>
-            </td>
-            <td>Viewer</td>
-            <td>Finance</td>
-            <td><span class="badge text-bg-secondary">Suspended</span></td>
-            <td>Apr 07, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 4) }}">View</a></td>
-          </tr>
-          <tr>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <img class="avatar-img avatar-sm" src="{{ asset('assets/images/avatar/avatar-5.jpg') }}" alt="Jon Oliver">
-                <div>
-                  <p class="fw-semibold mb-0">Jon Oliver</p>
-                  <p class="text-muted small mb-0">jon@example.com</p>
-                </div>
-              </div>
-            </td>
-            <td>Analyst</td>
-            <td>Data</td>
-            <td><span class="badge text-bg-success">Active</span></td>
-            <td>Apr 22, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 5) }}">View</a></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mt-3">
-      <p class="text-muted small mb-0">Showing 1 to 5 of 124 users</p>
-      <nav aria-label="Users pagination">
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item disabled"><a class="page-link" href="#">Previous</a></li>
-          <li class="page-item active"><a class="page-link" href="#">1</a></li>
-          <li class="page-item"><a class="page-link" href="#">2</a></li>
-          <li class="page-item"><a class="page-link" href="#">Next</a></li>
-        </ul>
-      </nav>
-    </div>
+    <div class="panel-header"><div><h2 class="h5 mb-1">Utilisateurs enregistrés</h2><p class="text-muted mb-0">Les comptes sont chargés depuis la base de données.</p></div><input class="form-control form-control-sm table-search" type="search" placeholder="Rechercher dans la page" data-table-search="usersTable" aria-label="Rechercher un utilisateur"></div>
+    <div class="table-responsive"><table class="table align-middle mb-0" id="usersTable" data-searchable-table><thead><tr><th>Utilisateur</th><th>Rôle(s)</th><th>Statut</th><th>Créé le</th><th class="text-end">Actions</th></tr></thead><tbody>
+      @forelse ($users as $user)
+        <tr><td><strong>{{ $user->name }}</strong><br><small class="text-muted">{{ $user->email }}</small></td><td>{{ $user->roles->pluck('name')->join(', ') ?: 'Aucun rôle' }}</td><td><span class="badge text-bg-{{ $user->active ? 'success' : 'secondary' }}">{{ $user->active ? 'Actif' : 'Désactivé' }}</span></td><td>{{ $user->created_at?->format('d/m/Y') }}</td><td class="text-end"><div class="btn-group btn-group-sm"><button class="btn btn-light" type="button" data-bs-toggle="modal" data-bs-target="#detailsUtilisateur{{ $user->id }}" aria-label="Voir l’utilisateur" title="Voir"><i class="fa-solid fa-eye" aria-hidden="true"></i></button><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#modifierUtilisateur{{ $user->id }}" aria-label="Modifier l’utilisateur" title="Modifier"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button><form method="POST" action="{{ route('users.destroy', $user) }}" onsubmit="return confirm('Supprimer cet utilisateur ?');">@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit" aria-label="Supprimer l’utilisateur" title="Supprimer"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></form></div></td></tr>
+      @empty
+        <tr><td colspan="5" class="text-center text-muted py-4">Aucun utilisateur enregistré.</td></tr>
+      @endforelse
+    </tbody></table></div>
+    <div class="d-flex justify-content-end mt-3">{{ $users->links() }}</div>
   </section>
 </div>
+
+<div class="modal fade" id="ajouterUtilisateurModal" tabindex="-1" aria-labelledby="ajouterUtilisateurModalLabel" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="ajouterUtilisateurModalLabel">Ajouter un utilisateur</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div><form method="POST" action="{{ route('users.store') }}">@csrf<div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label" for="modal-name">Nom complet</label><input class="form-control" id="modal-name" name="name" value="{{ old('name') }}" required></div><div class="col-md-6"><label class="form-label" for="modal-email">Adresse e-mail</label><input class="form-control" id="modal-email" name="email" type="email" value="{{ old('email') }}" required></div><div class="col-md-6"><label class="form-label" for="modal-password">Mot de passe</label><input class="form-control" id="modal-password" name="password" type="password" required></div><div class="col-md-6"><label class="form-label" for="modal-password-confirmation">Confirmation</label><input class="form-control" id="modal-password-confirmation" name="password_confirmation" type="password" required></div><div class="col-12"><label class="form-label" for="modal-role">Rôle</label><select class="form-select" id="modal-role" name="role" required><option value="">Sélectionner un rôle</option>@foreach ($roles as $role)<option value="{{ $role->name }}">{{ $role->name }}</option>@endforeach</select></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary" type="submit">Créer l’utilisateur</button></div></form></div></div></div>
+
+@foreach ($users as $user)
+<div class="modal fade" id="detailsUtilisateur{{ $user->id }}" tabindex="-1" aria-labelledby="detailsUtilisateurLabel{{ $user->id }}" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="detailsUtilisateurLabel{{ $user->id }}">Détails de l’utilisateur</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div><div class="modal-body"><dl class="row mb-0"><dt class="col-sm-4">Nom</dt><dd class="col-sm-8">{{ $user->name }}</dd><dt class="col-sm-4">E-mail</dt><dd class="col-sm-8">{{ $user->email }}</dd><dt class="col-sm-4">Rôle(s)</dt><dd class="col-sm-8">{{ $user->roles->pluck('name')->join(', ') ?: 'Aucun rôle' }}</dd><dt class="col-sm-4">Créé le</dt><dd class="col-sm-8">{{ $user->created_at?->format('d/m/Y') }}</dd></dl></div></div></div></div>
+<div class="modal fade" id="modifierUtilisateur{{ $user->id }}" tabindex="-1" aria-labelledby="modifierUtilisateurLabel{{ $user->id }}" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="modifierUtilisateurLabel{{ $user->id }}">Modifier l’utilisateur</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div><form method="POST" action="{{ route('users.update', $user) }}">@csrf @method('PUT')<div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label" for="nom-{{ $user->id }}">Nom complet</label><input class="form-control" id="nom-{{ $user->id }}" name="name" value="{{ $user->name }}" required></div><div class="col-md-6"><label class="form-label" for="email-{{ $user->id }}">Adresse e-mail</label><input class="form-control" id="email-{{ $user->id }}" name="email" type="email" value="{{ $user->email }}" required></div><div class="col-12"><label class="form-label" for="role-{{ $user->id }}">Rôle</label><select class="form-select" id="role-{{ $user->id }}" name="role"><option value="">Conserver le rôle actuel</option>@foreach ($roles as $role)<option value="{{ $role->name }}" @selected($user->roles->contains('name', $role->name))>{{ $role->name }}</option>@endforeach</select></div><div class="col-12"><div class="form-check form-switch"><input type="hidden" name="active" value="0"><input class="form-check-input" id="active-{{ $user->id }}" name="active" value="1" type="checkbox" @checked($user->active)><label class="form-check-label" for="active-{{ $user->id }}">Compte actif et autorisé à se connecter</label></div></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary" type="submit">Enregistrer</button></div></form></div></div></div>
+@endforeach
 @endsection
