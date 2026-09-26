@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard | adminHMD')
+@section('title', 'Ministère de la Famille et de la Solidarité | Tableau de bord')
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
@@ -85,7 +85,6 @@
             <h2 class="h5 mb-1 section-title"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Sales Performance</span></h2>
             <p class="text-muted mb-0">Monthly revenue compared with operational targets.</p>
           </div>
-          <a class="btn btn-light btn-sm" href="{{ route('charts') }}">View Details</a>
         </div>
 
         <div class="chart-bars" aria-label="Sales performance chart">

@@ -15,11 +15,41 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(RolePermissionSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $admin = User::factory()->create([
+            'name' => 'Super Admin',
+            'email' => 'admin@oev.gov.bf',
+            'password' => bcrypt('admin1234'),
         ]);
+        $admin->assignRole('superAdmin');
+
+        $responsable = User::factory()->create([
+            'name' => 'Responsable DGFE',
+            'email' => 'responsable@oev.gov.bf',
+            'password' => bcrypt('admin1234'),
+        ]);
+        $responsable->assignRole('responsable DGFE');
+
+        $agent = User::factory()->create([
+            'name' => 'Agent DGFE',
+            'email' => 'agent@oev.gov.bf',
+            'password' => bcrypt('admin1234'),
+        ]);
+        $agent->assignRole('agent DGFE');
+
+        $dr = User::factory()->create([
+            'name' => 'Directeur Régional',
+            'email' => 'dr@oev.gov.bf',
+            'password' => bcrypt('admin1234'),
+        ]);
+        $dr->assignRole('DR');
+
+        $dp = User::factory()->create([
+            'name' => 'Directeur Provincial',
+            'email' => 'dp@oev.gov.bf',
+            'password' => bcrypt('admin1234'),
+        ]);
+        $dp->assignRole('DP');
     }
 }

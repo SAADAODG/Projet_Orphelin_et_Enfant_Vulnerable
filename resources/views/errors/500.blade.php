@@ -1,6 +1,6 @@
 @extends('layouts.guest')
 
-@section('title', '500 Server Error | adminHMD')
+@section('title', 'Ministère de la Famille et de la Solidarité | Erreur serveur')
 
 @section('content')
 <div class="error-page">

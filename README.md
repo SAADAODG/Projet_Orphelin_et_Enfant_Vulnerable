@@ -30,8 +30,7 @@ L'espace réservé aux agents et responsables OEV repose sur une architecture Bl
   - Liste des utilisateurs (`/admin/users`)
   - Ajout d'un compte utilisateur (`/admin/users/create`)
   - Fiche détaillée (`/admin/users/{id}`)
-- **Agents Intelligent (`/admin/create-agent`)** : Formulaire de configuration des agents virtuels et automatisations.
-- **UI Kit & Outils** : Profil (`/admin/profile`), Paramètres (`/admin/settings`), Tables (`/admin/tables`), Formulaires (`/admin/forms`), Composants (`/admin/components`), Modales (`/admin/modals`), Alertes (`/admin/alerts`).
+- **Administration** : Profil (`/admin/profile`), Paramètres (`/admin/settings`), utilisateurs et rôles/permissions.
 
 ---
 
