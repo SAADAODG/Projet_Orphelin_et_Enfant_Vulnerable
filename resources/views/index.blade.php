@@ -142,7 +142,7 @@
             <td>Operations</td>
             <td><span class="badge text-bg-success">Active</span></td>
             <td>Jan 12, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 1) }}">View</a></td>
+            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.index') }}">View</a></td>
           </tr>
           <tr>
             <td>
@@ -158,7 +158,7 @@
             <td>Sales</td>
             <td><span class="badge text-bg-success">Active</span></td>
             <td>Feb 03, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 2) }}">View</a></td>
+            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.index') }}">View</a></td>
           </tr>
           <tr>
             <td>
@@ -174,7 +174,7 @@
             <td>Content</td>
             <td><span class="badge text-bg-warning">Pending</span></td>
             <td>Mar 18, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 3) }}">View</a></td>
+            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.index') }}">View</a></td>
           </tr>
           <tr>
             <td>
@@ -190,7 +190,7 @@
             <td>Finance</td>
             <td><span class="badge text-bg-secondary">Suspended</span></td>
             <td>Apr 07, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 4) }}">View</a></td>
+            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.index') }}">View</a></td>
           </tr>
           <tr>
             <td>
@@ -206,7 +206,7 @@
             <td>Data</td>
             <td><span class="badge text-bg-success">Active</span></td>
             <td>Apr 22, 2026</td>
-            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.show', 5) }}">View</a></td>
+            <td class="text-end"><a class="btn btn-light btn-sm" href="{{ route('users.index') }}">View</a></td>
           </tr>
         </tbody>
       </table>
