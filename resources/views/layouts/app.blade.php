@@ -32,6 +32,13 @@
           <span class="nav-icon"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
           <span class="nav-text">Dashboard</span>
         </a>
+        <a class="nav-link {{ request()->routeIs('admin.signalements.*') ? 'active' : '' }}" href="{{ route('admin.signalements.index') }}">
+          <span class="nav-icon position-relative">
+            <i class="bi bi-megaphone" aria-hidden="true"></i>
+            <span class="notif-dot {{ $signalementsNonLus ? '' : 'd-none' }}" data-notif-signalements data-url="{{ route('admin.signalements.non-lus') }}" aria-label="{{ $signalementsNonLus }} nouveau(x) signalement(s)">{{ $signalementsNonLus > 99 ? '99+' : $signalementsNonLus }}</span>
+          </span>
+          <span class="nav-text">Signalements</span>
+        </a>
         <a class="nav-link {{ request()->routeIs('users.index') ? 'active' : '' }}" href="{{ route('users.index') }}">
           <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
           <span class="nav-text">Users</span>
@@ -160,6 +167,23 @@
 
   <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ asset('assets/js/main.js') }}"></script>
+  <script>
+    // Rafraîchit la pastille rouge des nouveaux signalements toutes les 30 secondes
+    (function () {
+      const pastille = document.querySelector('[data-notif-signalements]');
+      if (!pastille) return;
+      setInterval(function () {
+        fetch(pastille.dataset.url, { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            pastille.textContent = data.count > 99 ? '99+' : data.count;
+            pastille.classList.toggle('d-none', data.count === 0);
+            pastille.setAttribute('aria-label', data.count + ' nouveau(x) signalement(s)');
+          })
+          .catch(function () {});
+      }, 30000);
+    })();
+  </script>
   @stack('scripts')
 </body>
 </html>

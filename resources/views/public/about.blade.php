@@ -64,7 +64,7 @@
           </ul>
 
           <div class="pt-3 border-top border-white-50">
-            <a href="{{ route('public.demande') }}" class="btn btn-light fw-bold px-4 py-2 text-primary">
+            <a href="{{ route('public.signaler') }}" class="btn btn-light fw-bold px-4 py-2 text-primary">
               <i class="bi bi-file-earmark-plus-fill me-1"></i> Soumettre une Demande
             </a>
           </div>

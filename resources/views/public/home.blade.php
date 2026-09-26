@@ -3,11 +3,28 @@
 @section('title', 'Accueil | Plateforme OEV')
 
 @section('content')
-<!-- Hero Section (Inspiré de la maquette ONEA) -->
-<section class="hero-section">
-  <div class="container px-3 px-lg-4">
-    <div class="row align-items-center g-5">
-      <div class="col-12 col-lg-7">
+<!-- Hero Section : diaporama plein écran en arrière-plan -->
+<section class="hero-section hero-bg-slider">
+  <!-- Images d'arrière-plan (défilement automatique) -->
+  <div id="heroCarousel" class="carousel slide carousel-fade hero-bg-carousel" data-bs-ride="carousel" data-bs-interval="5000" data-bs-pause="false">
+    <div class="carousel-inner">
+      <div class="carousel-item active" style="background-image: url('{{ asset('assets/imagesDash/FB_IMG_1788680403383.jpg') }}');"></div>
+      <div class="carousel-item" style="background-image: url('{{ asset('assets/imagesDash/FB_IMG_1789026566473.jpg') }}');"></div>
+    </div>
+    <div class="carousel-indicators">
+      <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Image 1"></button>
+      <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="1" aria-label="Image 2"></button>
+    </div>
+  </div>
+
+  <!-- Voile sombre pour la lisibilité du texte -->
+  <div class="hero-bg-overlay"></div>
+
+  <!-- Contenu au premier plan -->
+  <div class="container px-3 px-lg-4 hero-bg-content">
+    <div class="row align-items-center">
+      <div class="col-12 col-lg-8">
+        <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" class="hero-bg-emblem">
         <h1 class="hero-title">
           Plateforme Officielle de <br>
           <span class="highlight-green">prise en charge OEV</span>
@@ -17,29 +34,12 @@
           Effectuez vos demandes de prise en charge en ligne, transmettez vos pièces justificatives et suivez l'évolution de vos dossiers en temps réel.
         </p>
         <div class="hero-cta-group">
-          <a href="{{ route('public.demande') }}" class="btn-hero-primary">
-            <i class="bi bi-file-earmark-plus-fill"></i> Faire une Demande
+          <a href="{{ route('public.signaler') }}" class="btn-hero-primary">
+            <i class="bi bi-megaphone-fill"></i> Signaler un OEV
           </a>
           <a href="{{ route('public.suivi') }}" class="btn-hero-secondary">
-            <i class="bi bi-card-checklist"></i> Suivre mon Dossier
+            <i class="bi bi-card-checklist"></i> Suivre mon signalement
           </a>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-5">
-        <div class="hero-visual-container">
-          <!-- Bulles décoratives (Effet Glassmorphism) -->
-          <div class="glass-bubble bubble-1"></div>
-          <div class="glass-bubble bubble-2"></div>
-
-          <!-- Carte Flottante du Sceau / Logo -->
-          <div class="hero-floating-card">
-            <div class="hero-emblem-badge bg-white p-2">
-              <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" style="max-height: 90px; width: auto; object-fit: contain;">
-            </div>
-            <h2 class="hero-card-title">OEV</h2>
-            <p class="hero-card-sub">ORPHELINS ET ENFANTS VULNÉRABLES</p>
-          </div>
         </div>
       </div>
     </div>

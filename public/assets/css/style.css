@@ -1616,3 +1616,57 @@ html[data-theme="dark"] {
   border-top-color: var(--admin-sidebar-border);
   color: var(--admin-sidebar-text);
 }
+
+/* Pastille rouge de notification (module Signalements) */
+.notif-dot {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc3545;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--admin-sidebar, #111827);
+  animation: notifPulse 2s ease-in-out infinite;
+}
+
+@keyframes notifPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.signalement-row-new {
+  background: #fff7f7;
+}
+
+.signalement-row-new td:first-child {
+  box-shadow: inset 3px 0 0 #dc3545;
+}
+
+.statut-tabs .nav-link {
+  font-weight: 700;
+  color: #4b5563;
+  border-radius: 8px;
+}
+
+.statut-tabs .nav-link.active {
+  background: var(--admin-primary);
+  color: #ffffff;
+}
+
+.detail-list dt {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.detail-list dd {
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+}

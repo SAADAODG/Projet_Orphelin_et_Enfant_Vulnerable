@@ -293,6 +293,88 @@ body.public-body {
   letter-spacing: 1px;
 }
 
+/* Hero : diaporama plein écran en arrière-plan */
+.hero-bg-slider {
+  min-height: calc(100vh - 80px);
+  display: flex;
+  align-items: center;
+  padding: 6rem 0;
+  background: #0b3d22;
+}
+
+.hero-bg-carousel,
+.hero-bg-carousel .carousel-inner,
+.hero-bg-carousel .carousel-item {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.hero-bg-carousel .carousel-item {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.hero-bg-carousel .carousel-item.active {
+  animation: heroZoom 6s ease-out forwards;
+}
+
+@keyframes heroZoom {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+.hero-bg-carousel .carousel-indicators {
+  z-index: 3;
+  margin-bottom: 1.5rem;
+}
+
+.hero-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(7, 40, 22, 0.85) 0%, rgba(7, 40, 22, 0.55) 55%, rgba(7, 40, 22, 0.25) 100%);
+  z-index: 1;
+}
+
+.hero-bg-content {
+  position: relative;
+  z-index: 2;
+}
+
+.hero-bg-emblem {
+  height: 80px;
+  width: auto;
+  margin-bottom: 1.5rem;
+  background: #ffffff;
+  border-radius: 50%;
+  padding: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+}
+
+.hero-bg-slider .hero-title {
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.hero-bg-slider .hero-title .highlight-green {
+  color: #4ade80;
+}
+
+.hero-bg-slider .hero-subtitle {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+@media (max-width: 576px) {
+  .hero-bg-slider {
+    min-height: 85vh;
+    padding: 4rem 0;
+  }
+  .hero-bg-slider .hero-title {
+    font-size: 2rem;
+  }
+}
+
 /* Bulles Décoratives Flottantes (Glassmorphism) */
 .glass-bubble {
   position: absolute;
@@ -523,4 +605,261 @@ body.public-body {
   padding-top: 1.5rem;
   font-size: 0.85rem;
   color: #71887b;
+}
+
+/* ===== Formulaire « Signaler un OEV » ===== */
+.signal-step {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.75rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--card-shadow);
+  border: 1px solid #eef7f2;
+}
+
+.signal-step-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.signal-step-num {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--light-green-bg);
+  color: var(--primary-green);
+  font-weight: 800;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(14, 131, 69, 0.25);
+}
+
+.signal-step-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--dark-green);
+  margin: 0;
+}
+
+.signal-step-sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.signal-form .form-label {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.signal-form .form-control:focus,
+.signal-form .form-select:focus {
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 0.2rem rgba(14, 131, 69, 0.15);
+}
+
+/* Cartes de choix (vulnérabilité) */
+.choice-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.choice-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.choice-card,
+.choice-chip {
+  position: relative;
+  cursor: pointer;
+  margin: 0;
+}
+
+.choice-card input,
+.choice-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.1rem 0.5rem;
+  border: 2px solid #e3e8ec;
+  border-radius: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.choice-card-body i {
+  font-size: 1.8rem;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.choice-card:hover .choice-card-body {
+  border-color: rgba(14, 131, 69, 0.4);
+}
+
+.choice-card input:checked + .choice-card-body {
+  border-color: var(--primary-green);
+  background: var(--light-green-bg);
+  color: var(--dark-green);
+  box-shadow: 0 6px 18px rgba(14, 131, 69, 0.15);
+}
+
+.choice-card input:checked + .choice-card-body i {
+  color: var(--primary-green);
+}
+
+.choice-card input:focus-visible + .choice-card-body,
+.choice-chip input:focus-visible + span {
+  outline: 3px solid rgba(14, 131, 69, 0.35);
+  outline-offset: 2px;
+}
+
+/* Pastilles de choix (lien avec l'enfant) */
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.choice-chip span {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  border: 2px solid #e3e8ec;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.choice-chip:hover span {
+  border-color: rgba(14, 131, 69, 0.4);
+}
+
+.choice-chip input:checked + span {
+  background: var(--primary-green);
+  border-color: var(--primary-green);
+  color: #ffffff;
+}
+
+.signal-aside {
+  position: sticky;
+  top: 100px;
+}
+
+.signal-howto {
+  padding-left: 1.2rem;
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.signal-howto li {
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 576px) {
+  .signal-step {
+    padding: 1.25rem;
+  }
+  .choice-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .choice-card-body {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 0.85rem 1rem;
+  }
+}
+
+/* ===== Confirmation & suivi du signalement ===== */
+.merci-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background: var(--primary-green);
+  color: #ffffff;
+  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 10px rgba(14, 131, 69, 0.15);
+}
+
+.recepisse-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem 2rem;
+  border: 2px dashed var(--primary-green);
+  border-radius: 14px;
+  background: var(--light-green-bg);
+}
+
+.recepisse-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.recepisse-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--dark-green);
+  letter-spacing: 2px;
+}
+
+.step-item.rejected .step-circle {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: #ffffff;
+}
+
+.suivi-message {
+  display: flex;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 14px;
+  margin-top: 1rem;
+}
+
+.suivi-message > i {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.suivi-message h3 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.suivi-message-success {
+  background: #e8f6ee;
+  color: #0a5c30;
+}
+
+.suivi-message-danger {
+  background: #fdecee;
+  color: #842029;
+}
+
+.suivi-message-info {
+  background: #fff8e6;
+  color: #7a5a00;
 }

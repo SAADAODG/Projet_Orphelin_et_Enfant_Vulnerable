@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
+use App\Http\Controllers\SignalementController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,13 +15,15 @@ Route::get('/', function () {
     return view('public.home');
 })->name('public.home');
 
-Route::get('/demande', function () {
-    return view('public.demande');
-})->name('public.demande');
+Route::get('/signaler', [SignalementController::class, 'create'])->name('public.signaler');
+Route::post('/signaler', [SignalementController::class, 'store'])->name('public.signaler.store');
+Route::get('/signaler/merci', [SignalementController::class, 'merci'])->name('public.signaler.merci');
 
-Route::get('/suivi', function () {
-    return view('public.suivi');
-})->name('public.suivi');
+Route::get('/suivi', [SignalementController::class, 'suivi'])->name('public.suivi');
+
+Route::get('/plainte', function () {
+    return view('public.plainte');
+})->name('public.plainte');
 
 Route::get('/a-propos', function () {
     return view('public.about');
@@ -31,6 +35,13 @@ Route::prefix('admin')->group(function () {
     Route::get('/dashboard', function () {
         return view('index');
     })->name('dashboard');
+
+    // Module « Liste des signalements »
+    Route::get('/signalements', [AdminSignalementController::class, 'index'])->name('admin.signalements.index');
+    Route::get('/signalements/non-lus', [AdminSignalementController::class, 'nonLus'])->name('admin.signalements.non-lus');
+    Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
+    Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
+    Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
 
     Route::get('/users', function () {
         return view('users');

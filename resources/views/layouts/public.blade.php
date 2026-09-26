@@ -39,20 +39,25 @@
       </button>
 
       <div class="collapse navbar-collapse" id="publicNavbarContent">
-        <ul class="navbar-nav mx-auto mb-2 mb-lg-0 gap-1">
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 gap-1">
           <li class="nav-item">
             <a class="public-nav-link {{ request()->routeIs('public.home') ? 'active' : '' }}" href="{{ route('public.home') }}">
               <i class="bi bi-house-door"></i> Accueil
             </a>
           </li>
           <li class="nav-item">
-            <a class="public-nav-link {{ request()->routeIs('public.demande') ? 'active' : '' }}" href="{{ route('public.demande') }}">
-              <i class="bi bi-file-earmark-plus"></i> Demande
+            <a class="public-nav-link {{ request()->routeIs('public.signaler*') ? 'active' : '' }}" href="{{ route('public.signaler') }}">
+              <i class="bi bi-megaphone"></i> Signaler un OEV
             </a>
           </li>
           <li class="nav-item">
             <a class="public-nav-link {{ request()->routeIs('public.suivi') ? 'active' : '' }}" href="{{ route('public.suivi') }}">
-              <i class="bi bi-search"></i> Suivi
+              <i class="bi bi-search"></i> Suivi du signalement
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="public-nav-link {{ request()->routeIs('public.plainte') ? 'active' : '' }}" href="{{ route('public.plainte') }}">
+              <i class="bi bi-exclamation-octagon"></i> Plainte
             </a>
           </li>
           <li class="nav-item">
@@ -62,14 +67,6 @@
           </li>
         </ul>
 
-        <div class="d-flex align-items-center gap-2 mt-3 mt-lg-0">
-          <a class="btn btn-auth-outline" href="{{ route('login') }}">
-            <i class="bi bi-box-arrow-in-right me-1"></i> Se connecter
-          </a>
-          <a class="btn btn-auth-solid" href="{{ route('dashboard') }}">
-            <i class="bi bi-person-badge me-1"></i> Espace Agent
-          </a>
-        </div>
       </div>
     </div>
   </nav>
@@ -96,8 +93,9 @@
         <div class="col-6 col-lg-3">
           <h2 class="footer-title">Liens Rapides</h2>
           <ul class="footer-links">
-            <li><a href="{{ route('public.demande') }}"><i class="bi bi-chevron-right me-1"></i> Faire une demande</a></li>
-            <li><a href="{{ route('public.suivi') }}"><i class="bi bi-chevron-right me-1"></i> Suivre un récépissé</a></li>
+            <li><a href="{{ route('public.signaler') }}"><i class="bi bi-chevron-right me-1"></i> Signaler un OEV</a></li>
+            <li><a href="{{ route('public.suivi') }}"><i class="bi bi-chevron-right me-1"></i> Suivi du signalement</a></li>
+            <li><a href="{{ route('public.plainte') }}"><i class="bi bi-chevron-right me-1"></i> Déposer une plainte</a></li>
             <li><a href="{{ route('public.about') }}"><i class="bi bi-chevron-right me-1"></i> Décrets & Éligibilité</a></li>
             <li><a href="{{ route('login') }}"><i class="bi bi-chevron-right me-1"></i> Connexion Agent</a></li>
           </ul>
