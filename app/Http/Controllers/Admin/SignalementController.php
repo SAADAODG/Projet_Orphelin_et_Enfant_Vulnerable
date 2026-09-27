@@ -19,12 +19,15 @@ class SignalementController extends Controller
     {
         $request->validate([
             'statut' => ['nullable', Rule::in(array_keys(Signalement::STATUTS))],
+            'decision' => ['nullable', Rule::in(array_keys(Signalement::DECISIONS))],
         ]);
 
         $statut = $request->query('statut');
+        $decision = $statut === Signalement::CLOTURE ? $request->query('decision') : null;
 
         $signalements = Signalement::query()
             ->when($statut, fn ($query) => $query->where('statut', $statut))
+            ->when($decision, fn ($query) => $query->where('decision', $decision))
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = '%'.$request->query('q').'%';
                 $query->where(fn ($sub) => $sub
@@ -43,9 +46,17 @@ class SignalementController extends Controller
             ->groupBy('statut')
             ->pluck('total', 'statut');
 
+        $decisions = Signalement::query()
+            ->where('statut', Signalement::CLOTURE)
+            ->selectRaw('decision, count(*) as total')
+            ->groupBy('decision')
+            ->pluck('total', 'decision');
+
         return view('admin.signalements.index', [
             'signalements' => $signalements,
             'statut' => $statut,
+            'decision' => $decision,
+            'decisions' => $decisions,
             'compteurs' => $compteurs,
             'total' => $compteurs->sum(),
         ]);
@@ -60,10 +71,12 @@ class SignalementController extends Controller
             $signalement->forceFill(['lu_at' => now()])->save();
         }
 
+        $signalement->load(['agentTraitement', 'agentCloture']);
+
         return view('admin.signalements.show', ['signalement' => $signalement]);
     }
 
-    public function valider(Signalement $signalement): RedirectResponse
+    public function valider(Request $request, Signalement $signalement): RedirectResponse
     {
         abort_unless($signalement->statut === Signalement::EN_ATTENTE, 422, 'Ce signalement a déjà été traité.');
 
@@ -71,6 +84,7 @@ class SignalementController extends Controller
             'statut' => Signalement::VALIDE,
             'motif_rejet' => null,
             'traite_le' => now(),
+            'traite_par' => $request->user()?->id,
         ])->save();
 
         return redirect()->route('admin.signalements.show', $signalement)
@@ -89,10 +103,40 @@ class SignalementController extends Controller
             'statut' => Signalement::REJETE,
             'motif_rejet' => $data['motif_rejet'] ?? null,
             'traite_le' => now(),
+            'traite_par' => $request->user()?->id,
         ])->save();
 
         return redirect()->route('admin.signalements.show', $signalement)
             ->with('success', 'Le signalement a été rejeté. Le message de non-éligibilité est visible par le déclarant.');
+    }
+
+    /**
+     * Clôture : le contact avec l'enfant a eu lieu et une décision de prise en charge est prise.
+     */
+    public function cloturer(Request $request, Signalement $signalement): RedirectResponse
+    {
+        abort_unless($signalement->statut === Signalement::VALIDE, 422, 'Seul un signalement validé peut être clôturé.');
+
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(array_keys(Signalement::DECISIONS))],
+            'date_visite' => ['required', 'date', 'before_or_equal:today', 'after_or_equal:'.$signalement->created_at->toDateString()],
+            'compte_rendu' => ['nullable', 'string', 'max:3000'],
+            'message_declarant' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'decision.required' => 'Choisissez la décision.',
+            'date_visite.required' => 'Indiquez la date du contact avec l\'enfant.',
+            'date_visite.before_or_equal' => 'La date ne peut pas être dans le futur.',
+            'date_visite.after_or_equal' => 'La date ne peut pas précéder le signalement.',
+        ]);
+
+        $signalement->forceFill($data + [
+            'statut' => Signalement::CLOTURE,
+            'cloture_le' => now(),
+            'cloture_par' => $request->user()?->id,
+        ])->save();
+
+        return redirect()->route('admin.signalements.show', $signalement)
+            ->with('success', 'Signalement clôturé : '.$signalement->decision_libelle.'. Le déclarant verra la décision dans le suivi.');
     }
 
     /**

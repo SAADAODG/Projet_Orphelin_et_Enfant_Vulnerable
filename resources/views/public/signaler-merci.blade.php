@@ -10,7 +10,7 @@
         <div class="suivi-card text-center">
           <div class="merci-icon"><i class="bi bi-check-lg"></i></div>
           <h1 class="h3 fw-bold text-dark mb-2">Merci, votre signalement a bien été envoyé</h1>
-          <p class="text-muted mb-4">Voici votre numéro de récépissé. Notez-le ou imprimez cette page : il vous permettra de suivre la réponse de nos agents.</p>
+          <p class="text-muted mb-4">Votre récépissé se télécharge automatiquement (PDF). Conservez-le : son numéro vous permettra de suivre la réponse de nos agents.</p>
 
           <div class="recepisse-box">
             <span class="recepisse-label">N° de récépissé</span>
@@ -21,12 +21,12 @@
           </div>
 
           <div class="d-flex flex-wrap justify-content-center gap-2 mt-4">
-            <a href="{{ route('public.suivi', ['recepisse' => $recepisse]) }}" class="btn btn-primary px-4 fw-bold">
+            <a href="{{ route('public.signaler.recepisse', $recepisse) }}" class="btn btn-primary px-4 fw-bold" id="telechargerRecepisse" download>
+              <i class="bi bi-file-earmark-arrow-down me-1"></i> Télécharger le récépissé (PDF)
+            </a>
+            <a href="{{ route('public.suivi', ['recepisse' => $recepisse]) }}" class="btn btn-outline-secondary px-4">
               <i class="bi bi-search me-1"></i> Suivre mon signalement
             </a>
-            <button type="button" class="btn btn-outline-secondary px-4" onclick="window.print()">
-              <i class="bi bi-printer me-1"></i> Imprimer
-            </button>
           </div>
         </div>
       </div>
@@ -37,6 +37,13 @@
 
 @push('scripts')
 <script>
+  // Téléchargement automatique du récépissé PDF à l'arrivée sur la page
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      document.getElementById('telechargerRecepisse').click();
+    }, 600);
+  });
+
   document.getElementById('copierRecepisse').addEventListener('click', function () {
     const bouton = this;
     navigator.clipboard.writeText(document.getElementById('recepisseValue').textContent.trim()).then(function () {

@@ -90,8 +90,13 @@
 
         <div class="nav-section">
           <span class="nav-section-label">Contrôle</span>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-chat-text" aria-hidden="true"></i></span>
+          <a class="nav-link {{ request()->routeIs('admin.plaintes.*') ? 'active' : '' }}" href="{{ route('admin.plaintes.index') }}">
+            <span class="nav-icon position-relative">
+              <i class="bi bi-chat-text" aria-hidden="true"></i>
+              @if ($plaintesNonLues)
+                <span class="notif-dot" aria-label="{{ $plaintesNonLues }} nouvelle(s) plainte(s)">{{ $plaintesNonLues > 99 ? '99+' : $plaintesNonLues }}</span>
+              @endif
+            </span>
             <span class="nav-text">Gestion de plainte</span>
           </a>
           <a class="nav-link" href="#">

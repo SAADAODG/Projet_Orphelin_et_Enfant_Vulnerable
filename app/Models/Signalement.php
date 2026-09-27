@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 class Signalement extends Model
@@ -11,17 +12,64 @@ class Signalement extends Model
     public const EN_ATTENTE = 'en_attente';
     public const VALIDE = 'valide';
     public const REJETE = 'rejete';
+    public const CLOTURE = 'cloture';
 
+    // Cycle de vie : en attente -> validé (contact à faire) -> clôturé (contact fait, décision prise)
+    //                en attente -> rejeté
     public const STATUTS = [
         self::EN_ATTENTE => 'En attente',
         self::VALIDE => 'Validé',
+        self::CLOTURE => 'Clôturé',
         self::REJETE => 'Rejeté',
     ];
 
+    public const STATUTS_COULEURS = [
+        self::EN_ATTENTE => 'warning',
+        self::VALIDE => 'primary',
+        self::CLOTURE => 'success',
+        self::REJETE => 'danger',
+    ];
+
+    public const PRISE_EN_CHARGE = 'prise_en_charge';
+    public const NON_PRISE_EN_CHARGE = 'non_prise_en_charge';
+
+    public const DECISIONS = [
+        self::PRISE_EN_CHARGE => 'Prise en charge',
+        self::NON_PRISE_EN_CHARGE => 'Non prise en charge',
+    ];
+
+    // Situations de vulnérabilité (plusieurs possibles, stockées séparées par des virgules)
     public const VULNERABILITES = [
         'orphelin' => 'Orphelin',
-        'handicape' => 'Handicapé',
-        'autre' => 'Autre',
+        'handicap' => 'En situation de handicap',
+        'rue' => 'Abandonné ou en situation de rue',
+        'violence' => "Victime de violence ou d'exploitation",
+        'deplace' => 'Déplacé interne ou réfugié',
+        'sante' => 'Malade chronique ou affecté par le VIH',
+        'precarite' => 'Famille en grande précarité',
+        'autre' => 'Autre situation',
+    ];
+
+    public const VULNERABILITES_DESCRIPTIONS = [
+        'orphelin' => 'A perdu son père, sa mère ou les deux',
+        'handicap' => 'Handicap physique, mental ou sensoriel',
+        'rue' => 'Sans famille pour s\'occuper de lui, vit dans la rue',
+        'violence' => 'Maltraitance, travail forcé, mariage précoce…',
+        'deplace' => 'A dû quitter son foyer (insécurité, conflit…)',
+        'sante' => 'Maladie de longue durée, VIH',
+        'precarite' => 'La famille ne peut subvenir à ses besoins',
+        'autre' => 'Une situation qui n\'est pas dans la liste',
+    ];
+
+    public const VULNERABILITES_ICONES = [
+        'orphelin' => 'bi-heartbreak',
+        'handicap' => 'bi-universal-access',
+        'rue' => 'bi-signpost-split',
+        'violence' => 'bi-shield-exclamation',
+        'deplace' => 'bi-house-slash',
+        'sante' => 'bi-heart-pulse',
+        'precarite' => 'bi-basket',
+        'autre' => 'bi-three-dots',
     ];
 
     public const LIENS = [
@@ -56,6 +104,8 @@ class Signalement extends Model
         return [
             'traite_le' => 'datetime',
             'lu_at' => 'datetime',
+            'date_visite' => 'date',
+            'cloture_le' => 'datetime',
         ];
     }
 
@@ -69,6 +119,31 @@ class Signalement extends Model
         } while (static::where('recepisse', $recepisse)->exists());
 
         return $recepisse;
+    }
+
+    public function agentTraitement(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'traite_par');
+    }
+
+    public function agentCloture(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cloture_par');
+    }
+
+    public function getDecisionLibelleAttribute(): ?string
+    {
+        return $this->decision ? (self::DECISIONS[$this->decision] ?? $this->decision) : null;
+    }
+
+    public function getStatutCouleurAttribute(): string
+    {
+        return self::STATUTS_COULEURS[$this->statut] ?? 'secondary';
+    }
+
+    public function getInitialesAttribute(): string
+    {
+        return Str::upper(Str::substr($this->enfant_prenom, 0, 1).Str::substr($this->enfant_nom, 0, 1));
     }
 
     public function scopeNonLus(Builder $query): Builder
@@ -88,9 +163,12 @@ class Signalement extends Model
 
     public function getVulnerabiliteLibelleAttribute(): string
     {
-        $libelle = self::VULNERABILITES[$this->vulnerabilite] ?? $this->vulnerabilite;
+        $libelles = collect(explode(',', (string) $this->vulnerabilite))
+            ->filter()
+            ->map(fn ($cle) => self::VULNERABILITES[$cle] ?? $cle)
+            ->implode(', ');
 
-        return $this->vulnerabilite_precision ? $libelle.' ('.$this->vulnerabilite_precision.')' : $libelle;
+        return $this->vulnerabilite_precision ? $libelles.' ('.$this->vulnerabilite_precision.')' : $libelles;
     }
 
     public function getLienLibelleAttribute(): string

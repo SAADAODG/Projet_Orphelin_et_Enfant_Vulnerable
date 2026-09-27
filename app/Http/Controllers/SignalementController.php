@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Signalement;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class SignalementController extends Controller
 {
@@ -18,6 +20,8 @@ class SignalementController extends Controller
         return view('public.signaler', [
             'localites' => config('localites'),
             'vulnerabilites' => Signalement::VULNERABILITES,
+            'vulnerabilitesDescriptions' => Signalement::VULNERABILITES_DESCRIPTIONS,
+            'vulnerabilitesIcones' => Signalement::VULNERABILITES_ICONES,
             'liens' => Signalement::LIENS,
         ]);
     }
@@ -33,8 +37,14 @@ class SignalementController extends Controller
             'enfant_nom' => ['required', 'string', 'max:100'],
             'enfant_prenom' => ['required', 'string', 'max:150'],
             'enfant_age' => ['required', 'integer', 'min:0', 'max:17'],
-            'vulnerabilite' => ['required', Rule::in(array_keys(Signalement::VULNERABILITES))],
-            'vulnerabilite_precision' => ['nullable', 'required_if:vulnerabilite,autre', 'string', 'max:255'],
+            'vulnerabilites' => ['required', 'array', 'min:1'],
+            'vulnerabilites.*' => [Rule::in(array_keys(Signalement::VULNERABILITES))],
+            'vulnerabilite_precision' => [
+                'nullable',
+                Rule::requiredIf(in_array('autre', (array) $request->input('vulnerabilites', []), true)),
+                'string',
+                'max:255',
+            ],
             'region' => ['required', Rule::in(array_keys($localites))],
             'province' => ['required', Rule::in($localites[$request->input('region')] ?? [])],
             'localite' => ['required', 'string', 'max:150'],
@@ -48,6 +58,8 @@ class SignalementController extends Controller
         ], [
             'required' => 'Ce champ est obligatoire.',
             'required_if' => 'Merci de préciser.',
+            'vulnerabilites.required' => "Choisissez au moins une situation.",
+            'vulnerabilite_precision.required' => 'Merci de préciser la situation.',
             'in' => 'Veuillez choisir une option valide.',
             'integer' => 'Veuillez saisir un nombre.',
             'enfant_age.min' => "L'âge ne peut pas être négatif.",
@@ -56,7 +68,10 @@ class SignalementController extends Controller
             'max' => 'Ce champ est trop long.',
         ]);
 
-        if ($data['vulnerabilite'] !== 'autre') {
+        // Plusieurs situations possibles : on les enregistre séparées par des virgules
+        $data['vulnerabilite'] = implode(',', array_unique($data['vulnerabilites']));
+        unset($data['vulnerabilites']);
+        if (! str_contains($data['vulnerabilite'], 'autre')) {
             $data['vulnerabilite_precision'] = null;
         }
         if ($data['declarant_lien'] !== 'autre') {
@@ -64,6 +79,9 @@ class SignalementController extends Controller
         }
 
         $signalement = Signalement::create($data + ['recepisse' => Signalement::genererRecepisse()]);
+
+        // Seule la personne qui vient d'envoyer le signalement peut télécharger son récépissé PDF
+        $request->session()->push('recepisses_autorises', $signalement->recepisse);
 
         return redirect()->route('public.signaler.merci')->with('recepisse', $signalement->recepisse);
     }
@@ -80,6 +98,22 @@ class SignalementController extends Controller
         }
 
         return view('public.signaler-merci', ['recepisse' => $recepisse]);
+    }
+
+    /**
+     * Téléchargement du récépissé PDF (réservé à la session qui a créé le signalement :
+     * il contient des données personnelles).
+     */
+    public function recepisse(Request $request, string $recepisse): Response
+    {
+        abort_unless(in_array($recepisse, $request->session()->get('recepisses_autorises', []), true), 403);
+
+        $signalement = Signalement::where('recepisse', $recepisse)->firstOrFail();
+
+        return Pdf::loadView('pdf.recepisse', ['signalement' => $signalement])
+            ->setPaper('a4')
+            ->setOption('isFontSubsettingEnabled', true)
+            ->download('recepisse-'.$signalement->recepisse.'.pdf');
     }
 
     /**

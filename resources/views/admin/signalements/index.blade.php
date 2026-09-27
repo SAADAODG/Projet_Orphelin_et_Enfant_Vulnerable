@@ -3,118 +3,126 @@
 @section('title', 'Signalements | Espace Agent OEV')
 
 @section('content')
+@php use App\Models\Signalement; @endphp
 <div class="container-fluid px-3 px-lg-4 py-4">
   <div class="page-heading">
     <div class="page-heading-copy">
       <span class="page-icon"><i class="bi bi-megaphone" aria-hidden="true"></i></span>
       <div>
         <p class="eyebrow mb-1">Prise en charge OEV</p>
-        <h1 class="h3 mb-1">Liste des signalements</h1>
-        <p class="text-muted mb-0">Examinez les signalements envoyés par les citoyens, puis validez-les ou rejetez-les.</p>
+        <h1 class="h3 mb-1">Signalements</h1>
+        <p class="text-muted mb-0">Examinez, validez puis clôturez les signalements après le contact avec l'enfant.</p>
       </div>
     </div>
   </div>
 
-  <section class="row g-3 mt-1" aria-label="Résumé des signalements">
-    @php
-      $cartes = [
-        ['label' => 'Total', 'valeur' => $total, 'classe' => 'metric-primary', 'icone' => 'bi-collection'],
-        ['label' => 'En attente', 'valeur' => $compteurs['en_attente'] ?? 0, 'classe' => 'metric-warning', 'icone' => 'bi-hourglass-split'],
-        ['label' => 'Validés', 'valeur' => $compteurs['valide'] ?? 0, 'classe' => 'metric-success', 'icone' => 'bi-check2-circle'],
-        ['label' => 'Rejetés', 'valeur' => $compteurs['rejete'] ?? 0, 'classe' => 'metric-danger', 'icone' => 'bi-x-circle'],
-      ];
-    @endphp
+  <!-- Compteurs compacts -->
+  @php
+    $cartes = [
+      ['cle' => Signalement::EN_ATTENTE, 'label' => 'En attente', 'icone' => 'bi-hourglass-split', 'couleur' => 'warning'],
+      ['cle' => Signalement::VALIDE, 'label' => 'Validés · contact à faire', 'icone' => 'bi-telephone-outbound', 'couleur' => 'primary'],
+      ['cle' => Signalement::CLOTURE, 'label' => 'Clôturés', 'icone' => 'bi-check2-circle', 'couleur' => 'success'],
+      ['cle' => Signalement::REJETE, 'label' => 'Rejetés', 'icone' => 'bi-x-circle', 'couleur' => 'danger'],
+    ];
+  @endphp
+  <section class="sig-stats" aria-label="Résumé des signalements">
     @foreach ($cartes as $carte)
-      <div class="col-12 col-sm-6 col-xl-3">
-        <article class="metric-card {{ $carte['classe'] }}">
-          <div class="metric-top">
-            <span class="metric-label">{{ $carte['label'] }}</span>
-            <span class="metric-icon"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
-          </div>
-          <div class="metric-value">{{ $carte['valeur'] }}</div>
-        </article>
-      </div>
+      <a class="sig-stat {{ $statut === $carte['cle'] ? 'is-active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => $carte['cle']]) }}">
+        <span class="sig-stat-icone text-{{ $carte['couleur'] }} bg-{{ $carte['couleur'] }}-subtle"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
+        <span>
+          <span class="sig-stat-valeur">{{ $compteurs[$carte['cle']] ?? 0 }}</span>
+          <span class="sig-stat-label">{{ $carte['label'] }}</span>
+        </span>
+      </a>
     @endforeach
   </section>
 
-  <section class="panel mt-3">
-    <div class="panel-header flex-wrap">
-      <ul class="nav nav-pills statut-tabs gap-1">
-        <li class="nav-item">
-          <a class="nav-link {{ ! $statut ? 'active' : '' }}" href="{{ route('admin.signalements.index', request()->only('q')) }}">Tous</a>
-        </li>
-        @foreach (\App\Models\Signalement::STATUTS as $valeur => $libelle)
-          <li class="nav-item">
-            <a class="nav-link {{ $statut === $valeur ? 'active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => $valeur] + request()->only('q')) }}">
-              {{ $libelle }} <span class="ms-1 opacity-75">({{ $compteurs[$valeur] ?? 0 }})</span>
-            </a>
-          </li>
+  <section class="sig-panel mt-3">
+    <div class="sig-toolbar">
+      <nav class="sig-tabs" aria-label="Filtrer par statut">
+        <a class="sig-tab {{ ! $statut ? 'active' : '' }}" href="{{ route('admin.signalements.index', request()->only('q')) }}">Tous <span>{{ $total }}</span></a>
+        @foreach (Signalement::STATUTS as $valeur => $libelle)
+          <a class="sig-tab {{ $statut === $valeur ? 'active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => $valeur] + request()->only('q')) }}">{{ $libelle }} <span>{{ $compteurs[$valeur] ?? 0 }}</span></a>
         @endforeach
-      </ul>
-      <form method="GET" action="{{ route('admin.signalements.index') }}" class="d-flex gap-2">
+      </nav>
+      <form method="GET" action="{{ route('admin.signalements.index') }}" class="sig-search">
         @if ($statut)<input type="hidden" name="statut" value="{{ $statut }}">@endif
-        <input class="form-control form-control-sm table-search" type="search" name="q" value="{{ request('q') }}" placeholder="Récépissé, nom, province..." aria-label="Rechercher un signalement">
-        <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-search" aria-hidden="true"></i></button>
+        @if ($decision)<input type="hidden" name="decision" value="{{ $decision }}">@endif
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input type="search" name="q" value="{{ request('q') }}" placeholder="Récépissé, nom, province…" aria-label="Rechercher un signalement">
       </form>
     </div>
 
+    @if ($statut === Signalement::CLOTURE)
+      <!-- Historique des clôtures : filtre par décision -->
+      <div class="sig-subtabs">
+        <span class="text-muted small me-1">Décision :</span>
+        <a class="sig-chip {{ ! $decision ? 'active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => Signalement::CLOTURE] + request()->only('q')) }}">Toutes</a>
+        <a class="sig-chip sig-chip--success {{ $decision === Signalement::PRISE_EN_CHARGE ? 'active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => Signalement::CLOTURE, 'decision' => Signalement::PRISE_EN_CHARGE] + request()->only('q')) }}"><i class="bi bi-house-heart" aria-hidden="true"></i> Prise en charge <span>{{ $decisions[Signalement::PRISE_EN_CHARGE] ?? 0 }}</span></a>
+        <a class="sig-chip sig-chip--danger {{ $decision === Signalement::NON_PRISE_EN_CHARGE ? 'active' : '' }}" href="{{ route('admin.signalements.index', ['statut' => Signalement::CLOTURE, 'decision' => Signalement::NON_PRISE_EN_CHARGE] + request()->only('q')) }}"><i class="bi bi-slash-circle" aria-hidden="true"></i> Non prise en charge <span>{{ $decisions[Signalement::NON_PRISE_EN_CHARGE] ?? 0 }}</span></a>
+      </div>
+    @endif
+
     <div class="table-responsive">
-      <table class="table align-middle mb-0">
+      <table class="table sig-table align-middle mb-0">
         <thead>
           <tr>
-            <th scope="col">Récépissé</th>
             <th scope="col">Enfant</th>
-            <th scope="col">Vulnérabilité</th>
+            <th scope="col">Situation</th>
             <th scope="col">Localité</th>
             <th scope="col">Déclarant</th>
-            <th scope="col">Reçu le</th>
-            <th scope="col">Statut</th>
-            <th scope="col" class="text-end">Action</th>
+            <th scope="col">{{ $statut === Signalement::CLOTURE ? 'Décision' : 'Statut' }}</th>
+            <th scope="col" class="text-end">Reçu</th>
           </tr>
         </thead>
         <tbody>
           @forelse ($signalements as $signalement)
-            <tr class="{{ $signalement->lu_at ? '' : 'signalement-row-new' }}">
+            @php $url = route('admin.signalements.show', $signalement); @endphp
+            <tr class="sig-row {{ $signalement->lu_at ? '' : 'is-new' }}" onclick="window.location='{{ $url }}'">
               <td>
-                <span class="fw-bold">{{ $signalement->recepisse }}</span>
-                @unless ($signalement->lu_at)
-                  <span class="badge text-bg-danger ms-1">Nouveau</span>
-                @endunless
+                <div class="sig-enfant">
+                  <span class="sig-avatar">{{ $signalement->initiales }}</span>
+                  <span>
+                    <a href="{{ $url }}" class="sig-nom">{{ $signalement->enfant_nom_complet }}</a>
+                    @unless ($signalement->lu_at)<span class="sig-new-dot" title="Nouveau"></span>@endunless
+                    <span class="sig-meta">{{ $signalement->enfant_age }} ans · {{ $signalement->recepisse }}</span>
+                  </span>
+                </div>
               </td>
               <td>
-                <div class="fw-semibold">{{ $signalement->enfant_nom_complet }}</div>
-                <div class="small text-muted">{{ $signalement->enfant_age }} ans (estimé)</div>
-              </td>
-              <td>{{ $signalement->vulnerabilite_libelle }}</td>
-              <td>
-                <div>{{ $signalement->province }}</div>
-                <div class="small text-muted">{{ $signalement->localite }}</div>
+                @foreach (array_filter(explode(',', (string) $signalement->vulnerabilite)) as $cle)
+                  <span class="sig-tag">{{ Signalement::VULNERABILITES[$cle] ?? $cle }}</span>
+                @endforeach
               </td>
               <td>
-                <div>{{ $signalement->declarant_nom_complet }}</div>
-                <div class="small text-muted">{{ $signalement->lien_libelle }}</div>
+                <span class="sig-lieu"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ $signalement->province }}</span>
+                <span class="sig-meta">{{ $signalement->localite }}</span>
               </td>
-              <td class="text-nowrap">{{ $signalement->created_at->format('d/m/Y H:i') }}</td>
               <td>
-                @if ($signalement->statut === 'valide')
-                  <span class="badge text-bg-success">Validé</span>
-                @elseif ($signalement->statut === 'rejete')
-                  <span class="badge text-bg-danger">Rejeté</span>
+                <span class="d-block">{{ $signalement->declarant_nom_complet }}</span>
+                <span class="sig-meta">{{ $signalement->lien_libelle }}</span>
+              </td>
+              <td>
+                @if ($signalement->statut === Signalement::CLOTURE)
+                  <span class="sig-badge {{ $signalement->decision === Signalement::PRISE_EN_CHARGE ? 'text-success bg-success-subtle' : 'text-danger bg-danger-subtle' }}">
+                    <i class="bi {{ $signalement->decision === Signalement::PRISE_EN_CHARGE ? 'bi-house-heart' : 'bi-slash-circle' }}" aria-hidden="true"></i>
+                    {{ $signalement->decision_libelle }}
+                  </span>
+                  <span class="sig-meta">Clôturé le {{ $signalement->cloture_le?->format('d/m/Y') }}</span>
                 @else
-                  <span class="badge text-bg-warning">En attente</span>
+                  <span class="sig-badge text-{{ $signalement->statut_couleur }} bg-{{ $signalement->statut_couleur }}-subtle">{{ $signalement->statut_libelle }}</span>
                 @endif
               </td>
-              <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="{{ route('admin.signalements.show', $signalement) }}">
-                  <i class="bi bi-eye" aria-hidden="true"></i> Voir
-                </a>
+              <td class="text-end text-nowrap">
+                <span class="d-block small">{{ $signalement->created_at->format('d/m/Y') }}</span>
+                <span class="sig-meta">{{ $signalement->created_at->diffForHumans() }}</span>
               </td>
             </tr>
           @empty
             <tr>
-              <td colspan="8" class="text-center text-muted py-5">
-                <i class="bi bi-inbox fs-2 d-block mb-2" aria-hidden="true"></i>
-                Aucun signalement pour le moment.
+              <td colspan="6" class="sig-vide">
+                <i class="bi bi-inbox" aria-hidden="true"></i>
+                <span>Aucun signalement {{ $statut ? 'dans cette catégorie' : 'pour le moment' }}.</span>
               </td>
             </tr>
           @endforelse

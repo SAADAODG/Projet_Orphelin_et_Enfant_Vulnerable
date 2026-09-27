@@ -6,78 +6,80 @@
 <!-- Hero Section : diaporama plein écran en arrière-plan -->
 <section class="hero-section hero-bg-slider">
   <!-- Images d'arrière-plan (défilement automatique) -->
+  @php $slides = config('accueil.slides', []); @endphp
   <div id="heroCarousel" class="carousel slide carousel-fade hero-bg-carousel" data-bs-ride="carousel" data-bs-interval="5000" data-bs-pause="false">
     <div class="carousel-inner">
-      <div class="carousel-item active" style="background-image: url('{{ asset('assets/imagesDash/FB_IMG_1788680403383.jpg') }}');"></div>
-      <div class="carousel-item" style="background-image: url('{{ asset('assets/imagesDash/FB_IMG_1789026566473.jpg') }}');"></div>
+      @foreach ($slides as $slide)
+        @php
+          // Largeur de l'image pour ne garder qu'une partie de la bande de fond (cadrage gauche / droite)
+          $largeur = null;
+          if (isset($slide['fond_visible']) && in_array($slide['cadrage'] ?? '', ['gauche', 'droite'], true)
+              && ($taille = @getimagesize(public_path($slide['image'])))) {
+              $k = max(0, min(1, (float) $slide['fond_visible']));
+              $ratio = $taille[0] / $taille[1];
+              $largeur = sprintf('calc(%.1f%% + %.2fcqh)', (1 - $k) * 100, $k * $ratio * 100);
+          }
+        @endphp
+        <div class="carousel-item hero-slide--{{ $slide['cadrage'] ?? 'plein' }} {{ ! empty($slide['decalage']) ? 'hero-slide--decale' : '' }} {{ $loop->first ? 'active' : '' }}"
+             style="background: {{ $slide['fond'] ?? '#0a3a20' }}; --hero-img-hauteur: {{ $slide['hauteur'] ?? '100%' }}; --hero-img-position: {{ $slide['position'] ?? 'center' }};@if ($largeur) --hero-img-largeur: {{ $largeur }};@endif @if (! empty($slide['decalage'])) --hero-img-dx: {{ $slide['decalage']['x'] ?? '0%' }}; --hero-img-dy: {{ $slide['decalage']['y'] ?? '0%' }};@endif">
+          <img class="hero-slide-img" src="{{ asset($slide['image']) }}" alt="{{ $slide['alt'] ?? '' }}" @unless ($loop->first) loading="lazy" @endunless>
+          @if (! empty($slide['slogan']) && ($slide['slogan']['afficher'] ?? true))
+            @php $slogan = $slide['slogan']; @endphp
+            <div class="container px-3 px-lg-4 hero-slogan-wrap hero-slogan--{{ $slogan['horizontal'] ?? 'gauche' }} hero-slogan--{{ $slogan['vertical'] ?? 'milieu' }} hero-slogan--{{ $slogan['couleur'] ?? 'clair' }} {{ ! empty($slogan['style']) ? 'hero-slogan--'.$slogan['style'] : '' }} {{ ! empty($slogan['animation']) ? 'hero-slogan--anim-'.$slogan['animation'] : '' }}">
+              <div class="hero-slogan" @if (! empty($slogan['taille_texte'])) style="--slogan-texte-echelle: {{ (float) $slogan['taille_texte'] }};" @endif>
+                @if (! empty($slogan['titre']))<p class="hero-slogan-titre">{{ $slogan['titre'] }}</p>@endif
+                @if (! empty($slogan['accent']))<p class="hero-slogan-accent"><span>{{ $slogan['accent'] }}</span></p>@endif
+                @if (! empty($slogan['texte']))<p class="hero-slogan-texte {{ ! empty($slogan['couleur_texte']) ? 'hero-slogan-texte--'.$slogan['couleur_texte'] : '' }}">{{ $slogan['texte'] }}</p>@endif
+                @if (! empty($slogan['icones']))
+                  <div class="hero-slogan-icones">
+                    @foreach ($slogan['icones'] as $icone)
+                      <div class="hero-icone" style="--icone-couleur: {{ $icone['couleur'] ?? '#127a44' }};">
+                        <span class="hero-icone-rond"><i class="{{ $icone['icone'] }}" aria-hidden="true"></i></span>
+                        <span class="hero-icone-libelle">{{ $icone['libelle'] }}</span>
+                      </div>
+                    @endforeach
+                  </div>
+                @endif
+                @if (! empty($slogan['ornement']))
+                  <div class="hero-ornement" aria-hidden="true">
+                    <span class="hero-ornement-rouge"></span><i class="fa-solid fa-star"></i><span class="hero-ornement-vert"></span>
+                  </div>
+                @endif
+              </div>
+            </div>
+          @endif
+        </div>
+      @endforeach
     </div>
     <div class="carousel-indicators">
-      <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Image 1"></button>
-      <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="1" aria-label="Image 2"></button>
+      @foreach ($slides as $slide)
+        <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="{{ $loop->index }}" class="{{ $loop->first ? 'active' : '' }}" @if ($loop->first) aria-current="true" @endif aria-label="Image {{ $loop->iteration }}"></button>
+      @endforeach
     </div>
   </div>
 
-  <!-- Voile sombre pour la lisibilité du texte -->
-  <div class="hero-bg-overlay"></div>
-
-  <!-- Contenu au premier plan -->
+  <!-- Boutons d'action au premier plan -->
   <div class="container px-3 px-lg-4 hero-bg-content">
-    <div class="row align-items-center">
-      <div class="col-12 col-lg-8">
-        <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" class="hero-bg-emblem">
-        <div class="hero-badges">
-          <span class="badge-pill badge-pill--soft">Burkina Faso</span>
-          <span class="badge-pill badge-pill--gold">Ministère de la Famille et de la Solidarité</span>
-        </div>
-
-        <h1 class="hero-title">
-          Ministère de la Famille et de la Solidarité <br>
-          <span class="highlight-green">Protection, accompagnement et prise en charge</span>
-          des orphelins et enfants vulnérables.
-        </h1>
-
-        <p class="hero-subtitle">
-          La plateforme OEV accompagne les orphelins et enfants vulnérables dans leur accès à la protection sociale,
-          à l’éducation, à la santé et à l’accompagnement institutionnel, dans le respect de la dignité humaine et des valeurs nationales.
-        </p>
-
-        <div class="hero-cta-group">
-          <a href="{{ route('public.signaler') }}" class="btn-hero-primary">
-            <i class="bi bi-megaphone-fill"></i> Signaler un OEV
-          </a>
-          <a href="{{ route('public.suivi') }}" class="btn-hero-secondary">
-            <i class="bi bi-card-checklist"></i> Suivre mon signalement
-          </a>
-        </div>
-
-        <div class="hero-trust-row">
-          <div class="trust-item">
-            <strong>+1 200</strong>
-            <span>Enfants accompagnés</span>
-          </div>
-          <div class="trust-item">
-            <strong>98%</strong>
-            <span>Demandes traitées</span>
-          </div>
-          <div class="trust-item">
-            <strong>24h</strong>
-            <span>Réponse rapide</span>
-          </div>
-        </div>
-      </div>
+    <div class="hero-cta-group hero-cta-floating">
+      <a href="{{ route('public.signaler') }}" class="btn-hero-primary btn-hero-animated">
+        <i class="bi bi-megaphone-fill"></i> Signaler un OEV
+      </a>
+      <a href="{{ route('public.suivi') }}" class="btn-hero-secondary btn-hero-animated">
+        <i class="bi bi-card-checklist"></i> Suivre mon signalement
+      </a>
     </div>
   </div>
 </section>
 
 <section class="public-section public-section--light">
   <div class="container px-3 px-lg-4">
-    <div class="section-title-wrapper">
+    <div class="section-title-wrapper reveal-up">
       <p class="section-eyebrow">Mission nationale</p>
       <h2 class="section-main-title">Un accompagnement au service de la protection de l’enfance</h2>
     </div>
 
     <div class="row g-4">
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 0ms">
         <article class="feature-card">
           <div class="feature-icon-wrapper">
             <i class="bi bi-book-half"></i>
@@ -87,7 +89,7 @@
         </article>
       </div>
 
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 120ms">
         <article class="feature-card">
           <div class="feature-icon-wrapper">
             <i class="bi bi-heart-pulse"></i>
@@ -97,7 +99,7 @@
         </article>
       </div>
 
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 240ms">
         <article class="feature-card">
           <div class="feature-icon-wrapper">
             <i class="bi bi-people-fill"></i>
@@ -107,7 +109,7 @@
         </article>
       </div>
 
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 360ms">
         <article class="feature-card">
           <div class="feature-icon-wrapper">
             <i class="bi bi-file-earmark-check"></i>
@@ -122,34 +124,34 @@
 
 <section class="public-section">
   <div class="container px-3 px-lg-4">
-    <div class="section-title-wrapper">
+    <div class="section-title-wrapper reveal-up">
       <p class="section-eyebrow">Parcours simple</p>
       <h2 class="section-main-title">Comment la demande est traitée ?</h2>
     </div>
 
     <div class="row g-4 justify-content-center">
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 0ms">
         <div class="step-card">
           <span class="step-number">01</span>
           <h4>Identification</h4>
           <p>Enregistrement du dossier et vérification des informations de l’enfant et du tuteur.</p>
         </div>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 120ms">
         <div class="step-card">
           <span class="step-number">02</span>
           <h4>Déclaration</h4>
           <p>Soumission de la demande avec pièces justificatives et numéro de récépissé unique.</p>
         </div>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 240ms">
         <div class="step-card">
           <span class="step-number">03</span>
           <h4>Analyse</h4>
           <p>Vérification par les agents et validation des besoins selon les critères institutionnels.</p>
         </div>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3 reveal-up" style="--reveal-delay: 360ms">
         <div class="step-card step-card--success">
           <span class="step-number">04</span>
           <h4>Décision</h4>
@@ -213,3 +215,25 @@
   </div>
 </section>
 @endsection
+
+@push('scripts')
+<script>
+  // Apparition des sections « Mission nationale » et « Parcours simple » au défilement
+  (function () {
+    const elements = document.querySelectorAll('.reveal-up');
+    if (!('IntersectionObserver' in window)) {
+      elements.forEach(function (el) { el.classList.add('is-visible'); });
+      return;
+    }
+    const observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    elements.forEach(function (el) { observer.observe(el); });
+  })();
+</script>
+@endpush

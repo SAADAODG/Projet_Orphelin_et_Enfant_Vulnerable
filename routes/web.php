@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\PlainteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SignalementController;
@@ -23,12 +25,13 @@ Route::get('/', function () {
 Route::get('/signaler', [SignalementController::class, 'create'])->name('public.signaler');
 Route::post('/signaler', [SignalementController::class, 'store'])->name('public.signaler.store');
 Route::get('/signaler/merci', [SignalementController::class, 'merci'])->name('public.signaler.merci');
+Route::get('/signaler/recepisse/{recepisse}', [SignalementController::class, 'recepisse'])->name('public.signaler.recepisse');
 
 Route::get('/suivi', [SignalementController::class, 'suivi'])->name('public.suivi');
 
-Route::get('/plainte', function () {
-    return view('public.plainte');
-})->name('public.plainte');
+Route::get('/plainte', [PlainteController::class, 'create'])->name('public.plainte');
+Route::post('/plainte', [PlainteController::class, 'store'])->name('public.plainte.store');
+Route::get('/plainte/merci', [PlainteController::class, 'merci'])->name('public.plainte.merci');
 
 Route::get('/a-propos', function () {
     return view('public.about');
@@ -62,6 +65,12 @@ Route::middleware('auth')->prefix('admin')->group(function () {
     Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
     Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
     Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
+    Route::patch('/signalements/{signalement}/cloturer', [AdminSignalementController::class, 'cloturer'])->name('admin.signalements.cloturer');
+
+    // Module « Gestion de plainte »
+    Route::get('/plaintes', [AdminPlainteController::class, 'index'])->name('admin.plaintes.index');
+    Route::get('/plaintes/{plainte}', [AdminPlainteController::class, 'show'])->name('admin.plaintes.show');
+    Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->name('admin.plaintes.statut');
 
     Route::resource('users', UserController::class)->except(['create', 'edit', 'show']);
     Route::middleware('role:superAdmin|administrateur')->group(function () {
