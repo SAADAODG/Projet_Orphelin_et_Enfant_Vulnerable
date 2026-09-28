@@ -4,13 +4,17 @@
 
 @section('title', 'Liste des OEV | OEV')
 
+@push('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
+@endpush
+
 @php
   $etatsDossier = [
-    'complet' => ['label' => 'Dossier complet', 'couleur' => 'success'],
-    'incomplet' => ['label' => 'Dossier incomplet', 'couleur' => 'warning'],
-    'aucun' => ['label' => 'Sans dossier', 'couleur' => 'secondary'],
+    'complet' => 'Dossier complet',
+    'incomplet' => 'Dossier incomplet',
+    'aucun' => 'Sans dossier',
   ];
-  $totalPieces = count(Oev::DOCUMENTS);
+  $filtreActif = $filtres['dossier'] || $filtres['statut'] || $filtres['recherche'] !== '';
 @endphp
 
 @section('content')
@@ -21,34 +25,33 @@
       <div>
         <p class="eyebrow mb-1">OEV</p>
         <h1 class="h3 mb-1">Liste des OEV</h1>
-        <p class="text-muted mb-0">Orphelins et enfants vulnérables enregistrés, avec ou sans dossier.</p>
+        <p class="text-muted mb-0">Orphelins et enfants vulnérables enregistrés. Cliquez sur un OEV pour voir sa fiche complète.</p>
       </div>
     </div>
     @can('enregistrer OEV')
     <div class="heading-actions">
-      <a class="btn btn-primary btn-sm" href="{{ route('oevs.create') }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Enregistrer un OEV</a>
+      <a class="btn btn-primary" href="{{ route('oevs.create') }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Enregistrer un OEV</a>
     </div>
     @endcan
   </div>
 
-  @if (session('success')) <div class="alert alert-success mt-3">{{ session('success') }}</div> @endif
+  @if (session('success')) <div class="alert alert-success mt-3"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> {{ session('success') }}</div> @endif
 
   <section class="row g-3 mt-1" aria-label="Statistiques des dossiers OEV">
     @foreach ([
-      ['cle' => null, 'label' => 'Total OEV', 'valeur' => $stats['total'], 'icone' => 'bi-people', 'style' => 'metric-primary'],
-      ['cle' => 'complet', 'label' => 'Dossiers complets', 'valeur' => $stats['complet'], 'icone' => 'bi-folder-check', 'style' => 'metric-success'],
-      ['cle' => 'incomplet', 'label' => 'Dossiers incomplets', 'valeur' => $stats['incomplet'], 'icone' => 'bi-folder2-open', 'style' => 'metric-warning'],
-      ['cle' => 'aucun', 'label' => 'Sans dossier', 'valeur' => $stats['aucun'], 'icone' => 'bi-folder-x', 'style' => 'metric-danger'],
+      ['cle' => null, 'label' => 'OEV enregistrés', 'valeur' => $stats['total'], 'icone' => 'bi-people-fill', 'style' => ''],
+      ['cle' => 'complet', 'label' => 'Dossiers complets', 'valeur' => $stats['complet'], 'icone' => 'bi-folder-check', 'style' => 'oev-stat--success'],
+      ['cle' => 'incomplet', 'label' => 'Dossiers incomplets', 'valeur' => $stats['incomplet'], 'icone' => 'bi-folder2-open', 'style' => 'oev-stat--warning'],
+      ['cle' => 'aucun', 'label' => 'Sans dossier', 'valeur' => $stats['aucun'], 'icone' => 'bi-folder-x', 'style' => 'oev-stat--danger'],
     ] as $carte)
-      <div class="col-12 col-sm-6 col-xl-3">
-        <a class="text-decoration-none" href="{{ route('oevs.index', array_filter(['dossier' => $carte['cle']])) }}">
-          <article class="metric-card {{ $carte['style'] }} {{ $filtres['dossier'] === $carte['cle'] ? 'border border-2 border-primary' : '' }}">
-            <div class="metric-top">
-              <span class="metric-label">{{ $carte['label'] }}</span>
-              <span class="metric-icon"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
-            </div>
-            <div class="metric-value">{{ $carte['valeur'] }}</div>
-          </article>
+      <div class="col-6 col-xl-3">
+        <a class="oev-stat {{ $carte['style'] }} {{ $filtres['dossier'] === $carte['cle'] && ($carte['cle'] || ! $filtreActif) ? 'is-active' : '' }}"
+           href="{{ route('oevs.index', array_filter(['dossier' => $carte['cle']])) }}">
+          <span class="oev-stat-icone"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
+          <span>
+            <span class="oev-stat-valeur d-block">{{ $carte['valeur'] }}</span>
+            <span class="oev-stat-label">{{ $carte['label'] }}</span>
+          </span>
         </a>
       </div>
     @endforeach
@@ -57,79 +60,96 @@
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
-        <h2 class="h5 mb-1">OEV enregistrés</h2>
-        <p class="text-muted mb-0">{{ $oevs->total() }} OEV trouvé(s).</p>
+        <h2 class="h5 mb-1">OEV enregistrés <span class="badge rounded-pill text-bg-light border ms-1">{{ $oevs->total() }}</span></h2>
+        <p class="text-muted mb-0">
+          @if ($filtreActif)
+            Résultats filtrés — <a href="{{ route('oevs.index') }}" class="text-decoration-none">tout afficher</a>
+          @else
+            Tous les OEV, du plus récent au plus ancien.
+          @endif
+        </p>
       </div>
     </div>
 
-    <form class="row g-2 align-items-end mb-3" method="GET" action="{{ route('oevs.index') }}">
-      <div class="col-12 col-md-5">
-        <label class="form-label small mb-1" for="filtre-q">Recherche</label>
-        <input class="form-control form-control-sm" id="filtre-q" name="q" type="search" value="{{ $filtres['recherche'] }}" placeholder="Code, nom, tuteur, localité, établissement">
+    <form class="oev-toolbar" method="GET" action="{{ route('oevs.index') }}" role="search">
+      <div class="oev-recherche">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input class="form-control" name="q" type="search" value="{{ $filtres['recherche'] }}" placeholder="Rechercher par code, nom, prénom, tuteur, localité…" aria-label="Rechercher un OEV">
       </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small mb-1" for="filtre-dossier">Dossier</label>
-        <select class="form-select form-select-sm" id="filtre-dossier" name="dossier">
-          <option value="">Tous</option>
-          @foreach ($etatsDossier as $cle => $etat)
-            <option value="{{ $cle }}" @selected($filtres['dossier'] === $cle)>{{ $etat['label'] }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="col-6 col-md-3">
-        <label class="form-label small mb-1" for="filtre-statut">Statut</label>
-        <select class="form-select form-select-sm" id="filtre-statut" name="statut">
-          <option value="">Tous</option>
-          @foreach (Oev::STATUTS as $cle => $label)
-            <option value="{{ $cle }}" @selected($filtres['statut'] === $cle)>{{ $label }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="col-12 col-md-2 d-flex gap-2">
-        <button class="btn btn-primary btn-sm flex-grow-1" type="submit"><i class="bi bi-funnel" aria-hidden="true"></i> Filtrer</button>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ route('oevs.index') }}" title="Réinitialiser" aria-label="Réinitialiser les filtres"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
-      </div>
+      <select class="form-select" name="statut" aria-label="Filtrer par statut" onchange="this.form.submit()">
+        <option value="">Tous les statuts</option>
+        @foreach (Oev::STATUTS as $cle => $label)
+          <option value="{{ $cle }}" @selected($filtres['statut'] === $cle)>{{ $label }}</option>
+        @endforeach
+      </select>
+      <select class="form-select" name="dossier" aria-label="Filtrer par état du dossier" onchange="this.form.submit()">
+        <option value="">Tous les dossiers</option>
+        @foreach ($etatsDossier as $cle => $label)
+          <option value="{{ $cle }}" @selected($filtres['dossier'] === $cle)>{{ $label }}</option>
+        @endforeach
+      </select>
+      <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Rechercher</button>
     </form>
 
-    <div class="table-responsive">
-      <table class="table align-middle mb-0">
-        <thead>
-          <tr><th>Code</th><th>Enfant</th><th>Statut</th><th>Tuteur</th><th>Scolarité en cours</th><th>Localité</th><th>Dossier</th><th class="text-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @forelse ($oevs as $oev)
-            @php($etat = $oev->etatDossier())
-            <tr>
-              <td><strong>{{ $oev->code }}</strong></td>
-              <td>
-                {{ $oev->nomComplet() }}
-                @if ($oev->handicap)<span class="badge text-bg-info ms-1" title="{{ $oev->nature_handicap }}">Handicap</span>@endif
-                <br><small class="text-muted">{{ $oev->sexe === 'F' ? 'Fille' : 'Garçon' }} · né(e) le {{ $oev->date_naissance->format('d/m/Y') }} ({{ $oev->age() }} ans)</small>
-              </td>
-              <td><small>{{ $oev->libelle('statut', Oev::STATUTS) }}</small></td>
-              <td>{{ $oev->nomCompletTuteur() }}<br><small class="text-muted">{{ $oev->contact_tuteur }}</small></td>
-              <td>{{ $oev->etablissement_actuel }}<br><small class="text-muted">{{ $oev->classe }} · {{ $oev->libelle('type_etablissement', Oev::TYPES_ETABLISSEMENT) }}</small></td>
-              <td><small>{{ $oev->commune }}<br><span class="text-muted">{{ $oev->province }}, {{ $oev->region }}</span></small></td>
-              <td>
-                <span class="badge text-bg-{{ $etatsDossier[$etat]['couleur'] }}">{{ $etatsDossier[$etat]['label'] }}</span>
-                <small class="text-muted d-block">{{ $oev->documents_count }}/{{ $totalPieces }} pièce(s)</small>
-              </td>
-              <td class="text-end">
-                <div class="btn-group btn-group-sm">
-                  <a class="btn btn-light" href="{{ route('oevs.show', $oev) }}" title="Voir la fiche" aria-label="Voir la fiche de {{ $oev->nomComplet() }}"><i class="fa-solid fa-eye" aria-hidden="true"></i></a>
-                  @can('enregistrer OEV')
-                    <a class="btn btn-outline-primary" href="{{ route('oevs.edit', $oev) }}" title="{{ $etat === 'complet' ? 'Modifier' : 'Compléter le dossier' }}" aria-label="Modifier {{ $oev->nomComplet() }}"><i class="fa-solid {{ $etat === 'complet' ? 'fa-pen-to-square' : 'fa-folder-plus' }}" aria-hidden="true"></i></a>
-                  @endcan
-                </div>
-              </td>
-            </tr>
-          @empty
-            <tr><td colspan="8" class="text-center text-muted py-4">Aucun OEV ne correspond à ces critères.</td></tr>
-          @endforelse
-        </tbody>
-      </table>
-    </div>
-    <div class="d-flex justify-content-end mt-3">{{ $oevs->links() }}</div>
+    @if ($oevs->isEmpty())
+      <div class="oev-vide">
+        <div class="oev-vide-icone"><i class="bi {{ $filtreActif ? 'bi-search' : 'bi-people' }}" aria-hidden="true"></i></div>
+        @if ($filtreActif)
+          <h3 class="h5">Aucun OEV ne correspond à votre recherche</h3>
+          <p class="text-muted">Essayez d’autres mots-clés ou retirez les filtres.</p>
+          <a class="btn btn-outline-primary" href="{{ route('oevs.index') }}">Réinitialiser les filtres</a>
+        @else
+          <h3 class="h5">Aucun OEV enregistré pour le moment</h3>
+          <p class="text-muted">Les OEV apparaîtront ici dès leur enregistrement.</p>
+          @can('enregistrer OEV')
+            <a class="btn btn-primary" href="{{ route('oevs.create') }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Enregistrer le premier OEV</a>
+          @endcan
+        @endif
+      </div>
+    @else
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 oev-liste">
+          <thead>
+            <tr><th>Code</th><th>Nom</th><th class="d-none d-md-table-cell">Prénom(s)</th><th>Statut</th><th class="text-end"><span class="visually-hidden">Ouvrir</span></th></tr>
+          </thead>
+          <tbody>
+            @foreach ($oevs as $oev)
+              <tr data-href="{{ route('oevs.show', $oev) }}">
+                <td><a class="oev-code text-decoration-none" href="{{ route('oevs.show', $oev) }}" aria-label="Ouvrir la fiche de {{ $oev->nomComplet() }}">{{ $oev->code }}</a></td>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    <span class="oev-avatar oev-avatar--{{ $oev->sexe }}" aria-hidden="true">{{ $oev->initiales() }}</span>
+                    <span>
+                      <span class="oev-nom d-block">{{ $oev->nom }}</span>
+                      <span class="d-md-none small text-muted">{{ $oev->prenom }}</span>
+                    </span>
+                  </div>
+                </td>
+                <td class="d-none d-md-table-cell">{{ $oev->prenom }}</td>
+                <td><span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', Oev::STATUTS) }}</span></td>
+                <td class="text-end"><span class="oev-ouvrir"><i class="bi bi-chevron-right" aria-hidden="true"></i></span></td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <small class="text-muted">Affichage de {{ $oevs->firstItem() }} à {{ $oevs->lastItem() }} sur {{ $oevs->total() }} OEV</small>
+        {{ $oevs->links() }}
+      </div>
+    @endif
   </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  // Toute la ligne ouvre la fiche de l'OEV (le code reste un vrai lien pour le clavier et le clic molette)
+  document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
+    ligne.addEventListener('click', function (e) {
+      if (e.target.closest('a')) { return; }
+      if (e.ctrlKey || e.metaKey) { window.open(ligne.dataset.href, '_blank'); } else { window.location = ligne.dataset.href; }
+    });
+  });
+</script>
+@endpush

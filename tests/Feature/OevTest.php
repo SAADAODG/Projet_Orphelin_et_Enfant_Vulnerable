@@ -75,7 +75,7 @@ class OevTest extends TestCase
         $this->assertSame('Awa', $oev->prenom);
         $this->assertSame('Issa', $oev->prenom_tuteur);
         $this->assertSame(11, $oev->age());
-        $this->get(route('oevs.show', $oev))->assertOk()->assertSee('OUEDRAOGO Awa');
+        $this->get(route('oevs.show', $oev))->assertOk()->assertSeeInOrder(['OUEDRAOGO', 'Awa', $oev->code]);
     }
 
     public function test_enregistrement_avec_toutes_les_pieces_donne_un_dossier_complet(): void
@@ -123,6 +123,16 @@ class OevTest extends TestCase
         $this->assertSame('+226 76 54 32 10', Oev::where('nom', 'KABORE')->value('contact_tuteur'));
     }
 
+    public function test_les_messages_d_erreur_du_formulaire_sont_en_francais(): void
+    {
+        $this->actingAs($this->agent)
+            ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region' => '']))
+            ->assertSessionHasErrors([
+                'classe' => 'Le champ « classe » est obligatoire.',
+                'region' => 'Le champ « région » est obligatoire.',
+            ]);
+    }
+
     public function test_un_telephone_incomplet_est_refuse(): void
     {
         $this->actingAs($this->agent)
@@ -149,9 +159,24 @@ class OevTest extends TestCase
         $this->actingAs($this->agent)->post(route('oevs.store'), $this->donneesOev(['nom_structure_rib' => 'ONG Avenir']) + $this->pieces());
         $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'KABORE', 'prenom' => 'Paul', 'sexe' => 'M']));
 
-        $this->get(route('oevs.index'))->assertOk()->assertSee('OUEDRAOGO Awa')->assertSee('KABORE Paul');
-        $this->get(route('oevs.index', ['dossier' => 'complet']))->assertSee('OUEDRAOGO Awa')->assertDontSee('KABORE Paul');
-        $this->get(route('oevs.index', ['dossier' => 'aucun']))->assertSee('KABORE Paul')->assertDontSee('OUEDRAOGO Awa');
+        $this->get(route('oevs.index'))->assertOk()->assertSee('OUEDRAOGO')->assertSee('KABORE');
+        $this->get(route('oevs.index', ['dossier' => 'complet']))->assertSee('OUEDRAOGO')->assertDontSee('KABORE');
+        $this->get(route('oevs.index', ['dossier' => 'aucun']))->assertSee('KABORE')->assertDontSee('OUEDRAOGO');
+    }
+
+    public function test_la_liste_affiche_code_nom_prenom_statut_et_la_fiche_le_detail(): void
+    {
+        $this->actingAs($this->agent)->post(route('oevs.store'), $this->donneesOev());
+        $oev = Oev::firstOrFail();
+
+        $this->get(route('oevs.index'))
+            ->assertSeeInOrder([$oev->code, 'OUEDRAOGO', 'Awa', 'Orphelin de père'])
+            ->assertSee(route('oevs.show', $oev))
+            ->assertDontSee('SAWADOGO')        // le tuteur n'apparaît plus dans la liste
+            ->assertDontSee('Lycée Philippe'); // ni la scolarité
+
+        $this->get(route('oevs.show', $oev))
+            ->assertSee('SAWADOGO')->assertSee('+226 70 00 00 00')->assertSee('Lycée Philippe Zinda Kaboré')->assertSee('Kadiogo');
     }
 
     public function test_un_dp_peut_voir_mais_pas_enregistrer(): void

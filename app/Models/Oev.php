@@ -87,6 +87,40 @@ class Oev extends Model
         return $this->nom . ' ' . $this->prenom;
     }
 
+    /** Tailles maximales souhaitées par pièce (Ko), plafonnées par la configuration PHP du serveur. */
+    public const TAILLE_MAX_PHOTO_KO = 2048;
+    public const TAILLE_MAX_DOCUMENT_KO = 5120;
+
+    public static function tailleMaxFichierKo(string $type): int
+    {
+        $souhaitee = $type === 'photo' ? self::TAILLE_MAX_PHOTO_KO : self::TAILLE_MAX_DOCUMENT_KO;
+
+        return min($souhaitee, intdiv(self::octetsIni('upload_max_filesize'), 1024));
+    }
+
+    /** Taille totale maximale d'un envoi de formulaire (Ko), fixée par post_max_size. */
+    public static function tailleMaxEnvoiKo(): int
+    {
+        return intdiv(self::octetsIni('post_max_size'), 1024);
+    }
+
+    /** Convertit une valeur php.ini ("2M", "8M", "1G"…) en octets ; 0 ou vide = illimité. */
+    private static function octetsIni(string $cle): int
+    {
+        $valeur = trim((string) ini_get($cle));
+        $nombre = (int) $valeur;
+        if ($nombre <= 0) {
+            return PHP_INT_MAX;
+        }
+
+        return match (strtolower(substr($valeur, -1))) {
+            'g' => $nombre * 1024 ** 3,
+            'm' => $nombre * 1024 ** 2,
+            'k' => $nombre * 1024,
+            default => $nombre,
+        };
+    }
+
     public const INDICATIF = '+226';
 
     /** Chiffres du numéro sans l'indicatif du Burkina Faso, ex. "+226 70 12 34 56" → "70123456". */
@@ -107,6 +141,12 @@ class Oev extends Model
     public function age(): int
     {
         return (int) $this->date_naissance?->age;
+    }
+
+    /** Initiales pour l'avatar, ex. "OUEDRAOGO Awa" → "OA". */
+    public function initiales(): string
+    {
+        return mb_strtoupper(mb_substr((string) $this->nom, 0, 1) . mb_substr((string) $this->prenom, 0, 1));
     }
 
     public function nomCompletTuteur(): string

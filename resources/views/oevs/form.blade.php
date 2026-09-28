@@ -32,6 +32,11 @@
     'cnib_tuteur' => 'bi-person-badge',
     'rib' => 'bi-bank',
   ];
+
+  // Limites de taille réelles (application ∩ configuration PHP du serveur)
+  $maxFichiersKo = collect(Oev::DOCUMENTS)->keys()->mapWithKeys(fn ($t) => [$t => Oev::tailleMaxFichierKo($t)])->all();
+  $maxEnvoiKo = Oev::tailleMaxEnvoiKo();
+  $enMo = fn (int $ko) => str_replace('.', ',', (string) round($ko / 1024, 1)) . ' Mo';
 @endphp
 
 @section('title', ($edition ? 'Modifier ' . $oev->code : 'Enregistrer un OEV') . ' | OEV')
@@ -120,6 +125,7 @@
     <div class="alert alert-danger mt-3">
       <strong>Veuillez corriger les erreurs suivantes :</strong>
       <ul class="mb-0 mt-1">@foreach ($errors->all() as $erreur)<li>{{ $erreur }}</li>@endforeach</ul>
+      <div class="small mt-2"><i class="bi bi-info-circle" aria-hidden="true"></i> Les informations saisies ont été conservées, mais les fichiers choisis doivent être sélectionnés à nouveau (étape 3).</div>
     </div>
   @endif
 
@@ -333,9 +339,11 @@
       <div data-etape="3" hidden>
         <p class="text-muted mb-3">
           <i class="bi bi-info-circle" aria-hidden="true"></i>
-          Cliquez sur une carte (ou glissez-y un fichier) : PDF, JPG ou PNG, 5 Mo max — photo en JPG ou PNG, 2 Mo max.
+          Cliquez sur une carte (ou glissez-y un fichier) : PDF, JPG ou PNG, <strong>{{ $enMo($maxFichiersKo['acte_naissance']) }} max par fichier</strong>
+          (photo : JPG ou PNG, {{ $enMo($maxFichiersKo['photo']) }} max), <strong>{{ $enMo($maxEnvoiKo) }} au total</strong>.
           Les pièces sont facultatives : le dossier pourra être complété plus tard.
         </p>
+        <div class="alert alert-danger py-2" data-alerte-taille hidden></div>
         <div class="row g-3">
           @foreach (Oev::DOCUMENTS as $type => $libelle)
             @php($existant = $documents->get($type))
@@ -457,6 +465,17 @@ document.addEventListener('DOMContentLoaded', function () {
   var atteinte = 1;
   var pieces = @json(Oev::DOCUMENTS);
 
+  /* ----- Limites de taille des fichiers (en Ko, fournies par le serveur) ----- */
+  var limites = { fichiers: @json($maxFichiersKo), envoi: {{ min($maxEnvoiKo, PHP_INT_MAX >> 11) }} };
+  var zoneAlerteTaille = form.querySelector('[data-alerte-taille]');
+  function enMo(ko) { return (ko / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' Mo'; }
+  function alerteTaille(message) { zoneAlerteTaille.textContent = message; zoneAlerteTaille.hidden = !message; }
+  function tailleTotaleKo() {
+    var octets = 0;
+    form.querySelectorAll('input[type=file]').forEach(function (i) { if (i.files[0]) { octets += i.files[0].size; } });
+    return octets / 1024;
+  }
+
   var panneaux = form.querySelectorAll('[data-etape]');
   var puces = form.querySelectorAll('[data-stepper]');
   var btnPrec = form.querySelector('[data-precedent]');
@@ -519,6 +538,14 @@ document.addEventListener('DOMContentLoaded', function () {
     input.addEventListener('change', function () {
       var fichier = input.files[0];
       carte.classList.remove('is-invalid');
+      if (fichier && fichier.size > limites.fichiers[carte.dataset.piece] * 1024) {
+        alerteTaille('« ' + fichier.name + ' » pèse ' + enMo(fichier.size / 1024) + ' : le maximum pour « ' + pieces[carte.dataset.piece] + ' » est de ' + enMo(limites.fichiers[carte.dataset.piece]) + '. Choisissez un fichier plus léger.');
+        input.value = '';
+        carte.classList.add('is-invalid');
+        fichier = null;
+      } else {
+        alerteTaille('');
+      }
       if (fichier) {
         carte.classList.add('is-filled');
         etat.textContent = fichier.name + ' (' + Math.max(1, Math.round(fichier.size / 1024)) + ' Ko)';
@@ -654,6 +681,14 @@ document.addEventListener('DOMContentLoaded', function () {
   form.addEventListener('submit', function (e) {
     for (var i = 1; i < total; i++) {
       if (!validerEtape(i)) { e.preventDefault(); afficher(i); validerEtape(i); return; }
+    }
+    // Marge de 256 Ko pour les champs texte de la requête
+    var totalKo = tailleTotaleKo();
+    if (totalKo > limites.envoi - 256) {
+      e.preventDefault();
+      afficher(3);
+      alerteTaille('Les fichiers sélectionnés totalisent ' + enMo(totalKo) + ' : le maximum autorisé en un seul envoi est de ' + enMo(limites.envoi - 256) + '. Retirez ou allégez certaines pièces (elles pourront être ajoutées plus tard via « Modifier / compléter »).');
+      return;
     }
     btnEnr.disabled = true;
     btnEnr.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Enregistrement…';

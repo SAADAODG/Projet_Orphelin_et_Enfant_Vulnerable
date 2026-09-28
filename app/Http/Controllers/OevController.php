@@ -13,6 +13,51 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OevController extends Controller
 {
+    /** Messages de validation en français, propres au formulaire OEV (la langue de l'application n'est pas modifiée). */
+    private const MESSAGES = [
+        'required' => 'Le champ « :attribute » est obligatoire.',
+        'string' => 'Le champ « :attribute » doit être un texte.',
+        'max.string' => 'Le champ « :attribute » ne doit pas dépasser :max caractères.',
+        'max.numeric' => 'Le champ « :attribute » ne doit pas être supérieur à :max.',
+        'max.file' => 'Le fichier « :attribute » ne doit pas dépasser :max Ko.',
+        'min.numeric' => 'Le champ « :attribute » doit être supérieur ou égal à :min.',
+        'integer' => 'Le champ « :attribute » doit être un nombre entier.',
+        'numeric' => 'Le champ « :attribute » doit être un nombre.',
+        'boolean' => 'Le champ « :attribute » est invalide.',
+        'in' => 'La valeur choisie pour « :attribute » est invalide.',
+        'date' => 'Le champ « :attribute » n’est pas une date valide.',
+        'regex' => 'Le format du champ « :attribute » est invalide.',
+        'file' => '« :attribute » doit être un fichier.',
+        'image' => '« :attribute » doit être une image.',
+        'mimes' => '« :attribute » doit être au format : :values.',
+        'uploaded' => '« :attribute » n’a pas pu être téléversé.',
+    ];
+
+    private const ATTRIBUTS = [
+        'nom' => 'nom de l’enfant',
+        'prenom' => 'prénom(s) de l’enfant',
+        'sexe' => 'sexe',
+        'date_naissance' => 'date de naissance',
+        'statut' => 'statut',
+        'handicap' => 'situation de handicap',
+        'nature_handicap' => 'nature du handicap',
+        'systeme_educatif' => 'système éducatif',
+        'nom_tuteur' => 'nom du parent ou tuteur',
+        'prenom_tuteur' => 'prénom(s) du parent ou tuteur',
+        'contact_tuteur' => 'téléphone du parent ou tuteur',
+        'etablissement_precedent' => 'établissement de l’année précédente',
+        'moyenne_annuelle' => 'moyenne annuelle',
+        'appreciation' => 'appréciation',
+        'etablissement_actuel' => 'établissement de l’année en cours',
+        'type_etablissement' => 'public ou privé',
+        'classe' => 'classe',
+        'frais_scolarite' => 'frais de scolarité',
+        'region' => 'région',
+        'province' => 'province',
+        'commune' => 'commune',
+        'nom_structure_rib' => 'nom de la structure',
+    ];
+
     public function index(Request $request): View
     {
         $dossier = $request->query('dossier');
@@ -156,27 +201,25 @@ class OevController extends Controller
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
 
+        $messagesFichiers = [];
         foreach (array_keys(Oev::DOCUMENTS) as $type) {
+            $max = Oev::tailleMaxFichierKo($type);
             $regles[$type] = $type === 'photo'
-                ? ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:2048']
-                : ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+                ? ['nullable', 'image', 'mimes:jpg,jpeg,png', "max:{$max}"]
+                : ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', "max:{$max}"];
+
+            // Fichier refusé par PHP lui-même (au-delà de upload_max_filesize)
+            $messagesFichiers["{$type}.uploaded"] = Oev::DOCUMENTS[$type] . ' : fichier trop volumineux (maximum ' . round($max / 1024, 1) . ' Mo). Veuillez le sélectionner à nouveau.';
+            $messagesFichiers["{$type}.max"] = Oev::DOCUMENTS[$type] . ' : fichier trop volumineux (maximum ' . round($max / 1024, 1) . ' Mo).';
         }
 
-        $validated = $request->validate($regles, [
+        $validated = $request->validate($regles, $messagesFichiers + [
             'nature_handicap.required_if' => 'Précisez la nature du handicap.',
             'nom_structure_rib.required' => 'Précisez le nom de la structure titulaire du RIB.',
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
             'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
-        ], Oev::DOCUMENTS + [
-            'contact_tuteur' => 'numéro de téléphone du parent ou tuteur',
-            'nom_structure_rib' => 'nom de la structure',
-            'date_naissance' => 'date de naissance',
-            'nom' => 'nom de l’enfant',
-            'prenom' => 'prénom(s) de l’enfant',
-            'nom_tuteur' => 'nom du parent ou tuteur',
-            'prenom_tuteur' => 'prénom(s) du parent ou tuteur',
-        ]);
+        ] + self::MESSAGES, Oev::DOCUMENTS + self::ATTRIBUTS);
 
         if (! $validated['handicap']) {
             $validated['nature_handicap'] = null;
