@@ -4,6 +4,8 @@
 
 @php
   $edition = $oev->exists;
+  // Le DP peut enregistrer et soumettre au DR en une fois (création, ou dossier en constitution / non conforme)
+  $peutSoumettre = auth()->user()->can('constituer dossiers') && (! $edition || $oev->estModifiable());
   $v = fn (string $champ) => old($champ, $oev->{$champ});
   $handicap = (string) old('handicap', $oev->handicap ? '1' : ($edition ? '0' : ''));
 
@@ -39,9 +41,10 @@
   $enMo = fn (int $ko) => str_replace('.', ',', (string) round($ko / 1024, 1)) . ' Mo';
 @endphp
 
-@section('title', ($edition ? 'Modifier ' . $oev->code : 'Enregistrer un OEV') . ' | OEV')
+@section('title', ($edition ? 'Modifier ' . $oev->reference() : 'Constituer dossier enfant') . ' | OEV')
 
 @push('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
 <style>
   .oev-stepper { display: flex; list-style: none; padding: 0; margin: 0; gap: .5rem; }
   .oev-stepper li { flex: 1; position: relative; }
@@ -109,17 +112,36 @@
 <div class="container-fluid px-3 px-lg-4 py-4">
   <div class="page-heading">
     <div class="page-heading-copy">
-      <span class="page-icon"><i class="bi bi-person-plus" aria-hidden="true"></i></span>
+      <span class="page-icon"><i class="bi {{ $edition ? 'bi-pencil-square' : 'bi-file-earmark-medical' }}" aria-hidden="true"></i></span>
       <div>
-        <p class="eyebrow mb-1">OEV</p>
-        <h1 class="h3 mb-1">{{ $edition ? 'Modifier l’OEV ' . $oev->code : 'Enregistrer un OEV' }}</h1>
+        <p class="eyebrow mb-1">{{ ! $edition ? 'Gestion des demandes' : ($oev->statut_dossier === Oev::ETAT_COMPLEMENT ? 'Validation des dossiers · Complément' : 'Constituer dossier enfant') }}</p>
+        <h1 class="h3 mb-1">{{ $edition ? 'Modifier le dossier ' . $oev->reference() : 'Constituer dossier enfant' }}</h1>
         <p class="text-muted mb-0">Remplissez les étapes puis vérifiez le récapitulatif avant d’enregistrer.</p>
       </div>
     </div>
-    <div class="heading-actions">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ $edition ? route('oevs.show', $oev) : route('oevs.index') }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Annuler</a>
-    </div>
+    @if ($edition)
+      <div class="heading-actions">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ route('oevs.show', $oev) }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Annuler</a>
+      </div>
+    @endif
   </div>
+
+  @unless ($edition)
+    <div class="mt-3">@include('oevs._onglets')</div>
+  @endunless
+
+  {{-- Rappel de la demande à traiter : non-conformité du DR (pour le DP) ou complément du central (pour le DR) --}}
+  @if ($edition && $oev->statut_dossier === Oev::ETAT_COMPLEMENT)
+    <div class="alert alert-warning mt-3">
+      <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+      <strong>Complément demandé par le niveau central :</strong> {{ $oev->motif_complement }}
+    </div>
+  @elseif ($edition && $oev->statut_dossier === Oev::ETAT_NON_CONFORME && $oev->motif_non_conformite)
+    <div class="alert alert-danger mt-3">
+      <i class="bi bi-x-octagon me-1" aria-hidden="true"></i>
+      <strong>Motif de non-conformité (DR) :</strong> {{ $oev->motif_non_conformite }}
+    </div>
+  @endif
 
   @if ($errors->any())
     <div class="alert alert-danger mt-3">
@@ -449,7 +471,13 @@
         <button type="button" class="btn btn-outline-secondary" data-precedent hidden><i class="bi bi-arrow-left" aria-hidden="true"></i> Précédent</button>
         <span class="text-muted small ms-auto me-2 d-none d-sm-inline" data-compteur></span>
         <button type="button" class="btn btn-primary px-4" data-suivant>Suivant <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
-        <button type="submit" class="btn btn-success px-4" data-enregistrer hidden><i class="bi bi-check2-circle" aria-hidden="true"></i> {{ $edition ? 'Enregistrer les modifications' : 'Enregistrer l’OEV' }}</button>
+        <span class="d-flex flex-wrap gap-2" data-enregistrer hidden>
+          <input type="hidden" name="soumettre" value="0" data-champ-soumettre>
+          <button type="submit" class="btn {{ $peutSoumettre ? 'btn-outline-success' : 'btn-success' }} px-4"><i class="bi bi-save" aria-hidden="true"></i> {{ $edition ? 'Enregistrer les modifications' : 'Enregistrer le dossier' }}</button>
+          @if ($peutSoumettre)
+            <button type="submit" class="btn btn-success px-4" data-avec-soumission title="Le dossier doit comporter les {{ count(Oev::DOCUMENTS) }} pièces"><i class="bi bi-send-check" aria-hidden="true"></i> Enregistrer et soumettre au DR</button>
+          @endif
+        </span>
       </div>
     </section>
   </form>
@@ -690,8 +718,13 @@ document.addEventListener('DOMContentLoaded', function () {
       alerteTaille('Les fichiers sélectionnés totalisent ' + enMo(totalKo) + ' : le maximum autorisé en un seul envoi est de ' + enMo(limites.envoi - 256) + '. Retirez ou allégez certaines pièces (elles pourront être ajoutées plus tard via « Modifier / compléter »).');
       return;
     }
-    btnEnr.disabled = true;
-    btnEnr.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Enregistrement…';
+    // « Enregistrer et soumettre au DR » : le serveur soumet le dossier s'il est complet
+    var avecSoumission = e.submitter && e.submitter.hasAttribute('data-avec-soumission');
+    form.querySelector('[data-champ-soumettre]').value = avecSoumission ? '1' : '0';
+    btnEnr.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    if (e.submitter) {
+      e.submitter.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> ' + (avecSoumission ? 'Soumission…' : 'Enregistrement…');
+    }
   });
 
   var initiale = Number(form.dataset.etapeInitiale) || 1;

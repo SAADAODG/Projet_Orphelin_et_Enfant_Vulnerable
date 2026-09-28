@@ -81,17 +81,32 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::delete('/roles-permissions/{role}', [RolePermissionController::class, 'destroy'])->name('roles-permissions.destroy');
     });
 
-    // --- OEV : enregistrement et dossier ---
-    Route::middleware('can:enregistrer OEV')->group(function () {
+    // --- Dossiers enfants / OEV : DP (constituer) → DR (valider) → niveau central (intégrer) ---
+    Route::middleware('can:constituer dossiers')->group(function () {
+        Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
         Route::get('/oevs/create', [OevController::class, 'create'])->name('oevs.create');
         Route::post('/oevs', [OevController::class, 'store'])->name('oevs.store');
+        Route::delete('/oevs/{oev}', [OevController::class, 'destroy'])->name('oevs.destroy');
+        Route::post('/oevs/{oev}/soumettre', [OevController::class, 'soumettre'])->name('oevs.soumettre');
+    });
+    // Modification : DP pendant la constitution, DR sur demande de complément (contrôlé dans le contrôleur)
+    Route::middleware('can:voir OEV')->group(function () {
         Route::get('/oevs/{oev}/edit', [OevController::class, 'edit'])->name('oevs.edit');
         Route::put('/oevs/{oev}', [OevController::class, 'update'])->name('oevs.update');
-        Route::delete('/oevs/{oev}', [OevController::class, 'destroy'])->name('oevs.destroy');
         Route::delete('/oevs/{oev}/documents/{document}', [OevController::class, 'destroyDocument'])->name('oevs.documents.destroy');
     });
+    Route::middleware('can:valider dossiers')->group(function () {
+        Route::get('/validation-dossiers', [OevController::class, 'validation'])->name('oevs.validation');
+        Route::post('/oevs/{oev}/conforme', [OevController::class, 'conforme'])->name('oevs.conforme');
+        Route::post('/oevs/{oev}/non-conforme', [OevController::class, 'nonConforme'])->name('oevs.non-conforme');
+    });
+    Route::middleware('can:intégrer OEV')->group(function () {
+        Route::get('/integration-oev', [OevController::class, 'integration'])->name('oevs.integration');
+        Route::post('/oevs/{oev}/integrer', [OevController::class, 'integrer'])->name('oevs.integrer');
+        Route::post('/oevs/{oev}/complement', [OevController::class, 'demanderComplement'])->name('oevs.complement');
+    });
     Route::middleware('can:voir OEV')->group(function () {
-        Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
+        Route::get('/liste-oev', [OevController::class, 'liste'])->name('oevs.liste');
         Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
         Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
     });

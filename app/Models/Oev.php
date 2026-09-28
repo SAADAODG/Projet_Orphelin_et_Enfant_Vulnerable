@@ -16,10 +16,44 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
     'region', 'province', 'commune',
     'nom_structure_rib', 'created_by',
+    'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
+    'motif_complement', 'complement_at', 'complement_par',
 ])]
 class Oev extends Model
 {
     use SoftDeletes;
+
+    /*
+     * Circuit du dossier : le DP constitue puis soumet ; le DR déclare le dossier conforme (validé)
+     * ou non conforme (retour au DP) ; le niveau central intègre l'enfant, qui devient OEV et reçoit son code.
+     * Le central peut aussi demander un complément : le dossier revient au DR, qui le complète
+     * lui-même puis le valide à nouveau, ou le renvoie au DP (non conforme).
+     */
+    public const ETAT_BROUILLON = 'brouillon';
+    public const ETAT_SOUMIS = 'soumis';
+    public const ETAT_NON_CONFORME = 'non_conforme';
+    public const ETAT_VALIDE = 'valide';
+    public const ETAT_COMPLEMENT = 'complement';
+    public const ETAT_INTEGRE = 'integre';
+
+    public const ETATS = [
+        self::ETAT_BROUILLON => 'En constitution',
+        self::ETAT_SOUMIS => 'Soumis au DR',
+        self::ETAT_NON_CONFORME => 'Non conforme',
+        self::ETAT_VALIDE => 'Validé par le DR',
+        self::ETAT_COMPLEMENT => 'Complément demandé',
+        self::ETAT_INTEGRE => 'Intégré (OEV)',
+    ];
+
+    /** Couleur Bootstrap associée à chaque état. */
+    public const COULEURS_ETATS = [
+        self::ETAT_BROUILLON => 'secondary',
+        self::ETAT_SOUMIS => 'info',
+        self::ETAT_NON_CONFORME => 'danger',
+        self::ETAT_VALIDE => 'primary',
+        self::ETAT_COMPLEMENT => 'warning',
+        self::ETAT_INTEGRE => 'success',
+    ];
 
     public const SEXES = ['M' => 'Masculin', 'F' => 'Féminin'];
 
@@ -60,6 +94,10 @@ class Oev extends Model
             'moyenne_annuelle' => 'decimal:2',
             'frais_scolarite' => 'integer',
             'deleted_at' => 'datetime',
+            'soumis_at' => 'datetime',
+            'verifie_at' => 'datetime',
+            'integre_at' => 'datetime',
+            'complement_at' => 'datetime',
         ];
     }
 
@@ -73,13 +111,102 @@ class Oev extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function soumetteur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'soumis_par');
+    }
+
+    public function verificateur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verifie_par');
+    }
+
+    public function integrateur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'integre_par');
+    }
+
+    public function demandeurComplement(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'complement_par');
+    }
+
+    /** Code OEV attribué à l'intégration, ex. OEV-2026-0001. */
     public static function genererCode(): string
     {
-        $prefixe = 'OEV-' . now()->year . '-';
-        $dernier = static::withTrashed()->where('code', 'like', $prefixe . '%')->orderByDesc('code')->value('code');
+        return self::prochainNumero('code', 'OEV');
+    }
+
+    /** Numéro de dossier attribué à la constitution, ex. DOS-2026-0001. */
+    public static function genererNumeroDossier(): string
+    {
+        return self::prochainNumero('numero_dossier', 'DOS');
+    }
+
+    private static function prochainNumero(string $colonne, string $prefixe): string
+    {
+        $prefixe .= '-' . now()->year . '-';
+        $dernier = static::withTrashed()->where($colonne, 'like', $prefixe . '%')->orderByDesc($colonne)->value($colonne);
         $numero = $dernier ? ((int) substr($dernier, strlen($prefixe))) + 1 : 1;
 
         return $prefixe . str_pad((string) $numero, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Identifiant affiché : le code OEV une fois intégré, sinon le numéro de dossier. */
+    public function reference(): string
+    {
+        return $this->code ?: (string) $this->numero_dossier;
+    }
+
+    public function estIntegre(): bool
+    {
+        return $this->statut_dossier === self::ETAT_INTEGRE;
+    }
+
+    /** Le DP peut modifier, compléter, supprimer ou soumettre le dossier. */
+    public function estModifiable(): bool
+    {
+        return in_array($this->statut_dossier, [self::ETAT_BROUILLON, self::ETAT_NON_CONFORME], true);
+    }
+
+    /** Le DR doit traiter le dossier : soumis par le DP, ou revenu du central avec une demande de complément. */
+    public function attendDecisionDr(): bool
+    {
+        return in_array($this->statut_dossier, [self::ETAT_SOUMIS, self::ETAT_COMPLEMENT], true);
+    }
+
+    /**
+     * Qui peut modifier les informations et les pièces, et quand :
+     * le DP pendant la constitution (ou après non-conformité), le DR quand le central demande un complément.
+     */
+    public function peutEtreModifiePar(?User $utilisateur): bool
+    {
+        if (! $utilisateur) {
+            return false;
+        }
+
+        return ($this->estModifiable() && $utilisateur->can('constituer dossiers'))
+            || ($this->statut_dossier === self::ETAT_COMPLEMENT && $utilisateur->can('valider dossiers'));
+    }
+
+    public function estComplet(): bool
+    {
+        return $this->nombreDocuments() >= count(self::DOCUMENTS);
+    }
+
+    public function libelleEtat(): string
+    {
+        return self::ETATS[$this->statut_dossier] ?? (string) $this->statut_dossier;
+    }
+
+    public function couleurEtat(): string
+    {
+        return self::COULEURS_ETATS[$this->statut_dossier] ?? 'secondary';
+    }
+
+    public function scopeEtat(Builder $query, string ...$etats): Builder
+    {
+        return $query->whereIn('statut_dossier', $etats);
     }
 
     public function nomComplet(): string

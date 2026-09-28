@@ -19,6 +19,19 @@ html[data-theme="dark"] {
   --oev-vulnerable: #fbbf24;
 }
 
+/* ---------- Onglets « Constituer dossier enfant » ---------- */
+.oev-onglets {
+  display: inline-flex; flex-wrap: wrap; gap: .35rem; padding: .35rem;
+  border-radius: 14px; background: var(--admin-surface); border: 1px solid var(--admin-border); box-shadow: var(--admin-shadow-sm);
+}
+.oev-onglet {
+  display: inline-flex; align-items: center; gap: .5rem; padding: .55rem 1.1rem; border-radius: 10px;
+  font-weight: 600; font-size: .9rem; color: var(--admin-muted); text-decoration: none; transition: all .15s ease;
+}
+.oev-onglet:hover { color: var(--admin-primary); background: var(--oev-soft); }
+.oev-onglet.is-active { color: #fff; background: var(--admin-primary); box-shadow: 0 6px 14px color-mix(in srgb, var(--admin-primary) 30%, transparent); }
+@media (max-width: 575.98px) { .oev-onglets { display: flex; } .oev-onglet { flex: 1; justify-content: center; padding-inline: .5rem; } }
+
 /* ---------- Badges de statut ---------- */
 .oev-statut {
   --c: var(--admin-muted);
@@ -50,6 +63,13 @@ html[data-theme="dark"] {
   background: var(--oev-soft);
   border: 1px solid color-mix(in srgb, var(--admin-primary) 18%, transparent);
   white-space: nowrap;
+}
+
+/* Numéro de dossier (avant intégration) : même forme que le code OEV, en neutre */
+.oev-code--dossier {
+  color: var(--admin-muted);
+  background: var(--admin-surface-soft);
+  border-color: var(--admin-border);
 }
 
 .oev-avatar {
@@ -98,7 +118,17 @@ html[data-theme="dark"] .oev-avatar--M { --c: #38bdf8; }
 }
 .oev-stat-valeur { font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
 .oev-stat-label { font-size: .8rem; color: var(--admin-muted); font-weight: 600; }
+.oev-stats--compact .oev-stat { gap: .7rem; padding: .85rem 1rem; }
+.oev-stats--compact .oev-stat-icone { width: 2.4rem; height: 2.4rem; font-size: 1.1rem; border-radius: 12px; }
+.oev-stats--compact .oev-stat-valeur { font-size: 1.35rem; }
+.oev-stats--compact .oev-stat-label { font-size: .75rem; line-height: 1.2; display: block; }
 .oev-stat--success { --c: var(--admin-success); }
+.oev-stat--info { --c: #0891b2; }
+.oev-stat--orphelin_pere { --c: var(--oev-pere); }
+.oev-stat--orphelin_mere { --c: var(--oev-mere); }
+.oev-stat--orphelin_double { --c: var(--oev-double); }
+.oev-stat--vulnerable { --c: var(--oev-vulnerable); }
+html[data-theme="dark"] .oev-stat--info { --c: #22d3ee; }
 .oev-stat--warning { --c: var(--admin-warning); }
 .oev-stat--danger { --c: var(--admin-danger); }
 
@@ -241,6 +271,36 @@ html[data-theme="dark"] .oev-avatar--M { --c: #38bdf8; }
 }
 .oev-lieu-point { width: 1.15rem; height: 1.15rem; border-radius: 50%; flex-shrink: 0; margin-top: .15rem; border: 3px solid var(--admin-primary); background: var(--admin-surface); }
 .oev-lieu li:last-child .oev-lieu-point { background: var(--admin-primary); }
+
+/* ---------- Fiche : parcours du dossier (DP → DR → central) ---------- */
+.oev-parcours { list-style: none; padding: 0; margin: 0; }
+.oev-etape { display: flex; gap: .85rem; position: relative; padding-bottom: 1.1rem; }
+.oev-etape:last-child { padding-bottom: 0; }
+.oev-etape:not(:last-child)::after {
+  content: ""; position: absolute; left: .95rem; top: 2.1rem; bottom: .15rem; width: 2px; background: var(--admin-border);
+}
+.oev-etape.is-faite:not(:last-child)::after { background: var(--admin-success); }
+.oev-etape-point {
+  width: 2rem; height: 2rem; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: .9rem;
+  color: var(--admin-muted); background: var(--admin-surface-soft); border: 2px solid var(--admin-border);
+}
+.oev-etape.is-faite .oev-etape-point { color: #fff; background: var(--admin-success); border-color: var(--admin-success); }
+.oev-etape.is-courante .oev-etape-point { color: var(--admin-primary); border-color: var(--admin-primary); box-shadow: var(--admin-ring); }
+.oev-etape.is-refusee .oev-etape-point { color: #fff; background: var(--admin-danger); border-color: var(--admin-danger); }
+.oev-etape-titre { font-weight: 700; font-size: .9rem; }
+.oev-etape-detail { font-size: .8rem; color: var(--admin-muted); }
+.oev-etape-niveau { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--admin-muted); }
+
+.oev-action {
+  border-radius: var(--oev-radius);
+  padding: 1rem 1.25rem;
+  display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;
+  border: 1px solid color-mix(in srgb, var(--admin-primary) 35%, var(--admin-border));
+  background: var(--oev-soft);
+}
+.oev-action--danger { border-color: color-mix(in srgb, var(--admin-danger) 40%, var(--admin-border)); background: color-mix(in srgb, var(--admin-danger) 7%, var(--admin-surface)); }
+.oev-action--warning { border-color: color-mix(in srgb, var(--admin-warning) 45%, var(--admin-border)); background: color-mix(in srgb, var(--admin-warning) 8%, var(--admin-surface)); }
+.oev-action--success { border-color: color-mix(in srgb, var(--admin-success) 40%, var(--admin-border)); background: color-mix(in srgb, var(--admin-success) 7%, var(--admin-surface)); }
 
 /* ---------- Fiche : pièces du dossier ---------- */
 .oev-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem; }

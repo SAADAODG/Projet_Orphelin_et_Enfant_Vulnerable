@@ -50,26 +50,37 @@
             <span class="nav-icon"><i class="bi bi-clipboard-check" aria-hidden="true"></i></span>
             <span class="nav-text">Gestion des demandes</span>
           </a>
-          <a class="nav-link" href="#">
+          @php($ecranOev = match (true) {
+              request()->routeIs('oevs.validation') => 'validation',
+              request()->routeIs('oevs.integration') => 'integration',
+              request()->routeIs('oevs.liste') => 'liste',
+              request()->routeIs('oevs.*') => 'dossiers',
+              default => null,
+          })
+          @can('constituer dossiers')
+          <a class="nav-link {{ $ecranOev === 'dossiers' ? 'active' : '' }}" href="{{ route('oevs.index') }}" @if ($ecranOev === 'dossiers') aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-file-earmark-medical" aria-hidden="true"></i></span>
             <span class="nav-text">Constituer dossier enfant</span>
           </a>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
-            <span class="nav-text">Validation enfant</span>
+          @endcan
+          @can('valider dossiers')
+          <a class="nav-link {{ $ecranOev === 'validation' ? 'active' : '' }}" href="{{ route('oevs.validation') }}" @if ($ecranOev === 'validation') aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-patch-check" aria-hidden="true"></i></span>
+            <span class="nav-text">Validation des dossiers</span>
           </a>
+          @endcan
         </div>
 
         <div class="nav-section">
           <span class="nav-section-label">OEV</span>
-          @can('enregistrer OEV')
-          <a class="nav-link {{ request()->routeIs('oevs.create') ? 'active' : '' }}" href="{{ route('oevs.create') }}" {{ request()->routeIs('oevs.create') ? 'aria-current="page"' : '' }}>
-            <span class="nav-icon"><i class="bi bi-person-plus" aria-hidden="true"></i></span>
-            <span class="nav-text">Enregistrer un OEV</span>
+          @can('intégrer OEV')
+          <a class="nav-link {{ $ecranOev === 'integration' ? 'active' : '' }}" href="{{ route('oevs.integration') }}" @if ($ecranOev === 'integration') aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-person-check" aria-hidden="true"></i></span>
+            <span class="nav-text">Intégration des OEV</span>
           </a>
           @endcan
           @can('voir OEV')
-          <a class="nav-link {{ request()->routeIs('oevs.*') && ! request()->routeIs('oevs.create') ? 'active' : '' }}" href="{{ route('oevs.index') }}" {{ request()->routeIs('oevs.*') && ! request()->routeIs('oevs.create') ? 'aria-current="page"' : '' }}>
+          <a class="nav-link {{ $ecranOev === 'liste' ? 'active' : '' }}" href="{{ route('oevs.liste') }}" @if ($ecranOev === 'liste') aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
             <span class="nav-text">Liste des OEV</span>
           </a>

@@ -21,13 +21,19 @@ class RolePermissionSeeder extends Seeder
             'voir rapports',
             'gérer paramètres',
             'gérer rôles',
+            // Circuit du dossier enfant : DP (constituer) → DR (valider) → niveau central (intégrer)
             'voir OEV',
-            'enregistrer OEV',
+            'constituer dossiers',
+            'valider dossiers',
+            'intégrer OEV',
         ];
 
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
+
+        // Ancienne permission remplacée par le circuit ci-dessus
+        Permission::where('name', 'enregistrer OEV')->where('guard_name', 'web')->delete();
 
         $roles = [
             'superAdmin' => $permissions,
@@ -43,7 +49,9 @@ class RolePermissionSeeder extends Seeder
                 'gérer paramètres',
                 'gérer rôles',
                 'voir OEV',
-                'enregistrer OEV',
+                'constituer dossiers',
+                'valider dossiers',
+                'intégrer OEV',
             ],
             'responsable DGFE' => [
                 'voir utilisateurs',
@@ -51,26 +59,27 @@ class RolePermissionSeeder extends Seeder
                 'valider demandes',
                 'voir rapports',
                 'voir OEV',
-                'enregistrer OEV',
+                'intégrer OEV',
             ],
             'agent DGFE' => [
                 'voir demandes',
                 'valider demandes',
                 'voir rapports',
                 'voir OEV',
-                'enregistrer OEV',
+                'intégrer OEV',
             ],
             'DR' => [
                 'voir demandes',
                 'valider demandes',
                 'voir rapports',
                 'voir OEV',
-                'enregistrer OEV',
+                'valider dossiers',
             ],
             'DP' => [
                 'voir demandes',
                 'voir rapports',
                 'voir OEV',
+                'constituer dossiers',
             ],
         ];
 

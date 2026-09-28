@@ -58,17 +58,35 @@ class OevController extends Controller
         'nom_structure_rib' => 'nom de la structure',
     ];
 
+    /** DP — « Constituer dossier enfant » : tous les dossiers, quel que soit leur état. */
     public function index(Request $request): View
     {
-        $dossier = $request->query('dossier');
+        return $this->lister($request, 'oevs.index', array_keys(Oev::ETATS), null);
+    }
+
+    /** DR — « Validation des dossiers » : dossiers soumis ou revenus du central (complément), et ceux déjà traités. */
+    public function validation(Request $request): View
+    {
+        return $this->lister($request, 'oevs.validation', [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME], Oev::ETAT_SOUMIS)
+            // Information pour le DR : dossiers encore chez les DP (non visibles tant qu'ils ne sont pas soumis)
+            ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->count());
+    }
+
+    /** Niveau central — « Intégration des OEV » : dossiers validés à intégrer, compléments en attente, OEV intégrés. */
+    public function integration(Request $request): View
+    {
+        return $this->lister($request, 'oevs.integration', [Oev::ETAT_VALIDE, Oev::ETAT_COMPLEMENT, Oev::ETAT_INTEGRE], Oev::ETAT_VALIDE);
+    }
+
+    /** « Liste des OEV » : uniquement les enfants intégrés (devenus OEV), visibles de tous les niveaux. */
+    public function liste(Request $request): View
+    {
         $statut = $request->query('statut');
+        $statut = array_key_exists((string) $statut, Oev::STATUTS) ? $statut : null;
         $recherche = trim((string) $request->query('q'));
 
-        $oevs = Oev::withCount('documents')
-            ->when($dossier === 'complet', fn ($q) => $q->dossierComplet())
-            ->when($dossier === 'incomplet', fn ($q) => $q->dossierIncomplet())
-            ->when($dossier === 'aucun', fn ($q) => $q->sansDossier())
-            ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
+        $oevs = Oev::etat(Oev::ETAT_INTEGRE)
+            ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
                     foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'region', 'province', 'commune', 'etablissement_actuel'] as $champ) {
@@ -76,19 +94,18 @@ class OevController extends Controller
                     }
                 });
             })
-            ->latest()
+            ->orderByDesc('integre_at')
             ->paginate(15)
             ->withQueryString();
 
-        return view('oevs.index', [
+        $parStatut = Oev::etat(Oev::ETAT_INTEGRE)
+            ->selectRaw('statut, count(*) as total')->groupBy('statut')
+            ->pluck('total', 'statut');
+
+        return view('oevs.liste', [
             'oevs' => $oevs,
-            'stats' => [
-                'total' => Oev::count(),
-                'complet' => Oev::dossierComplet()->count(),
-                'incomplet' => Oev::dossierIncomplet()->count(),
-                'aucun' => Oev::sansDossier()->count(),
-            ],
-            'filtres' => compact('dossier', 'statut', 'recherche'),
+            'compteurs' => collect(Oev::STATUTS)->mapWithKeys(fn ($l, $s) => [$s => (int) ($parStatut[$s] ?? 0)]),
+            'filtres' => compact('statut', 'recherche'),
         ]);
     }
 
@@ -103,7 +120,8 @@ class OevController extends Controller
 
         $oev = DB::transaction(function () use ($request, $validated) {
             $oev = Oev::create($validated + [
-                'code' => Oev::genererCode(),
+                'numero_dossier' => Oev::genererNumeroDossier(),
+                'statut_dossier' => Oev::ETAT_BROUILLON,
                 'created_by' => $request->user()->id,
             ]);
             $this->enregistrerDocuments($request, $oev);
@@ -111,23 +129,33 @@ class OevController extends Controller
             return $oev;
         });
 
-        return redirect()->route('oevs.show', $oev)->with('success', "OEV {$oev->code} enregistré avec succès.");
+        return $this->apresEnregistrement($request, $oev, "Dossier {$oev->numero_dossier} enregistré.");
     }
 
-    public function show(Oev $oev): View
+    public function show(Request $request, Oev $oev): View
     {
-        $oev->load(['documents.auteur', 'createur']);
+        // Un dossier en cours de constitution n'est visible que du DP (le DR le voit une fois soumis).
+        abort_if($oev->statut_dossier === Oev::ETAT_BROUILLON && ! $request->user()->can('constituer dossiers'), 403);
+
+        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement']);
 
         return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
     }
 
-    public function edit(Oev $oev): View
+    public function edit(Request $request, Oev $oev)
     {
+        if ($refus = $this->refuserSiNonModifiable($request, $oev)) {
+            return $refus;
+        }
+
         return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type')]);
     }
 
     public function update(Request $request, Oev $oev)
     {
+        if ($refus = $this->refuserSiNonModifiable($request, $oev)) {
+            return $refus;
+        }
         $validated = $this->valider($request, $oev);
 
         DB::transaction(function () use ($request, $oev, $validated) {
@@ -135,26 +163,238 @@ class OevController extends Controller
             $this->enregistrerDocuments($request, $oev);
         });
 
-        return redirect()->route('oevs.show', $oev)->with('success', 'OEV mis à jour.');
+        if ($oev->statut_dossier === Oev::ETAT_COMPLEMENT) {
+            return redirect()->route('oevs.show', $oev)->with('success', 'Dossier complété. Vous pouvez maintenant le valider et le renvoyer au niveau central.');
+        }
+
+        return $this->apresEnregistrement($request, $oev, 'Dossier mis à jour.');
+    }
+
+    /**
+     * Après enregistrement par le DP : soumission immédiate au DR si demandée (bouton « Enregistrer et soumettre »)
+     * et possible, sinon rappel de l'étape suivante.
+     */
+    private function apresEnregistrement(Request $request, Oev $oev, string $message)
+    {
+        $oev->loadCount('documents');
+        $redirection = redirect()->route('oevs.show', $oev);
+
+        if ($request->boolean('soumettre')) {
+            if ($oev->estComplet()) {
+                $this->transmettreAuDr($request, $oev);
+
+                return $redirection->with('success', "{$message} Il a été soumis au DR pour vérification.");
+            }
+
+            return $redirection->with('success', $message)->withErrors([
+                'circuit' => 'Le dossier n’a pas été soumis au DR : il manque ' . (count(Oev::DOCUMENTS) - $oev->documents_count) . ' pièce(s).',
+            ]);
+        }
+
+        return $redirection->with('success', $oev->estComplet()
+            ? "{$message} Le dossier est complet : cliquez sur « Soumettre au DR » pour le transmettre."
+            : "{$message} Complétez les pièces puis soumettez-le au DR.");
+    }
+
+    private function transmettreAuDr(Request $request, Oev $oev): void
+    {
+        $oev->update([
+            'statut_dossier' => Oev::ETAT_SOUMIS,
+            'soumis_at' => now(),
+            'soumis_par' => $request->user()->id,
+        ]);
     }
 
     public function destroy(Oev $oev)
     {
+        if ($refus = $this->refuserSiVerrouille($oev)) {
+            return $refus;
+        }
         $oev->delete();
 
-        return redirect()->route('oevs.index')->with('success', "OEV {$oev->code} supprimé.");
+        return redirect()->route('oevs.index')->with('success', "Dossier {$oev->numero_dossier} supprimé.");
+    }
+
+    /** DP : transmet le dossier complet au DR pour vérification. */
+    public function soumettre(Request $request, Oev $oev)
+    {
+        if ($refus = $this->refuserSiVerrouille($oev)) {
+            return $refus;
+        }
+        if (! $oev->estComplet()) {
+            return back()->withErrors(['circuit' => 'Le dossier doit comporter les ' . count(Oev::DOCUMENTS) . ' pièces avant d’être soumis au DR.']);
+        }
+
+        $this->transmettreAuDr($request, $oev);
+
+        return redirect()->route('oevs.show', $oev)->with('success', 'Dossier soumis au DR pour vérification.');
+    }
+
+    /** DR : dossier conforme (ou complété après demande du central) → validé, transmis au niveau central. */
+    public function conforme(Request $request, Oev $oev)
+    {
+        if (! $oev->attendDecisionDr()) {
+            return back()->withErrors(['circuit' => 'Seul un dossier soumis au DR, ou revenu du central pour complément, peut être validé.']);
+        }
+        $apresComplement = $oev->statut_dossier === Oev::ETAT_COMPLEMENT;
+
+        $oev->update([
+            'statut_dossier' => Oev::ETAT_VALIDE,
+            'verifie_at' => now(),
+            'verifie_par' => $request->user()->id,
+            'motif_non_conformite' => null,
+        ]);
+
+        return redirect()->route('oevs.validation')->with('success', $apresComplement
+            ? "Dossier {$oev->numero_dossier} complété et renvoyé au niveau central."
+            : "Dossier {$oev->numero_dossier} déclaré conforme et validé.");
+    }
+
+    /** DR : dossier non conforme (ou complément impossible à apporter par le DR) → renvoyé au DP avec le motif. */
+    public function nonConforme(Request $request, Oev $oev)
+    {
+        if (! $oev->attendDecisionDr()) {
+            return back()->withErrors(['circuit' => 'Seul un dossier soumis au DR, ou revenu du central pour complément, peut être renvoyé au DP.']);
+        }
+        $validated = $request->validate(
+            ['motif_non_conformite' => ['required', 'string', 'max:2000']],
+            ['motif_non_conformite.required' => 'Indiquez le motif de non-conformité pour que le DP puisse corriger le dossier.'],
+        );
+
+        $oev->update([
+            'statut_dossier' => Oev::ETAT_NON_CONFORME,
+            'verifie_at' => now(),
+            'verifie_par' => $request->user()->id,
+            'motif_non_conformite' => $validated['motif_non_conformite'],
+        ]);
+
+        return redirect()->route('oevs.validation')->with('success', "Dossier {$oev->numero_dossier} renvoyé au DP pour correction.");
+    }
+
+    /** Niveau central : demande de complément sur un dossier validé → retour au DR avec la demande. */
+    public function demanderComplement(Request $request, Oev $oev)
+    {
+        if ($oev->statut_dossier !== Oev::ETAT_VALIDE) {
+            return back()->withErrors(['circuit' => 'Un complément ne peut être demandé que sur un dossier validé par le DR.']);
+        }
+        $validated = $request->validate(
+            ['motif_complement' => ['required', 'string', 'max:2000']],
+            ['motif_complement.required' => 'Précisez le complément attendu pour que le DR puisse y répondre.'],
+        );
+
+        $oev->update([
+            'statut_dossier' => Oev::ETAT_COMPLEMENT,
+            'motif_complement' => $validated['motif_complement'],
+            'complement_at' => now(),
+            'complement_par' => $request->user()->id,
+        ]);
+
+        return redirect()->route('oevs.integration')->with('success', "Complément demandé : le dossier {$oev->numero_dossier} est renvoyé au DR.");
+    }
+
+    /** Niveau central : l'enfant est intégré et devient OEV (attribution du code OEV). */
+    public function integrer(Request $request, Oev $oev)
+    {
+        if ($oev->statut_dossier !== Oev::ETAT_VALIDE) {
+            return back()->withErrors(['circuit' => 'Seul un dossier validé par le DR peut être intégré.']);
+        }
+
+        DB::transaction(fn () => $oev->update([
+            'code' => Oev::genererCode(),
+            'statut_dossier' => Oev::ETAT_INTEGRE,
+            'integre_at' => now(),
+            'integre_par' => $request->user()->id,
+        ]));
+
+        return redirect()->route('oevs.show', $oev)->with('success', "{$oev->nomComplet()} est intégré(e) : code OEV {$oev->code}.");
+    }
+
+    /**
+     * Liste commune aux trois écrans du circuit. $etats limite les dossiers visibles ;
+     * $etatParDefaut est l'onglet ouvert par défaut (null = tous les états).
+     */
+    private function lister(Request $request, string $vue, array $etats, ?string $etatParDefaut): View
+    {
+        $etat = $request->query('etat', $etatParDefaut);
+        $etat = in_array($etat, $etats, true) ? $etat : null;
+        $statut = $request->query('statut');
+        $recherche = trim((string) $request->query('q'));
+
+        $oevs = Oev::withCount('documents')
+            ->etat(...($etat ? [$etat] : $etats))
+            ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
+            ->when($recherche !== '', function ($q) use ($recherche) {
+                $q->where(function ($q) use ($recherche) {
+                    foreach (['code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'region', 'province', 'commune', 'etablissement_actuel'] as $champ) {
+                        $q->orWhere($champ, 'like', "%{$recherche}%");
+                    }
+                });
+            })
+            ->latest(match ($etat) {
+                Oev::ETAT_SOUMIS => 'soumis_at',
+                Oev::ETAT_COMPLEMENT => 'complement_at',
+                Oev::ETAT_INTEGRE => 'integre_at',
+                default => 'updated_at',
+            })
+            ->paginate(15)
+            ->withQueryString();
+
+        $compteurs = Oev::query()->etat(...$etats)
+            ->selectRaw('statut_dossier, count(*) as total')->groupBy('statut_dossier')
+            ->pluck('total', 'statut_dossier');
+
+        return view($vue, [
+            'oevs' => $oevs,
+            'etats' => $etats,
+            'compteurs' => collect($etats)->mapWithKeys(fn ($e) => [$e => (int) ($compteurs[$e] ?? 0)]),
+            'filtres' => compact('etat', 'statut', 'recherche'),
+        ]);
+    }
+
+    /** Un dossier soumis, validé ou intégré n'est plus modifiable par le DP. */
+    private function refuserSiVerrouille(Oev $oev)
+    {
+        if ($oev->estModifiable()) {
+            return null;
+        }
+
+        return redirect()->route('oevs.show', $oev)
+            ->withErrors(['circuit' => "Ce dossier est « {$oev->libelleEtat()} » : il ne peut plus être modifié."]);
+    }
+
+    /** Modification des informations et des pièces : DP en constitution, DR sur demande de complément du central. */
+    private function refuserSiNonModifiable(Request $request, Oev $oev)
+    {
+        $utilisateur = $request->user();
+        if ($oev->peutEtreModifiePar($utilisateur)) {
+            return null;
+        }
+        // Hors DP, seul le DR peut intervenir, et uniquement sur un complément demandé par le central.
+        abort_unless(
+            $utilisateur->can('constituer dossiers')
+            || ($utilisateur->can('valider dossiers') && $oev->statut_dossier !== Oev::ETAT_BROUILLON),
+            403,
+        );
+
+        return redirect()->route('oevs.show', $oev)
+            ->withErrors(['circuit' => "Ce dossier est « {$oev->libelleEtat()} » : vous ne pouvez pas le modifier à cette étape."]);
     }
 
     public function showDocument(Oev $oev, OevDocument $document): StreamedResponse
     {
-        abort_unless($document->oev_id === $oev->id && Storage::disk('local')->exists($document->chemin), 404);
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disque */
+        $disque = Storage::disk('local');
+        abort_unless($document->oev_id === $oev->id && $disque->exists($document->chemin), 404);
 
-        return Storage::disk('local')->response($document->chemin, $document->nom_original);
+        return $disque->response($document->chemin, $document->nom_original);
     }
 
-    public function destroyDocument(Oev $oev, OevDocument $document)
+    public function destroyDocument(Request $request, Oev $oev, OevDocument $document)
     {
         abort_unless($document->oev_id === $oev->id, 404);
+        if ($refus = $this->refuserSiNonModifiable($request, $oev)) {
+            return $refus;
+        }
 
         Storage::disk('local')->delete($document->chemin);
         $document->delete();
