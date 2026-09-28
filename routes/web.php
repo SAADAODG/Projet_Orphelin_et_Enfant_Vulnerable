@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\OevController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlainteController;
 use App\Http\Controllers\ProfileController;
@@ -78,6 +79,21 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::post('/roles-permissions', [RolePermissionController::class, 'store'])->name('roles-permissions.store');
         Route::put('/roles-permissions/{role}', [RolePermissionController::class, 'update'])->name('roles-permissions.update');
         Route::delete('/roles-permissions/{role}', [RolePermissionController::class, 'destroy'])->name('roles-permissions.destroy');
+    });
+
+    // --- OEV : enregistrement et dossier ---
+    Route::middleware('can:enregistrer OEV')->group(function () {
+        Route::get('/oevs/create', [OevController::class, 'create'])->name('oevs.create');
+        Route::post('/oevs', [OevController::class, 'store'])->name('oevs.store');
+        Route::get('/oevs/{oev}/edit', [OevController::class, 'edit'])->name('oevs.edit');
+        Route::put('/oevs/{oev}', [OevController::class, 'update'])->name('oevs.update');
+        Route::delete('/oevs/{oev}', [OevController::class, 'destroy'])->name('oevs.destroy');
+        Route::delete('/oevs/{oev}/documents/{document}', [OevController::class, 'destroyDocument'])->name('oevs.documents.destroy');
+    });
+    Route::middleware('can:voir OEV')->group(function () {
+        Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
+        Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
+        Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
     });
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');

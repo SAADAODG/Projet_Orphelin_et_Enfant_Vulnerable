@@ -62,10 +62,18 @@
 
         <div class="nav-section">
           <span class="nav-section-label">OEV</span>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
-            <span class="nav-text">Intégration des OEV</span>
+          @can('enregistrer OEV')
+          <a class="nav-link {{ request()->routeIs('oevs.create') ? 'active' : '' }}" href="{{ route('oevs.create') }}" {{ request()->routeIs('oevs.create') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-person-plus" aria-hidden="true"></i></span>
+            <span class="nav-text">Enregistrer un OEV</span>
           </a>
+          @endcan
+          @can('voir OEV')
+          <a class="nav-link {{ request()->routeIs('oevs.*') && ! request()->routeIs('oevs.create') ? 'active' : '' }}" href="{{ route('oevs.index') }}" {{ request()->routeIs('oevs.*') && ! request()->routeIs('oevs.create') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
+            <span class="nav-text">Liste des OEV</span>
+          </a>
+          @endcan
           <a class="nav-link" href="#">
             <span class="nav-icon"><i class="bi bi-map" aria-hidden="true"></i></span>
             <span class="nav-text">Suivi des OEV</span>

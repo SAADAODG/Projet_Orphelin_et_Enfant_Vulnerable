@@ -21,6 +21,8 @@ class RolePermissionSeeder extends Seeder
             'voir rapports',
             'gérer paramètres',
             'gérer rôles',
+            'voir OEV',
+            'enregistrer OEV',
         ];
 
         foreach ($permissions as $permission) {
@@ -40,26 +42,35 @@ class RolePermissionSeeder extends Seeder
                 'voir rapports',
                 'gérer paramètres',
                 'gérer rôles',
+                'voir OEV',
+                'enregistrer OEV',
             ],
             'responsable DGFE' => [
                 'voir utilisateurs',
                 'voir demandes',
                 'valider demandes',
                 'voir rapports',
+                'voir OEV',
+                'enregistrer OEV',
             ],
             'agent DGFE' => [
                 'voir demandes',
                 'valider demandes',
                 'voir rapports',
+                'voir OEV',
+                'enregistrer OEV',
             ],
             'DR' => [
                 'voir demandes',
                 'valider demandes',
                 'voir rapports',
+                'voir OEV',
+                'enregistrer OEV',
             ],
             'DP' => [
                 'voir demandes',
                 'voir rapports',
+                'voir OEV',
             ],
         ];
 
