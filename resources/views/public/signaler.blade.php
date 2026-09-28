@@ -12,7 +12,16 @@
       </ol>
     </nav>
     <h1 class="h4 fw-bold text-dark mb-1">Signaler un Orphelin ou Enfant Vulnérable</h1>
-    <p class="text-muted mb-0">Parent, tuteur ou simple citoyen : aidez-nous à identifier un enfant qui a besoin d'être pris en charge par l'État.</p>
+    @php $messageBanniere = "Parent, tuteur ou simple citoyen : aidez-nous à identifier un enfant qui a besoin d'être pris en charge par l'État."; @endphp
+    <div class="banniere-passante" role="note" aria-label="{{ $messageBanniere }}">
+      <div class="banniere-passante-piste" aria-hidden="true">
+        {{-- Le message est répété pour un défilement continu, sans coupure --}}
+        @for ($i = 0; $i < 2; $i++)
+          <span class="banniere-passante-texte"><i class="bi bi-megaphone"></i> {{ $messageBanniere }}</span>
+          <span class="banniere-passante-texte"><i class="bi bi-megaphone"></i> {{ $messageBanniere }}</span>
+        @endfor
+      </div>
+    </div>
   </div>
 </div>
 

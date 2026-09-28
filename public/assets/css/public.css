@@ -2257,3 +2257,51 @@ body.public-body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Bannière passante (Signaler un OEV) : rouge doux et discret ===== */
+.banniere-passante {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0;
+  border: 1px solid #f6d3d7;
+  border-radius: 8px;
+  background: #fdf1f2;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+}
+
+.banniere-passante-piste {
+  display: flex;
+  width: max-content;
+  animation: banniereDefile 40s linear infinite;
+}
+
+.banniere-passante:hover .banniere-passante-piste {
+  animation-play-state: paused;
+}
+
+.banniere-passante-texte {
+  flex: 0 0 auto;
+  padding: 0 2.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #b4404b;
+  white-space: nowrap;
+}
+
+.banniere-passante-texte i {
+  margin-right: 0.35rem;
+  opacity: 0.8;
+}
+
+@keyframes banniereDefile {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banniere-passante-piste {
+    animation: none;
+  }
+}
