@@ -10,6 +10,12 @@
   <link rel="stylesheet" href="{{ asset('assets/vendors/fontawesome/css/all.min.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/vendors/bootstrap-icons/bootstrap-icons.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+  {{-- Police de l'interface admin, réglable depuis Paramètres généraux > Apparence (voir
+       config/fonts.php) : {!! !!} car la valeur vient d'une liste fermée, jamais d'une saisie libre. --}}
+  @if ($siteSetting->police_admin_config['stylesheet'])
+    <link rel="stylesheet" href="{{ asset($siteSetting->police_admin_config['stylesheet']) }}">
+  @endif
+  <style>:root { --admin-font: {!! $siteSetting->police_admin_config['family'] !!}; }</style>
   @stack('styles')
 </head>
 
@@ -101,10 +107,16 @@
             <span class="nav-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
             <span class="nav-text">Gestion role et permission</span>
           </a>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
-            <span class="nav-text">Gestion des paramètres</span>
+          @can('gérer paramètres')
+          <a class="nav-link {{ request()->routeIs('localites.*') ? 'active' : '' }}" href="{{ route('localites.regions.index') }}" {{ request()->routeIs('localites.*') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+            <span class="nav-text">Localités</span>
           </a>
+          <a class="nav-link {{ request()->routeIs('parametres.*') ? 'active' : '' }}" href="{{ route('parametres.edit') }}" {{ request()->routeIs('parametres.*') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
+            <span class="nav-text">Paramètres généraux</span>
+          </a>
+          @endcan
         </div>
 
         <div class="nav-section">

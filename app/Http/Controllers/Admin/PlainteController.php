@@ -22,15 +22,15 @@ class PlainteController extends Controller
 
         $statut = $request->query('statut');
 
-        $plaintes = Plainte::query()
+        $plaintes = Plainte::with(['province', 'commune'])
             ->when($statut, fn ($query) => $query->where('statut', $statut))
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = '%'.$request->query('q').'%';
                 $query->where(fn ($sub) => $sub
                     ->where('reference', 'ilike', $q)
                     ->orWhere('description', 'ilike', $q)
-                    ->orWhere('province', 'ilike', $q)
-                    ->orWhere('localite', 'ilike', $q));
+                    ->orWhere('localite', 'ilike', $q)
+                    ->ouLocaliteContient($q, 'ilike'));
             })
             ->latest()
             ->paginate(15)

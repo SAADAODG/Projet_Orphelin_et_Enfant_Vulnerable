@@ -18,7 +18,7 @@
 
   // Étape à ouvrir en cas d'erreur de validation côté serveur
   $champsParEtape = [
-    1 => ['nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif', 'nom_tuteur', 'prenom_tuteur', 'contact_tuteur', 'region', 'province', 'commune'],
+    1 => ['nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif', 'nom_tuteur', 'prenom_tuteur', 'contact_tuteur', 'region_id', 'province_id', 'commune_id'],
     2 => ['etablissement_precedent', 'moyenne_annuelle', 'appreciation', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite'],
     3 => array_merge(array_keys(Oev::DOCUMENTS), ['nom_structure_rib']),
   ];
@@ -274,15 +274,12 @@
           <div class="col-lg-6">
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-geo-alt" aria-hidden="true"></i> Localité</div>
-              <div class="row g-3">
-                @foreach (['region' => 'Région', 'province' => 'Province', 'commune' => 'Commune'] as $champ => $label)
-                  <div class="{{ $champ === 'commune' ? 'col-12' : 'col-sm-6' }}">
-                    <label class="form-label" for="{{ $champ }}">{{ $label }} <span class="text-danger">*</span></label>
-                    <input class="form-control @error($champ) is-invalid @enderror" id="{{ $champ }}" name="{{ $champ }}" value="{{ $v($champ) }}" maxlength="100" required data-recap="{{ $champ }}">
-                    <div class="invalid-feedback">{{ $label }} obligatoire.</div>
-                  </div>
-                @endforeach
-              </div>
+              @include('partials.localite-selects', [
+                'localites' => $localites,
+                'valeurs' => $oev->only(['region_id', 'province_id', 'commune_id']),
+                'colonnes' => ['region_id' => 'col-sm-6', 'province_id' => 'col-sm-6', 'commune_id' => 'col-12'],
+                'attributs' => ['region_id' => 'data-recap="region_id"', 'province_id' => 'data-recap="province_id"', 'commune_id' => 'data-recap="commune_id"'],
+              ])
             </div>
           </div>
         </div>
@@ -434,9 +431,9 @@
                 <div class="oev-recap-bloc">
                   <h3><span><i class="bi bi-geo-alt me-1" aria-hidden="true"></i> Localité</span><button type="button" class="btn btn-link btn-sm p-0" data-aller="1">Modifier</button></h3>
                   <dl>
-                    <dt>Région</dt><dd data-r="region"></dd>
-                    <dt>Province</dt><dd data-r="province"></dd>
-                    <dt>Commune</dt><dd data-r="commune"></dd>
+                    <dt>Région</dt><dd data-r="region_id"></dd>
+                    <dt>Province</dt><dd data-r="province_id"></dd>
+                    <dt>Commune</dt><dd data-r="commune_id"></dd>
                   </dl>
                 </div>
               </div>

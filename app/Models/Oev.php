@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AppartientALocalite;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -14,14 +15,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
     'etablissement_precedent', 'moyenne_annuelle', 'appreciation',
     'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
-    'region', 'province', 'commune',
+    'region_id', 'province_id', 'commune_id',
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
     'motif_complement', 'complement_at', 'complement_par',
 ])]
 class Oev extends Model
 {
-    use SoftDeletes;
+    use AppartientALocalite, SoftDeletes;
 
     /*
      * Circuit du dossier : le DP constitue puis soumet ; le DR déclare le dossier conforme (validé)

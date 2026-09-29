@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Commune;
 use App\Models\Oev;
 use App\Models\User;
+use Database\Seeders\CommuneSeeder;
+use Database\Seeders\LocaliteSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -19,11 +22,14 @@ class OevTest extends TestCase
     private User $dr;
     private User $central;
 
+    private Commune $ouagadougou;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed([RolePermissionSeeder::class, LocaliteSeeder::class, CommuneSeeder::class]);
         Storage::fake('local');
+        $this->ouagadougou = Commune::where('nom', 'Ouagadougou')->firstOrFail();
 
         $this->dp = User::factory()->create()->assignRole('DP');
         $this->dr = User::factory()->create()->assignRole('DR');
@@ -50,9 +56,9 @@ class OevTest extends TestCase
             'type_etablissement' => 'public',
             'classe' => '6e',
             'frais_scolarite' => 25000,
-            'region' => 'Centre',
-            'province' => 'Kadiogo',
-            'commune' => 'Ouagadougou',
+            'region_id' => $this->ouagadougou->province->region_id,
+            'province_id' => $this->ouagadougou->province_id,
+            'commune_id' => $this->ouagadougou->id,
         ];
     }
 
@@ -164,11 +170,32 @@ class OevTest extends TestCase
     public function test_les_messages_d_erreur_du_formulaire_sont_en_francais(): void
     {
         $this->actingAs($this->dp)
-            ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region' => '']))
+            ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region_id' => '']))
             ->assertSessionHasErrors([
                 'classe' => 'Le champ « classe » est obligatoire.',
-                'region' => 'Le champ « région » est obligatoire.',
+                'region_id' => 'Le champ « région » est obligatoire.',
             ]);
+    }
+
+    public function test_la_localite_est_rattachee_aux_tables_et_doit_etre_coherente(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev())->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame('Ouagadougou', $oev->commune->nom);
+        $this->assertSame('Kadiogo', $oev->province->nom);
+        $this->get(route('oevs.show', $oev))->assertSee('Ouagadougou');
+        $this->get(route('oevs.index', ['q' => 'Kadiogo']))->assertOk()->assertSee('OUEDRAOGO');
+
+        // Une commune qui n'appartient pas à la province choisie est refusée.
+        $autreCommune = Commune::where('province_id', '!=', $this->ouagadougou->province_id)->firstOrFail();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'KABORE', 'commune_id' => $autreCommune->id]))
+            ->assertSessionHasErrors('commune_id');
+
+        // Une commune utilisée par un dossier ne peut pas être supprimée.
+        $admin = User::factory()->create();
+        $admin->assignRole('administrateur');
+        $this->actingAs($admin)->delete(route('localites.communes.destroy', $this->ouagadougou))->assertSessionHas('error');
+        $this->assertModelExists($this->ouagadougou);
     }
 
     // ---------- Circuit DP → DR → central ----------

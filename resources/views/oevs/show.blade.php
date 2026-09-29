@@ -315,10 +315,10 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-geo-alt" aria-hidden="true"></i> Localité</h2>
           <ul class="oev-lieu">
-            @foreach (['Région' => $oev->region, 'Province' => $oev->province, 'Commune' => $oev->commune] as $niveau => $lieu)
+            @foreach (['Région' => $oev->region?->nom, 'Province' => $oev->province?->nom, 'Commune' => $oev->commune?->nom] as $niveau => $lieu)
               <li>
                 <span class="oev-lieu-point" aria-hidden="true"></span>
-                <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu }}</strong></div>
+                <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu ?? '—' }}</strong></div>
               </li>
             @endforeach
           </ul>

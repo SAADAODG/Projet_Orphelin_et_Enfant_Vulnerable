@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Plateforme de prise en charge des Orphelins et Enfants Vulnérables (OEV)">
-  <title>@yield('title', 'Ministère de la Famille et de la Solidarité')</title>
+  <meta name="description" content="{{ $siteSetting->structure_description ?? $siteSetting->nom_site }}">
+  <title>@yield('title', $siteSetting->ministere_tutelle ?? $siteSetting->nom_site)</title>
 
-  <!-- Google Fonts Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  {{-- Police du site public, réglable depuis Paramètres généraux > Apparence (voir config/fonts.php) --}}
+  @if ($siteSetting->police_public_config['stylesheet'])
+    <link rel="stylesheet" href="{{ asset($siteSetting->police_public_config['stylesheet']) }}">
+  @endif
 
   <!-- Bootstrap 5 CSS & Icons -->
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
@@ -18,6 +18,9 @@
 
   <!-- Custom Public CSS -->
   <link rel="stylesheet" href="{{ asset('assets/css/public.css') }}">
+  {{-- {!! !!} : la valeur vient de la liste fermée config/fonts.php, jamais d'une saisie libre.
+       Doit venir après public.css, qui définit la valeur par défaut de --public-font. --}}
+  <style>:root { --public-font: {!! $siteSetting->police_public_config['family'] !!}; }</style>
   @stack('styles')
 </head>
 
@@ -30,8 +33,10 @@
           <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries Officielles" style="height: 36px; width: auto; object-fit: contain;">
         </div>
         <div class="brand-text">
-          <span class="brand-title">MINISTÈRE DE LA FAMILLE ET DE LA SOLIDARITÉ</span>
-          <span class="brand-subtitle">Programme OEV – Burkina Faso</span>
+          <span class="brand-title">{{ Str::upper($siteSetting->ministere_tutelle ?? $siteSetting->nom_site) }}</span>
+          @if ($siteSetting->slogan)
+            <span class="brand-subtitle">{{ $siteSetting->slogan }}</span>
+          @endif
         </div>
       </a>
 
@@ -84,39 +89,42 @@
         <div class="col-12 col-lg-4">
           <div class="footer-brand d-flex align-items-center gap-2">
             <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" style="height: 38px; width: auto; object-fit: contain;">
-            <span>Ministère de la Famille et de la Solidarité</span>
+            <span>{{ $siteSetting->ministere_tutelle ?? $siteSetting->nom_site }}</span>
           </div>
-          <p class="footer-description">
-            Plateforme de recensement, de protection et de suivi des droits des orphelins et enfants vulnérables au Burkina Faso.
-          </p>
+          @if ($siteSetting->structure_description)
+            <p class="footer-description">{{ $siteSetting->structure_description }}</p>
+          @endif
         </div>
 
         <div class="col-6 col-lg-3">
           <h2 class="footer-title">Liens Rapides</h2>
           <ul class="footer-links">
-            <li><a href="{{ route('public.signaler') }}"><i class="bi bi-chevron-right me-1"></i> Signaler un OEV</a></li>
-            <li><a href="{{ route('public.suivi') }}"><i class="bi bi-chevron-right me-1"></i> Suivi du signalement</a></li>
-            <li><a href="{{ route('public.plainte') }}"><i class="bi bi-chevron-right me-1"></i> Déposer une plainte</a></li>
-            <li><a href="{{ route('public.about') }}"><i class="bi bi-chevron-right me-1"></i> Décrets & Éligibilité</a></li>
-            <li><a href="{{ route('login') }}"><i class="bi bi-chevron-right me-1"></i> Connexion Agent</a></li>
+            @foreach ($quickLinks as $link)
+              <li><a href="{{ Str::startsWith($link->url, ['http://', 'https://', '#']) ? $link->url : url($link->url) }}"><i class="bi bi-chevron-right me-1"></i> {{ $link->libelle }}</a></li>
+            @endforeach
           </ul>
         </div>
 
         <div class="col-6 col-lg-2">
           <h2 class="footer-title">Services</h2>
           <ul class="footer-links">
-            <li><a href="#"><i class="bi bi-chevron-right me-1"></i> Prise en charge santé</a></li>
-            <li><a href="#"><i class="bi bi-chevron-right me-1"></i> Bourses d'études</a></li>
-            <li><a href="#"><i class="bi bi-chevron-right me-1"></i> Carte ou attestation OEV</a></li>
-            <li><a href="#"><i class="bi bi-chevron-right me-1"></i> Support Usagers</a></li>
+            @foreach ($services as $service)
+              <li><a href="{{ Str::startsWith($service->url, ['http://', 'https://', '#']) ? $service->url : url($service->url) }}"><i class="bi bi-chevron-right me-1"></i> {{ $service->libelle }}</a></li>
+            @endforeach
           </ul>
         </div>
 
         <div class="col-12 col-lg-3">
           <h2 class="footer-title">Contact & Localisation</h2>
-          <p class="small text-muted mb-2"><i class="bi bi-geo-alt-fill text-primary me-2"></i> Ouagadougou, Burkina Faso</p>
-          <p class="small text-muted mb-2"><i class="bi bi-telephone-fill text-primary me-2"></i> +226 25 30 00 00</p>
-          <p class="small text-muted mb-0"><i class="bi bi-envelope-fill text-primary me-2"></i> contact@oev.gov.bf</p>
+          @if ($siteSetting->contact_adresse)
+            <p class="small text-muted mb-2"><i class="bi bi-geo-alt-fill text-primary me-2"></i> {{ $siteSetting->contact_adresse }}</p>
+          @endif
+          @if ($siteSetting->contact_telephone)
+            <p class="small text-muted mb-2"><i class="bi bi-telephone-fill text-primary me-2"></i> {{ $siteSetting->contact_telephone }}</p>
+          @endif
+          @if ($siteSetting->contact_email)
+            <p class="small text-muted mb-0"><i class="bi bi-envelope-fill text-primary me-2"></i> {{ $siteSetting->contact_email }}</p>
+          @endif
         </div>
       </div>
 
