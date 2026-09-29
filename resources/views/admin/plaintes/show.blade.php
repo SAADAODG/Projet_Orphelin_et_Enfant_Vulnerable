@@ -38,8 +38,8 @@
           <h2 class="h5 mb-0 section-title"><i class="bi bi-geo-alt" aria-hidden="true"></i><span>Lieu et dossier concerné</span></h2>
         </div>
         <dl class="row detail-list mb-0">
-          <div class="col-sm-6"><dt>Région / Province</dt><dd>{{ $plainte->region ? $plainte->region.' — '.$plainte->province : 'Non précisé' }}</dd></div>
-          <div class="col-sm-6"><dt>Ville, village ou quartier</dt><dd>{{ $plainte->localite ?: 'Non précisé' }}</dd></div>
+          <div class="col-sm-6"><dt>Région / Province</dt><dd>{{ $plainte->region ? $plainte->region->nom.' — '.($plainte->province?->nom ?? '—') : 'Non précisé' }}</dd></div>
+          <div class="col-sm-6"><dt>Commune / quartier</dt><dd>{{ collect([$plainte->commune?->nom, $plainte->localite])->filter()->implode(' — ') ?: 'Non précisé' }}</dd></div>
           <div class="col-12">
             <dt>N° de signalement concerné</dt>
             <dd class="mb-0">

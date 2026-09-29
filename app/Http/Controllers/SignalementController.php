@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Region;
 use App\Models\Signalement;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +19,7 @@ class SignalementController extends Controller
     public function create(): View
     {
         return view('public.signaler', [
-            'localites' => config('localites'),
+            'localites' => Region::arborescence(),
             'vulnerabilites' => Signalement::VULNERABILITES,
             'vulnerabilitesDescriptions' => Signalement::VULNERABILITES_DESCRIPTIONS,
             'vulnerabilitesIcones' => Signalement::VULNERABILITES_ICONES,
@@ -31,8 +32,6 @@ class SignalementController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $localites = config('localites');
-
         $data = $request->validate([
             'enfant_nom' => ['required', 'string', 'max:100'],
             'enfant_prenom' => ['required', 'string', 'max:150'],
@@ -45,8 +44,7 @@ class SignalementController extends Controller
                 'string',
                 'max:255',
             ],
-            'region' => ['required', Rule::in(array_keys($localites))],
-            'province' => ['required', Rule::in($localites[$request->input('region')] ?? [])],
+            ...Signalement::reglesLocalite($request),
             'localite' => ['required', 'string', 'max:150'],
             'declarant_nom' => ['required', 'string', 'max:100'],
             'declarant_prenom' => ['required', 'string', 'max:150'],
@@ -61,6 +59,7 @@ class SignalementController extends Controller
             'vulnerabilites.required' => "Choisissez au moins une situation.",
             'vulnerabilite_precision.required' => 'Merci de préciser la situation.',
             'in' => 'Veuillez choisir une option valide.',
+            'exists' => 'Veuillez choisir une option valide.',
             'integer' => 'Veuillez saisir un nombre.',
             'enfant_age.min' => "L'âge ne peut pas être négatif.",
             'enfant_age.max' => "L'enfant doit avoir moins de 18 ans.",
@@ -108,7 +107,7 @@ class SignalementController extends Controller
     {
         abort_unless(in_array($recepisse, $request->session()->get('recepisses_autorises', []), true), 403);
 
-        $signalement = Signalement::where('recepisse', $recepisse)->firstOrFail();
+        $signalement = Signalement::with(['region', 'province', 'commune'])->where('recepisse', $recepisse)->firstOrFail();
 
         return Pdf::loadView('pdf.recepisse', ['signalement' => $signalement])
             ->setPaper('a4')

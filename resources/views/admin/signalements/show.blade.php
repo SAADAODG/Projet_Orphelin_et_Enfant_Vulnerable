@@ -40,8 +40,9 @@
       <dl class="sig-grille">
         <div><dt>Nom et prénom(s)</dt><dd>{{ $signalement->enfant_nom_complet }}</dd></div>
         <div><dt>Âge estimé</dt><dd>{{ $signalement->enfant_age }} ans</dd></div>
-        <div><dt>Région / Province</dt><dd>{{ $signalement->region }} — {{ $signalement->province }}</dd></div>
-        <div><dt>Ville, village ou quartier</dt><dd>{{ $signalement->localite }}</dd></div>
+        <div><dt>Région / Province</dt><dd>{{ $signalement->region?->nom ?? '—' }} — {{ $signalement->province?->nom ?? '—' }}</dd></div>
+        <div><dt>Commune</dt><dd>{{ $signalement->commune?->nom ?? '—' }}</dd></div>
+        <div><dt>Village, quartier ou secteur</dt><dd>{{ $signalement->localite }}</dd></div>
         <div class="sig-grille-large">
           <dt>Situation</dt>
           <dd>

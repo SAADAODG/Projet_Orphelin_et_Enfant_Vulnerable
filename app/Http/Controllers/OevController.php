@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Oev;
 use App\Models\OevDocument;
+use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,7 @@ class OevController extends Controller
         'numeric' => 'Le champ « :attribute » doit être un nombre.',
         'boolean' => 'Le champ « :attribute » est invalide.',
         'in' => 'La valeur choisie pour « :attribute » est invalide.',
+        'exists' => 'La valeur choisie pour « :attribute » est invalide.',
         'date' => 'Le champ « :attribute » n’est pas une date valide.',
         'regex' => 'Le format du champ « :attribute » est invalide.',
         'file' => '« :attribute » doit être un fichier.',
@@ -52,9 +54,9 @@ class OevController extends Controller
         'type_etablissement' => 'public ou privé',
         'classe' => 'classe',
         'frais_scolarite' => 'frais de scolarité',
-        'region' => 'région',
-        'province' => 'province',
-        'commune' => 'commune',
+        'region_id' => 'région',
+        'province_id' => 'province',
+        'commune_id' => 'commune',
         'nom_structure_rib' => 'nom de la structure',
     ];
 
@@ -71,9 +73,10 @@ class OevController extends Controller
             ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
-                    foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'region', 'province', 'commune', 'etablissement_actuel'] as $champ) {
+                    foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'etablissement_actuel'] as $champ) {
                         $q->orWhere($champ, 'like', "%{$recherche}%");
                     }
+                    $q->ouLocaliteContient("%{$recherche}%");
                 });
             })
             ->latest()
@@ -94,7 +97,7 @@ class OevController extends Controller
 
     public function create(): View
     {
-        return view('oevs.form', ['oev' => new Oev(), 'documents' => collect()]);
+        return view('oevs.form', ['oev' => new Oev(), 'documents' => collect(), 'localites' => Region::arborescence()]);
     }
 
     public function store(Request $request)
@@ -116,14 +119,14 @@ class OevController extends Controller
 
     public function show(Oev $oev): View
     {
-        $oev->load(['documents.auteur', 'createur']);
+        $oev->load(['documents.auteur', 'createur', 'region', 'province', 'commune']);
 
         return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
     }
 
     public function edit(Oev $oev): View
     {
-        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type')]);
+        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type'), 'localites' => Region::arborescence()]);
     }
 
     public function update(Request $request, Oev $oev)
@@ -194,9 +197,7 @@ class OevController extends Controller
             'classe' => ['required', 'string', 'max:50'],
             'frais_scolarite' => ['required', 'integer', 'min:0'],
 
-            'region' => ['required', 'string', 'max:100'],
-            'province' => ['required', 'string', 'max:100'],
-            'commune' => ['required', 'string', 'max:100'],
+            ...Oev::reglesLocalite($request),
 
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];

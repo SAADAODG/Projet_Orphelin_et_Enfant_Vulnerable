@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AppartientALocalite;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -14,12 +15,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
     'etablissement_precedent', 'moyenne_annuelle', 'appreciation',
     'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
-    'region', 'province', 'commune',
+    'region_id', 'province_id', 'commune_id',
     'nom_structure_rib', 'created_by',
 ])]
 class Oev extends Model
 {
-    use SoftDeletes;
+    use AppartientALocalite, SoftDeletes;
 
     public const SEXES = ['M' => 'Masculin', 'F' => 'Féminin'];
 

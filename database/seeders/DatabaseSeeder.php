@@ -15,7 +15,14 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(RolePermissionSeeder::class);
+        $this->call([
+            RolePermissionSeeder::class,
+            LocaliteSeeder::class,
+            CommuneSeeder::class,
+            SiteSettingSeeder::class,
+            QuickLinkSeeder::class,
+            ServiceSeeder::class,
+        ]);
 
         $admin = User::factory()->create([
             'name' => 'Super Admin',

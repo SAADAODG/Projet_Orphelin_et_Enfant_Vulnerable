@@ -84,7 +84,7 @@
                 <span class="badge text-bg-{{ \App\Models\Plainte::OBJETS_COULEURS[$plainte->objet] ?? 'secondary' }}"><i class="bi {{ \App\Models\Plainte::OBJETS_ICONES[$plainte->objet] ?? 'bi-chat' }} me-1" aria-hidden="true"></i>{{ $plainte->objet_libelle }}</span>
                 <div class="small text-muted">{{ \Illuminate\Support\Str::limit($plainte->description, 70) }}</div>
               </td>
-              <td>{{ $plainte->province ?? '—' }}@if ($plainte->localite)<div class="small text-muted">{{ $plainte->localite }}</div>@endif</td>
+              <td>{{ $plainte->province?->nom ?? '—' }}@if ($plainte->commune || $plainte->localite)<div class="small text-muted">{{ collect([$plainte->commune?->nom, $plainte->localite])->filter()->implode(' — ') }}</div>@endif</td>
               <td>
                 @if ($plainte->anonyme || ! $plainte->nom)
                   <span class="text-muted"><i class="bi bi-incognito me-1" aria-hidden="true"></i>Anonyme</span>

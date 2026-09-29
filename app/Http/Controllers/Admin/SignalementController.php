@@ -25,7 +25,7 @@ class SignalementController extends Controller
         $statut = $request->query('statut');
         $decision = $statut === Signalement::CLOTURE ? $request->query('decision') : null;
 
-        $signalements = Signalement::query()
+        $signalements = Signalement::with(['province', 'commune'])
             ->when($statut, fn ($query) => $query->where('statut', $statut))
             ->when($decision, fn ($query) => $query->where('decision', $decision))
             ->when($request->filled('q'), function ($query) use ($request) {
@@ -35,7 +35,7 @@ class SignalementController extends Controller
                     ->orWhere('enfant_nom', 'ilike', $q)
                     ->orWhere('enfant_prenom', 'ilike', $q)
                     ->orWhere('declarant_nom', 'ilike', $q)
-                    ->orWhere('province', 'ilike', $q));
+                    ->ouLocaliteContient($q, 'ilike'));
             })
             ->latest()
             ->paginate(15)
@@ -71,7 +71,7 @@ class SignalementController extends Controller
             $signalement->forceFill(['lu_at' => now()])->save();
         }
 
-        $signalement->load(['agentTraitement', 'agentCloture']);
+        $signalement->load(['agentTraitement', 'agentCloture', 'region', 'province', 'commune']);
 
         return view('admin.signalements.show', ['signalement' => $signalement]);
     }

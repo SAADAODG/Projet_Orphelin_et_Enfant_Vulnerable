@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AppartientALocalite;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class Plainte extends Model
 {
+    use AppartientALocalite;
+
     public const NOUVELLE = 'nouvelle';
     public const EN_COURS = 'en_cours';
     public const TRAITEE = 'traitee';
@@ -51,8 +54,9 @@ class Plainte extends Model
         'reference',
         'objet',
         'description',
-        'region',
-        'province',
+        'region_id',
+        'province_id',
+        'commune_id',
         'localite',
         'recepisse_signalement',
         'anonyme',

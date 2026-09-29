@@ -3,13 +3,20 @@
 use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\OevController;
+use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlainteController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProvinceController;
+use App\Http\Controllers\QuickLinkController;
+use App\Http\Controllers\RegionController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SignalementController;
 use App\Http\Controllers\UserController;
+use App\Models\Province;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,7 +27,7 @@ use Illuminate\Support\Facades\Route;
 
 // --- Routes Publiques ---
 Route::get('/', function () {
-    return view('public.home');
+    return view('public.home', ['nombreProvinces' => Province::count()]);
 })->name('public.home');
 
 Route::get('/signaler', [SignalementController::class, 'create'])->name('public.signaler');
@@ -94,6 +101,24 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
         Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
         Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
+    });
+
+    // --- Paramétrage : localités (Régions > Provinces > Communes) et paramètres généraux du site ---
+    Route::middleware('can:gérer paramètres')->group(function () {
+        Route::prefix('localites')->name('localites.')->group(function () {
+            Route::resource('regions', RegionController::class)->except('show');
+            Route::resource('provinces', ProvinceController::class)->except('show');
+            Route::resource('communes', CommuneController::class)->except('show');
+        });
+
+        Route::get('/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
+        Route::put('/parametres', [ParametreController::class, 'update'])->name('parametres.update');
+        Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
+        Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');
+        Route::delete('/quick-links/{quickLink}', [QuickLinkController::class, 'destroy'])->name('quick-links.destroy');
+        Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
+        Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
+        Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
     });
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
