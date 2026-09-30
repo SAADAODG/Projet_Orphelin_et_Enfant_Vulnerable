@@ -15,6 +15,7 @@
     Oev::ETAT_VALIDE => 'bi-patch-check',
     Oev::ETAT_COMPLEMENT => 'bi-arrow-repeat',
     Oev::ETAT_INTEGRE => 'bi-person-check',
+    Oev::ETAT_REJETE => 'bi-slash-circle',
   ];
   $stylesEtats = [
     Oev::ETAT_BROUILLON => '',
@@ -23,6 +24,7 @@
     Oev::ETAT_VALIDE => '',
     Oev::ETAT_COMPLEMENT => 'oev-stat--warning',
     Oev::ETAT_INTEGRE => 'oev-stat--success',
+    Oev::ETAT_REJETE => 'oev-stat--rejete',
   ];
   $filtreActif = $filtres['statut'] || $filtres['recherche'] !== '';
   $cartes = collect($etats)->map(fn ($e) => ['cle' => $e, 'label' => Oev::ETATS[$e], 'valeur' => $compteurs[$e] ?? 0, 'icone' => $iconesEtats[$e], 'style' => $stylesEtats[$e]]);

@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
     'motif_complement', 'complement_at', 'complement_par',
+    'motif_rejet', 'rejete_niveau', 'rejete_at', 'rejete_par',
 ])]
 class Oev extends Model
 {
@@ -28,6 +29,7 @@ class Oev extends Model
      * ou non conforme (retour au DP) ; le niveau central intègre l'enfant, qui devient OEV et reçoit son code.
      * Le central peut aussi demander un complément : le dossier revient au DR, qui le complète
      * lui-même puis le valide à nouveau, ou le renvoie au DP (non conforme).
+     * Le DR (dossier soumis ou en complément) et le central (dossier validé) peuvent rejeter définitivement le dossier.
      */
     public const ETAT_BROUILLON = 'brouillon';
     public const ETAT_SOUMIS = 'soumis';
@@ -35,6 +37,7 @@ class Oev extends Model
     public const ETAT_VALIDE = 'valide';
     public const ETAT_COMPLEMENT = 'complement';
     public const ETAT_INTEGRE = 'integre';
+    public const ETAT_REJETE = 'rejete';
 
     public const ETATS = [
         self::ETAT_BROUILLON => 'En constitution',
@@ -43,6 +46,7 @@ class Oev extends Model
         self::ETAT_VALIDE => 'Validé par le DR',
         self::ETAT_COMPLEMENT => 'Complément demandé',
         self::ETAT_INTEGRE => 'Intégré (OEV)',
+        self::ETAT_REJETE => 'Rejeté',
     ];
 
     /** Couleur Bootstrap associée à chaque état. */
@@ -53,6 +57,7 @@ class Oev extends Model
         self::ETAT_VALIDE => 'primary',
         self::ETAT_COMPLEMENT => 'warning',
         self::ETAT_INTEGRE => 'success',
+        self::ETAT_REJETE => 'dark',
     ];
 
     public const SEXES = ['M' => 'Masculin', 'F' => 'Féminin'];
@@ -98,6 +103,7 @@ class Oev extends Model
             'verifie_at' => 'datetime',
             'integre_at' => 'datetime',
             'complement_at' => 'datetime',
+            'rejete_at' => 'datetime',
         ];
     }
 
@@ -129,6 +135,11 @@ class Oev extends Model
     public function demandeurComplement(): BelongsTo
     {
         return $this->belongsTo(User::class, 'complement_par');
+    }
+
+    public function auteurRejet(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejete_par');
     }
 
     /** Code OEV attribué à l'intégration, ex. OEV-2026-0001. */
@@ -173,6 +184,20 @@ class Oev extends Model
     public function attendDecisionDr(): bool
     {
         return in_array($this->statut_dossier, [self::ETAT_SOUMIS, self::ETAT_COMPLEMENT], true);
+    }
+
+    /**
+     * Niveau habilité à rejeter le dossier à son étape actuelle, pour cet utilisateur :
+     * « DR » (dossier soumis ou en complément), « Central » (dossier validé), sinon null.
+     */
+    public function niveauRejetPour(?User $utilisateur): ?string
+    {
+        return match (true) {
+            $utilisateur === null => null,
+            $this->attendDecisionDr() && $utilisateur->can('valider dossiers') => 'DR',
+            $this->statut_dossier === self::ETAT_VALIDE && $utilisateur->can('intégrer OEV') => 'Central',
+            default => null,
+        };
     }
 
     /**

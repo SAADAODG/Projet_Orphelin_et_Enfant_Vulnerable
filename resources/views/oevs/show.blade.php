@@ -24,9 +24,9 @@
   $retour = match (true) {
       $oev->estIntegre()
           => ['route' => 'oevs.liste', 'label' => 'Liste des OEV', 'icone' => 'bi-person-lines-fill'],
-      $estCentral && in_array($etat, [Oev::ETAT_VALIDE, Oev::ETAT_COMPLEMENT], true)
+      $estCentral && in_array($etat, [Oev::ETAT_VALIDE, Oev::ETAT_COMPLEMENT, Oev::ETAT_REJETE], true)
           => ['route' => 'oevs.integration', 'label' => 'Intégration des OEV', 'icone' => 'bi-person-check'],
-      $utilisateur->can('valider dossiers') && in_array($etat, [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME], true)
+      $utilisateur->can('valider dossiers') && in_array($etat, [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME, Oev::ETAT_REJETE], true)
           => ['route' => 'oevs.validation', 'label' => 'Validation des dossiers', 'icone' => 'bi-patch-check'],
       $utilisateur->can('constituer dossiers')
           => ['route' => 'oevs.index', 'label' => 'Constituer dossier enfant', 'icone' => 'bi-file-earmark-medical'],
@@ -38,7 +38,10 @@
   };
 
   // Parcours : DP (constitution, soumission) → DR (vérification) → central (intégration)
-  $verifie = in_array($oev->statut_dossier, [Oev::ETAT_VALIDE, Oev::ETAT_INTEGRE], true);
+  $rejeteParDr = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === 'DR';
+  $rejeteParCentral = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === 'Central';
+  $detailRejet = $oev->rejete_at?->format('d/m/Y') . ($oev->auteurRejet ? ' · ' . $oev->auteurRejet->name : '');
+  $verifie = in_array($etat, [Oev::ETAT_VALIDE, Oev::ETAT_INTEGRE], true) || $rejeteParCentral;
   $parcours = [
       [
           'niveau' => 'DP', 'titre' => 'Dossier constitué', 'icone' => 'bi-folder-plus', 'etat' => 'faite',
@@ -49,13 +52,17 @@
           'etat' => $oev->soumis_at && $etat !== Oev::ETAT_BROUILLON ? 'faite' : ($estDp ? 'courante' : 'a-venir'),
           'detail' => $oev->soumis_at ? $oev->soumis_at->format('d/m/Y') . ($oev->soumetteur ? ' · ' . $oev->soumetteur->name : '') : 'En attente de soumission',
       ],
-      $etat === Oev::ETAT_COMPLEMENT
-          ? [
+      match (true) {
+          $etat === Oev::ETAT_COMPLEMENT => [
               'niveau' => 'DR', 'icone' => 'bi-arrow-repeat', 'etat' => 'courante',
               'titre' => 'Complément demandé par le central',
               'detail' => $oev->complement_at?->format('d/m/Y') . ($oev->demandeurComplement ? ' · ' . $oev->demandeurComplement->name : '') . ' — en attente du DR',
-          ]
-          : [
+          ],
+          $rejeteParDr => [
+              'niveau' => 'DR', 'icone' => 'bi-slash-circle', 'etat' => 'refusee',
+              'titre' => 'Rejeté par le DR', 'detail' => $detailRejet,
+          ],
+          default => [
               'niveau' => 'DR', 'icone' => $etat === Oev::ETAT_NON_CONFORME ? 'bi-x-lg' : 'bi-patch-check',
               'titre' => $etat === Oev::ETAT_NON_CONFORME ? 'Jugé non conforme' : ($verifie ? 'Conforme — validé' : 'Vérification de la conformité'),
               'etat' => $etat === Oev::ETAT_NON_CONFORME ? 'refusee' : ($verifie ? 'faite' : ($etat === Oev::ETAT_SOUMIS ? 'courante' : 'a-venir')),
@@ -63,13 +70,20 @@
                   ? $oev->verifie_at->format('d/m/Y') . ($oev->verificateur ? ' · ' . $oev->verificateur->name : '')
                   : ($etat === Oev::ETAT_SOUMIS ? 'En cours de vérification' : 'Après soumission'),
           ],
-      [
-          'niveau' => 'Central', 'titre' => $oev->estIntegre() ? 'Intégré — ' . $oev->code : 'Intégration comme OEV', 'icone' => 'bi-person-check',
-          'etat' => $oev->estIntegre() ? 'faite' : ($etat === Oev::ETAT_VALIDE ? 'courante' : 'a-venir'),
-          'detail' => $oev->integre_at
-              ? $oev->integre_at->format('d/m/Y') . ($oev->integrateur ? ' · ' . $oev->integrateur->name : '')
-              : ($etat === Oev::ETAT_COMPLEMENT ? 'En attente du complément' : 'Après validation du DR'),
-      ],
+      },
+      $rejeteParCentral
+          ? ['niveau' => 'Central', 'titre' => 'Rejeté par le niveau central', 'icone' => 'bi-slash-circle', 'etat' => 'refusee', 'detail' => $detailRejet]
+          : [
+              'niveau' => 'Central', 'titre' => $oev->estIntegre() ? 'Intégré — ' . $oev->code : 'Intégration comme OEV', 'icone' => 'bi-person-check',
+              'etat' => $oev->estIntegre() ? 'faite' : ($etat === Oev::ETAT_VALIDE ? 'courante' : 'a-venir'),
+              'detail' => $oev->integre_at
+                  ? $oev->integre_at->format('d/m/Y') . ($oev->integrateur ? ' · ' . $oev->integrateur->name : '')
+                  : match (true) {
+                      $rejeteParDr => 'Dossier clos',
+                      $etat === Oev::ETAT_COMPLEMENT => 'En attente du complément',
+                      default => 'Après validation du DR',
+                  },
+          ],
   ];
   $iconesPieces = [
     'acte_naissance' => 'bi-file-earmark-text',
@@ -202,7 +216,9 @@
         <button class="btn btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#formNonConforme" aria-expanded="{{ $errors->has('motif_non_conformite') ? 'true' : 'false' }}" aria-controls="formNonConforme">
           <i class="bi {{ $etat === Oev::ETAT_COMPLEMENT ? 'bi-arrow-return-left' : 'bi-x-circle' }}" aria-hidden="true"></i> {{ $etat === Oev::ETAT_COMPLEMENT ? 'Renvoyer au DP' : 'Non conforme' }}
         </button>
+        @include('oevs._rejet', ['cible' => 'bouton'])
       </div>
+      @include('oevs._rejet', ['cible' => 'formulaire'])
       <form class="collapse w-100 {{ $errors->has('motif_non_conformite') ? 'show' : '' }}" id="formNonConforme" method="POST" action="{{ route('oevs.non-conforme', $oev) }}">
         @csrf
         <label class="form-label fw-semibold" for="motif_non_conformite">{{ $etat === Oev::ETAT_COMPLEMENT ? 'Ce que le DP doit compléter' : 'Motif de non-conformité' }} (transmis au DP) <span class="text-danger">*</span></label>
@@ -224,7 +240,9 @@
         <button class="btn btn-outline-warning" type="button" data-bs-toggle="collapse" data-bs-target="#formComplement" aria-expanded="{{ $errors->has('motif_complement') ? 'true' : 'false' }}" aria-controls="formComplement">
           <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Demander un complément
         </button>
+        @include('oevs._rejet', ['cible' => 'bouton'])
       </div>
+      @include('oevs._rejet', ['cible' => 'formulaire'])
       <form class="collapse w-100 {{ $errors->has('motif_complement') ? 'show' : '' }}" id="formComplement" method="POST" action="{{ route('oevs.complement', $oev) }}">
         @csrf
         <label class="form-label fw-semibold" for="motif_complement">Complément attendu (transmis au DR) <span class="text-danger">*</span></label>
@@ -238,6 +256,18 @@
       <div>
         <div class="fw-bold"><i class="bi bi-hourglass-split me-1" aria-hidden="true"></i> Complément demandé{{ $oev->complement_at ? ' le ' . $oev->complement_at->format('d/m/Y') : '' }} — en attente du DR</div>
         <div class="small mt-1"><strong>Demande :</strong> {{ $oev->motif_complement }}</div>
+      </div>
+    </section>
+  @elseif ($etat === Oev::ETAT_REJETE)
+    {{-- Dossier clos : visible de tous, avec le motif --}}
+    <section class="oev-action oev-action--rejet mt-3">
+      <div>
+        <div class="fw-bold">
+          <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>
+          Dossier rejeté par {{ $oev->rejete_niveau === 'Central' ? 'le niveau central' : 'le DR' }}{{ $oev->auteurRejet ? ' (' . $oev->auteurRejet->name . ')' : '' }}{{ $oev->rejete_at ? ' le ' . $oev->rejete_at->format('d/m/Y') : '' }}
+        </div>
+        <div class="small mt-1"><strong>Motif :</strong> {{ $oev->motif_rejet }}</div>
+        <div class="small text-muted mt-1">Le dossier est clos : il ne peut plus être modifié ni intégré.</div>
       </div>
     </section>
   @endif

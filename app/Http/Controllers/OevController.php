@@ -67,7 +67,7 @@ class OevController extends Controller
     /** DR — « Validation des dossiers » : dossiers soumis ou revenus du central (complément), et ceux déjà traités. */
     public function validation(Request $request): View
     {
-        return $this->lister($request, 'oevs.validation', [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME], Oev::ETAT_SOUMIS)
+        return $this->lister($request, 'oevs.validation', [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME, Oev::ETAT_REJETE], Oev::ETAT_SOUMIS)
             // Information pour le DR : dossiers encore chez les DP (non visibles tant qu'ils ne sont pas soumis)
             ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->count());
     }
@@ -75,7 +75,7 @@ class OevController extends Controller
     /** Niveau central — « Intégration des OEV » : dossiers validés à intégrer, compléments en attente, OEV intégrés. */
     public function integration(Request $request): View
     {
-        return $this->lister($request, 'oevs.integration', [Oev::ETAT_VALIDE, Oev::ETAT_COMPLEMENT, Oev::ETAT_INTEGRE], Oev::ETAT_VALIDE);
+        return $this->lister($request, 'oevs.integration', [Oev::ETAT_VALIDE, Oev::ETAT_COMPLEMENT, Oev::ETAT_INTEGRE, Oev::ETAT_REJETE], Oev::ETAT_VALIDE);
     }
 
     /** « Liste des OEV » : uniquement les enfants intégrés (devenus OEV), visibles de tous les niveaux. */
@@ -137,7 +137,7 @@ class OevController extends Controller
         // Un dossier en cours de constitution n'est visible que du DP (le DR le voit une fois soumis).
         abort_if($oev->statut_dossier === Oev::ETAT_BROUILLON && ! $request->user()->can('constituer dossiers'), 403);
 
-        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement']);
+        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet']);
 
         return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
     }
@@ -271,6 +271,35 @@ class OevController extends Controller
         return redirect()->route('oevs.validation')->with('success', "Dossier {$oev->numero_dossier} renvoyé au DP pour correction.");
     }
 
+    /**
+     * Rejet définitif, avec motif : par le DR (dossier soumis ou en complément) ou par le central (dossier validé).
+     * Le dossier est clos : l'enfant ne devient pas OEV et le dossier n'est plus modifiable.
+     */
+    public function rejeter(Request $request, Oev $oev)
+    {
+        $niveau = $oev->niveauRejetPour($request->user());
+        if (! $niveau) {
+            abort_unless($request->user()->canAny(['valider dossiers', 'intégrer OEV']), 403);
+
+            return back()->withErrors(['circuit' => "Ce dossier est « {$oev->libelleEtat()} » : il ne peut pas être rejeté à cette étape."]);
+        }
+        $validated = $request->validate(
+            ['motif_rejet' => ['required', 'string', 'max:2000']],
+            ['motif_rejet.required' => 'Indiquez le motif du rejet.'],
+        );
+
+        $oev->update([
+            'statut_dossier' => Oev::ETAT_REJETE,
+            'motif_rejet' => $validated['motif_rejet'],
+            'rejete_niveau' => $niveau,
+            'rejete_at' => now(),
+            'rejete_par' => $request->user()->id,
+        ]);
+
+        return redirect()->route($niveau === 'DR' ? 'oevs.validation' : 'oevs.integration')
+            ->with('success', "Dossier {$oev->numero_dossier} rejeté.");
+    }
+
     /** Niveau central : demande de complément sur un dossier validé → retour au DR avec la demande. */
     public function demanderComplement(Request $request, Oev $oev)
     {
@@ -334,6 +363,7 @@ class OevController extends Controller
                 Oev::ETAT_SOUMIS => 'soumis_at',
                 Oev::ETAT_COMPLEMENT => 'complement_at',
                 Oev::ETAT_INTEGRE => 'integre_at',
+                Oev::ETAT_REJETE => 'rejete_at',
                 default => 'updated_at',
             })
             ->paginate(15)

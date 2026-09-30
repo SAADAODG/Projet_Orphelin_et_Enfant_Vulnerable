@@ -94,6 +94,8 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::get('/oevs/{oev}/edit', [OevController::class, 'edit'])->name('oevs.edit');
         Route::put('/oevs/{oev}', [OevController::class, 'update'])->name('oevs.update');
         Route::delete('/oevs/{oev}/documents/{document}', [OevController::class, 'destroyDocument'])->name('oevs.documents.destroy');
+        // Rejet définitif : DR ou niveau central selon l'étape (contrôlé dans le contrôleur)
+        Route::post('/oevs/{oev}/rejeter', [OevController::class, 'rejeter'])->name('oevs.rejeter');
     });
     Route::middleware('can:valider dossiers')->group(function () {
         Route::get('/validation-dossiers', [OevController::class, 'validation'])->name('oevs.validation');

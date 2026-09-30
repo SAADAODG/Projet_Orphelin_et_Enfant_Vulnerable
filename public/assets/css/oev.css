@@ -124,6 +124,8 @@ html[data-theme="dark"] .oev-avatar--M { --c: #38bdf8; }
 .oev-stats--compact .oev-stat-label { font-size: .75rem; line-height: 1.2; display: block; }
 .oev-stat--success { --c: var(--admin-success); }
 .oev-stat--info { --c: #0891b2; }
+.oev-stat--rejete { --c: #475569; }
+html[data-theme="dark"] .oev-stat--rejete { --c: #94a3b8; }
 .oev-stat--orphelin_pere { --c: var(--oev-pere); }
 .oev-stat--orphelin_mere { --c: var(--oev-mere); }
 .oev-stat--orphelin_double { --c: var(--oev-double); }
@@ -300,6 +302,7 @@ html[data-theme="dark"] .oev-stat--info { --c: #22d3ee; }
 }
 .oev-action--danger { border-color: color-mix(in srgb, var(--admin-danger) 40%, var(--admin-border)); background: color-mix(in srgb, var(--admin-danger) 7%, var(--admin-surface)); }
 .oev-action--warning { border-color: color-mix(in srgb, var(--admin-warning) 45%, var(--admin-border)); background: color-mix(in srgb, var(--admin-warning) 8%, var(--admin-surface)); }
+.oev-action--rejet { border-color: color-mix(in srgb, var(--admin-text) 30%, var(--admin-border)); background: color-mix(in srgb, var(--admin-text) 6%, var(--admin-surface)); }
 .oev-action--success { border-color: color-mix(in srgb, var(--admin-success) 40%, var(--admin-border)); background: color-mix(in srgb, var(--admin-success) 7%, var(--admin-surface)); }
 
 /* ---------- Fiche : pièces du dossier ---------- */

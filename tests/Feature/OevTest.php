@@ -330,6 +330,79 @@ class OevTest extends TestCase
         $this->get(route('oevs.edit', $oev))->assertRedirect(route('oevs.show', $oev));
     }
 
+    // ---------- Rejet définitif ----------
+
+    public function test_le_dr_peut_rejeter_un_dossier_soumis(): void
+    {
+        $oev = $this->dossierComplet();
+        $this->post(route('oevs.soumettre', $oev));
+
+        $this->actingAs($this->dr)->get(route('oevs.show', $oev))->assertSee('Rejeter');
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => ''])->assertSessionHasErrors('motif_rejet');
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'Enfant ne remplissant pas les critères'])
+            ->assertRedirect(route('oevs.validation'));
+
+        $oev->refresh();
+        $this->assertSame(Oev::ETAT_REJETE, $oev->statut_dossier);
+        $this->assertSame('DR', $oev->rejete_niveau);
+        $this->assertSame($this->dr->id, $oev->rejete_par);
+        $this->get(route('oevs.validation', ['etat' => 'rejete']))->assertSee($oev->numero_dossier);
+
+        // Dossier clos : le DP voit le motif mais ne peut plus rien modifier ni soumettre
+        $this->actingAs($this->dp)->get(route('oevs.show', $oev))
+            ->assertSee('Enfant ne remplissant pas les critères')->assertSee('Dossier rejeté par le DR')
+            ->assertDontSee('Soumettre au DR')->assertDontSee('Modifier / compléter');
+        $this->get(route('oevs.edit', $oev))->assertRedirect(route('oevs.show', $oev));
+        $this->post(route('oevs.soumettre', $oev))->assertSessionHasErrors('circuit');
+    }
+
+    public function test_le_dr_peut_rejeter_un_dossier_revenu_du_central(): void
+    {
+        $oev = $this->dossierValide();
+        $this->actingAs($this->central)->post(route('oevs.complement', $oev), ['motif_complement' => 'Pièces douteuses']);
+
+        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'Documents falsifiés'])->assertSessionHasNoErrors();
+        $this->assertSame(Oev::ETAT_REJETE, $oev->refresh()->statut_dossier);
+        $this->assertSame('DR', $oev->rejete_niveau);
+    }
+
+    public function test_le_central_peut_rejeter_un_dossier_valide(): void
+    {
+        $oev = $this->dossierValide();
+
+        $this->actingAs($this->central)->get(route('oevs.show', $oev))->assertSee('Rejeter');
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'Doublon avec un OEV existant'])
+            ->assertRedirect(route('oevs.integration'));
+
+        $oev->refresh();
+        $this->assertSame(Oev::ETAT_REJETE, $oev->statut_dossier);
+        $this->assertSame('Central', $oev->rejete_niveau);
+        $this->assertNull($oev->code, 'Un dossier rejeté ne reçoit pas de code OEV');
+        $this->post(route('oevs.integrer', $oev))->assertSessionHasErrors('circuit');
+        $this->get(route('oevs.integration', ['etat' => 'rejete']))->assertSee($oev->numero_dossier);
+        $this->get(route('oevs.liste'))->assertDontSee($oev->numero_dossier)->assertDontSee('OUEDRAOGO');
+        $this->get(route('oevs.show', $oev))->assertSee('Rejeté par le niveau central');
+    }
+
+    public function test_chacun_ne_rejette_qu_a_son_etape(): void
+    {
+        $oev = $this->dossierComplet();
+
+        // Le DP ne rejette jamais
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
+        // Dossier non soumis : ni le DR ni le central ne peuvent le rejeter
+        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertSessionHasErrors('circuit');
+
+        // Dossier soumis : le central ne peut pas encore le rejeter (c'est au DR)
+        $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
+        $this->actingAs($this->central)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertSessionHasErrors('circuit');
+
+        // Dossier validé : c'est au central, plus au DR
+        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev));
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertSessionHasErrors('circuit');
+        $this->assertSame(Oev::ETAT_VALIDE, $oev->refresh()->statut_dossier);
+    }
+
     public function test_les_etapes_ne_peuvent_pas_etre_sautees(): void
     {
         $oev = $this->dossierComplet();
