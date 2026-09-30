@@ -19,8 +19,6 @@
     </div>
   </div>
 
-  @if (session('success')) <div class="alert alert-success mt-3"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> {{ session('success') }}</div> @endif
-  @if ($errors->has('circuit')) <div class="alert alert-danger mt-3">{{ $errors->first('circuit') }}</div> @endif
 
   @if (($compteurs['complement'] ?? 0) > 0 && $filtres['etat'] !== 'complement')
     <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">

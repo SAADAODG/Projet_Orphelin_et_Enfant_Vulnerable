@@ -21,7 +21,6 @@
     </div>
   </div>
 
-  @include('partials.flash')
 
   <section class="panel mt-3">
     <div class="panel-header">
@@ -68,7 +67,7 @@
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
                   <a class="btn btn-light btn-sm" href="{{ route('localites.villages.edit', $village) }}" aria-label="Modifier"><i class="bi bi-pencil" aria-hidden="true"></i></a>
-                  <form action="{{ route('localites.villages.destroy', $village) }}" method="POST" onsubmit="return confirm('Supprimer le village « {{ $village->nom }} » ?');">
+                  <form action="{{ route('localites.villages.destroy', $village) }}" method="POST" data-confirm="Supprimer le village « {{ $village->nom }} » ?" data-confirm-danger>
                     @csrf
                     @method('DELETE')
                     <button class="btn btn-outline-danger btn-sm" type="submit" aria-label="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>

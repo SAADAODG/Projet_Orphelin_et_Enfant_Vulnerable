@@ -18,11 +18,6 @@
     </div>
   </div>
 
-  @if (session('success'))
-    <div class="alert alert-success border-0 shadow-sm" role="status">
-      <i class="bi bi-check-circle me-2" aria-hidden="true"></i>{{ session('success') }}
-    </div>
-  @endif
 
   <div class="row g-3">
     <div class="col-12 col-xl-8">

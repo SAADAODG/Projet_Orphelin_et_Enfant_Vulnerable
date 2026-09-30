@@ -41,8 +41,8 @@
   };
 
   // Parcours : DP (constitution, soumission) → DR (vérification) → central (intégration)
-  $rejeteParDr = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === 'DR';
-  $rejeteParCentral = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === 'Central';
+  $rejeteParDr = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === Oev::REJET_DR;
+  $rejeteParCentral = $etat === Oev::ETAT_REJETE && $oev->rejete_niveau === Oev::REJET_CENTRAL;
   $detailRejet = $oev->rejete_at?->format('d/m/Y') . ($oev->auteurRejet ? ' · ' . $oev->auteurRejet->name : '');
   $verifie = in_array($etat, [Oev::ETAT_VALIDE, Oev::ETAT_INTEGRE], true) || $rejeteParCentral;
   $parcours = [
@@ -113,8 +113,6 @@
     </ol>
   </nav>
 
-  @if (session('success')) <div class="alert alert-success"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> {{ session('success') }}</div> @endif
-  @if ($errors->any()) <div class="alert alert-danger"><i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i> {{ $errors->first() }}</div> @endif
 
   {{-- En-tête --}}
   <section class="oev-hero">
@@ -154,7 +152,7 @@
         <div class="oev-hero-actions w-100 justify-content-end">
           <a class="btn btn-outline-primary" href="{{ route('oevs.edit', $oev) }}"><i class="bi bi-pencil-square" aria-hidden="true"></i> Modifier / compléter</a>
           @if ($estDp)
-            <form method="POST" action="{{ route('oevs.destroy', $oev) }}" onsubmit="return confirm('Supprimer ce dossier ?');">
+            <form method="POST" action="{{ route('oevs.destroy', $oev) }}" data-confirm="Supprimer ce dossier ?" data-confirm-danger>
               @csrf @method('DELETE')
               <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i> Supprimer</button>
             </form>
@@ -186,7 +184,7 @@
           @endif
         </div>
       </div>
-      <form method="POST" action="{{ route('oevs.soumettre', $oev) }}" onsubmit="return confirm('Soumettre ce dossier au DR ?');">
+      <form method="POST" action="{{ route('oevs.soumettre', $oev) }}" data-confirm="Soumettre ce dossier au DR ?">
         @csrf
         <button class="btn btn-primary" type="submit" @disabled(! $oev->estComplet())><i class="bi bi-send" aria-hidden="true"></i> Soumettre au DR</button>
       </form>
@@ -215,7 +213,7 @@
         @if ($etat === Oev::ETAT_COMPLEMENT)
           <a class="btn btn-outline-primary" href="{{ route('oevs.edit', $oev) }}"><i class="bi bi-pencil-square" aria-hidden="true"></i> Compléter le dossier</a>
         @endif
-        <form method="POST" action="{{ route('oevs.conforme', $oev) }}" onsubmit="return confirm('{{ $etat === Oev::ETAT_COMPLEMENT ? 'Valider ce dossier et le renvoyer au niveau central ?' : 'Déclarer ce dossier conforme et le valider ?' }}');">
+        <form method="POST" action="{{ route('oevs.conforme', $oev) }}" data-confirm="{{ $etat === Oev::ETAT_COMPLEMENT ? 'Valider ce dossier et le renvoyer au niveau central ?' : 'Déclarer ce dossier conforme et le valider ?' }}">
           @csrf
           <button class="btn btn-success" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> {{ $etat === Oev::ETAT_COMPLEMENT ? 'Valider et renvoyer au central' : 'Conforme — valider' }}</button>
         </form>
@@ -239,7 +237,7 @@
         <div class="small text-muted">En l’intégrant, l’enfant devient OEV et reçoit son code OEV. S’il manque une information ou une pièce, demandez un complément au DR.</div>
       </div>
       <div class="d-flex flex-wrap gap-2">
-        <form method="POST" action="{{ route('oevs.integrer', $oev) }}" onsubmit="return confirm('Intégrer cet enfant comme OEV ?');">
+        <form method="POST" action="{{ route('oevs.integrer', $oev) }}" data-confirm="Intégrer cet enfant comme OEV ?">
           @csrf
           <button class="btn btn-success" type="submit"><i class="bi bi-person-check" aria-hidden="true"></i> Intégrer comme OEV</button>
         </form>
@@ -270,7 +268,7 @@
       <div>
         <div class="fw-bold">
           <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>
-          Dossier rejeté par {{ $oev->rejete_niveau === 'Central' ? 'le niveau central' : 'le DR' }}{{ $oev->auteurRejet ? ' (' . $oev->auteurRejet->name . ')' : '' }}{{ $oev->rejete_at ? ' le ' . $oev->rejete_at->format('d/m/Y') : '' }}
+          Dossier rejeté par {{ $oev->rejete_niveau === Oev::REJET_CENTRAL ? 'le niveau central' : 'le DR' }}{{ $oev->auteurRejet ? ' (' . $oev->auteurRejet->name . ')' : '' }}{{ $oev->rejete_at ? ' le ' . $oev->rejete_at->format('d/m/Y') : '' }}
         </div>
         <div class="small mt-1"><strong>Motif :</strong> {{ $oev->motif_rejet }}</div>
         <div class="small text-muted mt-1">Le dossier est clos : il ne peut plus être modifié ni intégré.</div>
@@ -552,7 +550,7 @@
                 <div class="oev-doc-actions">
                   <a class="btn btn-sm btn-outline-primary" href="{{ route('oevs.documents.show', [$oev, $document]) }}" target="_blank" rel="noopener"><i class="bi bi-eye" aria-hidden="true"></i> Ouvrir</a>
                   @if ($peutModifier)
-                    <form class="flex-fill d-flex" method="POST" action="{{ route('oevs.documents.destroy', [$oev, $document]) }}" onsubmit="return confirm('Retirer cette pièce du dossier ?');">
+                    <form class="flex-fill d-flex" method="POST" action="{{ route('oevs.documents.destroy', [$oev, $document]) }}" data-confirm="Retirer cette pièce du dossier ?" data-confirm-danger>
                       @csrf @method('DELETE')
                       <button class="btn btn-sm btn-outline-danger w-100" type="submit" aria-label="Retirer {{ $libelle }}"><i class="bi bi-trash" aria-hidden="true"></i> Retirer</button>
                     </form>

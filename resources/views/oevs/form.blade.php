@@ -189,13 +189,10 @@
     </div>
   @endif
 
-  @if ($errors->any())
-    <div class="alert alert-danger mt-3">
-      <strong>Veuillez corriger les erreurs suivantes :</strong>
-      <ul class="mb-0 mt-1">@foreach ($errors->all() as $erreur)<li>{{ $erreur }}</li>@endforeach</ul>
-      <div class="small mt-2"><i class="bi bi-info-circle" aria-hidden="true"></i> Les informations saisies ont été conservées, mais les fichiers choisis doivent être sélectionnés à nouveau (étape {{ $etapeFichiers }}).</div>
-    </div>
-  @endif
+  {{-- Erreurs affichées par SweetAlert (partials/alertes), avec ce rappel sur les fichiers --}}
+  @php
+    $noteErreursFormulaire = "Les informations saisies ont été conservées, mais les fichiers choisis doivent être sélectionnés à nouveau (étape {$etapeFichiers}).";
+  @endphp
 
   <form id="oevWizard" method="POST" action="{{ $edition ? route('oevs.update', $oev) : route('oevs.store') }}" enctype="multipart/form-data" class="mt-3" novalidate data-etape-initiale="{{ $etapeInitiale }}">
     @csrf

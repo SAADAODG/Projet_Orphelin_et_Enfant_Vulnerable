@@ -21,7 +21,6 @@
     </div>
   </div>
 
-  @include('partials.flash')
 
   <section class="panel mt-3">
     <div class="panel-header">
@@ -53,7 +52,7 @@
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
                   <a class="btn btn-light btn-sm" href="{{ route('localites.regions.edit', $region) }}"><i class="bi bi-pencil" aria-hidden="true"></i></a>
-                  <form action="{{ route('localites.regions.destroy', $region) }}" method="POST" onsubmit="return confirm('Supprimer la région « {{ $region->nom }} » ?');">
+                  <form action="{{ route('localites.regions.destroy', $region) }}" method="POST" data-confirm="Supprimer la région « {{ $region->nom }} » ?" data-confirm-danger>
                     @csrf
                     @method('DELETE')
                     <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash" aria-hidden="true"></i></button>

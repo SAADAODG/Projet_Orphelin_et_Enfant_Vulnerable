@@ -20,8 +20,6 @@
       <form class="panel needs-validation" method="POST" action="{{ route('settings.password.update') }}" novalidate>
         @csrf
         @method('PUT')
-        @if (session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
-        @if ($errors->any()) <div class="alert alert-danger">{{ $errors->first() }}</div> @endif
         <div class="panel-header">
           <div>
             <h2 class="h5 mb-1 section-title"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Changer le mot de passe</span></h2>

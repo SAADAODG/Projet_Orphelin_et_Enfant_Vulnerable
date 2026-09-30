@@ -21,7 +21,6 @@
 
   <div class="mt-3">@include('oevs._onglets')</div>
 
-  @if (session('success')) <div class="alert alert-success mt-3"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> {{ session('success') }}</div> @endif
 
   @include('oevs._liste', [
     'route' => 'oevs.index',

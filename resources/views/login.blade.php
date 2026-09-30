@@ -40,18 +40,6 @@
       <p class="text-muted mb-0">Connectez-vous à votre espace de travail</p>
     </div>
 
-    @if (session('success'))
-      <div class="alert alert-success py-2 mb-3" role="status">
-        <small>{{ session('success') }}</small>
-      </div>
-    @endif
-
-    @if ($errors->any())
-      <div class="alert alert-danger py-2 mb-3" role="alert">
-        <small>{{ $errors->first() }}</small>
-      </div>
-    @endif
-
     <div class="mb-3">
       <label class="form-label" for="email">Adresse e-mail</label>
       <input class="form-control" id="email" name="email" type="email" value="{{ old('email') }}" autocomplete="username" required>

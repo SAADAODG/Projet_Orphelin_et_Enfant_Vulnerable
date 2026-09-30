@@ -49,9 +49,9 @@ class AccesModulesTest extends TestCase
         $this->central = User::factory()->create()->assignRole('agent DGFE');
     }
 
-    private function dossier(Commune $commune, string $etat): Oev
+    private function dossier(Commune $commune, string $etat, array $attributs = []): Oev
     {
-        return Oev::create([
+        return Oev::create($attributs + [
             'nom' => 'ENFANT', 'prenom' => Str::random(6), 'sexe' => 'F', 'date_naissance' => '2015-03-01',
             'statut' => 'orphelin_pere', 'handicap' => false, 'systeme_educatif' => 'classique',
             'nom_tuteur' => 'TUTEUR', 'prenom_tuteur' => 'Issa', 'contact_tuteur' => '+226 70 00 00 00',
@@ -132,8 +132,8 @@ class AccesModulesTest extends TestCase
 
         $this->actingAs($this->dpKadiogo)->get(route('admin.signalements.index'))->assertOk()
             ->assertSee('KABORE')->assertDontSee('SAWADOGO');
-        $this->get(route('admin.signalements.show', $ailleurs))->assertForbidden();
-        $this->patch(route('admin.signalements.valider', $ailleurs))->assertForbidden();
+        $this->get(route('admin.signalements.show', $ailleurs))->assertAccesRefuse();
+        $this->patch(route('admin.signalements.valider', $ailleurs))->assertAccesRefuse();
 
         $this->patch(route('admin.signalements.valider', $chezLui))->assertRedirect();
         $this->assertSame(Signalement::VALIDE, $chezLui->refresh()->statut);
@@ -150,7 +150,7 @@ class AccesModulesTest extends TestCase
         $this->get(route('admin.signalements.show', $kadiogo))->assertOk()
             ->assertDontSee(route('admin.signalements.valider', $kadiogo))
             ->assertSee('En attente d’examen par la direction provinciale', false);
-        $this->patch(route('admin.signalements.valider', $kadiogo))->assertForbidden();
+        $this->patch(route('admin.signalements.valider', $kadiogo))->assertAccesRefuse();
         $this->assertSame(Signalement::EN_ATTENTE, $kadiogo->refresh()->statut);
     }
 
@@ -159,8 +159,8 @@ class AccesModulesTest extends TestCase
         $signalement = $this->signalement($this->ouagadougou, 'KABORE');
 
         $this->actingAs($this->central);
-        $this->get(route('admin.signalements.index'))->assertForbidden();
-        $this->get(route('admin.signalements.show', $signalement))->assertForbidden();
+        $this->get(route('admin.signalements.index'))->assertAccesRefuse();
+        $this->get(route('admin.signalements.show', $signalement))->assertAccesRefuse();
     }
 
     // ---------- Dossiers enfants ----------
@@ -171,9 +171,27 @@ class AccesModulesTest extends TestCase
         $valide = $this->dossier($this->ouagadougou, Oev::ETAT_VALIDE);
 
         $this->actingAs($this->central);
-        $this->get(route('oevs.show', $soumis))->assertForbidden();
+        $this->get(route('oevs.show', $soumis))->assertAccesRefuse();
         $this->get(route('oevs.show', $valide))->assertOk();
         $this->get(route('oevs.integration', ['etat' => Oev::ETAT_VALIDE]))->assertSee($valide->numero_dossier)->assertDontSee($soumis->numero_dossier);
+    }
+
+    public function test_le_central_ne_voit_que_les_dossiers_qu_il_a_lui_meme_rejetes(): void
+    {
+        $rejetDr = $this->dossier($this->ouagadougou, Oev::ETAT_REJETE, ['rejete_niveau' => Oev::REJET_DR, 'motif_rejet' => 'Hors critères']);
+        $rejetCentral = $this->dossier($this->ouagadougou, Oev::ETAT_REJETE, ['rejete_niveau' => Oev::REJET_CENTRAL, 'motif_rejet' => 'Doublon']);
+
+        $this->actingAs($this->central);
+        $this->get(route('oevs.integration', ['etat' => Oev::ETAT_REJETE]))->assertOk()
+            ->assertSee($rejetCentral->numero_dossier)
+            ->assertDontSee($rejetDr->numero_dossier);
+        $this->get(route('oevs.show', $rejetDr))->assertAccesRefuse();
+        $this->get(route('oevs.show', $rejetCentral))->assertOk();
+
+        // Le DR, lui, voit les deux rejets de sa région
+        $this->actingAs($this->drCentre)->get(route('oevs.validation', ['etat' => Oev::ETAT_REJETE]))
+            ->assertSee($rejetDr->numero_dossier)
+            ->assertSee($rejetCentral->numero_dossier);
     }
 
     public function test_le_dp_et_le_dr_ne_voient_que_les_dossiers_de_leur_zone(): void
@@ -184,12 +202,12 @@ class AccesModulesTest extends TestCase
 
         $this->actingAs($this->dpKadiogo);
         $this->get(route('oevs.index'))->assertSee($kadiogo->numero_dossier)->assertDontSee($bazega->numero_dossier);
-        $this->get(route('oevs.show', $bazega))->assertForbidden();
+        $this->get(route('oevs.show', $bazega))->assertAccesRefuse();
 
         $this->actingAs($this->drCentre);
         $this->get(route('oevs.validation'))->assertSee($kadiogo->numero_dossier)->assertSee($bazega->numero_dossier)->assertDontSee($houet->numero_dossier);
-        $this->get(route('oevs.show', $houet))->assertForbidden();
-        $this->post(route('oevs.conforme', $houet))->assertForbidden();
+        $this->get(route('oevs.show', $houet))->assertAccesRefuse();
+        $this->post(route('oevs.conforme', $houet))->assertAccesRefuse();
         $this->assertSame(Oev::ETAT_SOUMIS, $houet->refresh()->statut_dossier);
     }
 
@@ -214,8 +232,8 @@ class AccesModulesTest extends TestCase
     {
         $plainte = Plainte::forceCreate(['reference' => Plainte::genererReference(), 'objet' => 'mecontentement', 'description' => 'Retard de paiement', 'statut' => Plainte::NOUVELLE]);
 
-        $this->actingAs($this->dpKadiogo)->get(route('admin.plaintes.index'))->assertForbidden();
-        $this->actingAs($this->drCentre)->get(route('admin.plaintes.show', $plainte))->assertForbidden();
+        $this->actingAs($this->dpKadiogo)->get(route('admin.plaintes.index'))->assertAccesRefuse();
+        $this->actingAs($this->drCentre)->get(route('admin.plaintes.show', $plainte))->assertAccesRefuse();
 
         $this->actingAs($this->central)->get(route('admin.plaintes.index'))->assertOk()->assertSee($plainte->reference);
         $this->patch(route('admin.plaintes.statut', $plainte), ['statut' => Plainte::EN_COURS])->assertRedirect();

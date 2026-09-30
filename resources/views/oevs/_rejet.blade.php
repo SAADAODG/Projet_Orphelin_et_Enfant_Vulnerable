@@ -9,7 +9,7 @@
   </button>
 @else
   <form class="collapse w-100 {{ $errors->has('motif_rejet') ? 'show' : '' }}" id="formRejet" method="POST" action="{{ route('oevs.rejeter', $oev) }}"
-        onsubmit="return confirm('Rejeter définitivement ce dossier ? L’enfant ne sera pas intégré comme OEV.');">
+        data-confirm="Rejeter définitivement ce dossier ? L’enfant ne sera pas intégré comme OEV." data-confirm-danger>
     @csrf
     <div class="alert alert-dark py-2 small mb-2">
       <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>

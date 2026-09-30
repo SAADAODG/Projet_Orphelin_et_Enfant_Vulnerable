@@ -382,7 +382,7 @@ class OevController extends Controller implements HasMiddleware
             'rejete_par' => $request->user()->id,
         ]);
 
-        return redirect()->route($niveau === 'DR' ? 'oevs.validation' : 'oevs.integration')
+        return redirect()->route($niveau === Oev::REJET_DR ? 'oevs.validation' : 'oevs.integration')
             ->with('success', "Dossier {$oev->numero_dossier} rejeté.");
     }
 

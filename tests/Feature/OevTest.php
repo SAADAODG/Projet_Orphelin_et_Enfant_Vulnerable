@@ -743,7 +743,7 @@ class OevTest extends TestCase
         // Ni le DP ni le central ne peuvent modifier le dossier à cette étape
         $this->actingAs($this->dp)->get(route('oevs.edit', $oev))->assertRedirect(route('oevs.show', $oev));
         $this->put(route('oevs.update', $oev), $this->donneesOev(['classe' => 'X']))->assertRedirect(route('oevs.show', $oev));
-        $this->actingAs($this->central)->get(route('oevs.edit', $oev))->assertForbidden();
+        $this->actingAs($this->central)->get(route('oevs.edit', $oev))->assertAccesRefuse();
         $this->assertSame('6e', $oev->refresh()->classe);
 
         // Et le DR ne peut plus modifier un dossier une fois validé
@@ -810,13 +810,13 @@ class OevTest extends TestCase
         $oev = $this->dossierComplet();
 
         // Le DP ne rejette jamais
-        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
+        $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertAccesRefuse();
         // Dossier non soumis : ni le DR ni le central ne peuvent le rejeter (ils ne le voient pas encore)
-        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
+        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertAccesRefuse();
 
         // Dossier soumis : le central ne peut pas encore le rejeter (c'est au DR) ; il ne le voit même pas
         $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
-        $this->actingAs($this->central)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
+        $this->actingAs($this->central)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertAccesRefuse();
 
         // Dossier validé : c'est au central, plus au DR
         $this->actingAs($this->dr)->post(route('oevs.conforme', $oev));
@@ -829,14 +829,14 @@ class OevTest extends TestCase
         $oev = $this->dossierComplet();
 
         // Pas de validation DR ni d'intégration sur un dossier non soumis : il ne leur est même pas visible
-        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertForbidden();
-        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
+        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertAccesRefuse();
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertAccesRefuse();
         $this->assertSame(Oev::ETAT_BROUILLON, $oev->refresh()->statut_dossier);
         $this->assertNull($oev->code);
 
         // Soumis au DR : le central ne peut toujours pas l'intégrer avant la validation
         $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
-        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertAccesRefuse();
         $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
     }
 
@@ -847,19 +847,19 @@ class OevTest extends TestCase
 
         // Le DP ne valide pas et n'intègre pas
         $this->actingAs($this->dp);
-        $this->get(route('oevs.validation'))->assertForbidden();
-        $this->post(route('oevs.conforme', $oev))->assertForbidden();
-        $this->get(route('oevs.integration'))->assertForbidden();
+        $this->get(route('oevs.validation'))->assertAccesRefuse();
+        $this->post(route('oevs.conforme', $oev))->assertAccesRefuse();
+        $this->get(route('oevs.integration'))->assertAccesRefuse();
 
         // Le DR ne constitue pas et n'intègre pas
         $this->actingAs($this->dr);
-        $this->get(route('oevs.create'))->assertForbidden();
-        $this->post(route('oevs.integrer', $oev))->assertForbidden();
+        $this->get(route('oevs.create'))->assertAccesRefuse();
+        $this->post(route('oevs.integrer', $oev))->assertAccesRefuse();
 
         // Le niveau central ne constitue pas et ne valide pas
         $this->actingAs($this->central);
-        $this->post(route('oevs.store'), $this->donneesOev())->assertForbidden();
-        $this->post(route('oevs.conforme', $oev))->assertForbidden();
+        $this->post(route('oevs.store'), $this->donneesOev())->assertAccesRefuse();
+        $this->post(route('oevs.conforme', $oev))->assertAccesRefuse();
     }
 
     public function test_le_dr_ne_constitue_pas_et_ne_voit_que_les_dossiers_soumis(): void
@@ -871,13 +871,13 @@ class OevTest extends TestCase
         $this->get(route('oevs.validation'))->assertOk()
             ->assertDontSee('Constituer dossier enfant')
             ->assertSee('Validation des dossiers');
-        $this->get(route('oevs.index'))->assertForbidden();
-        $this->get(route('oevs.create'))->assertForbidden();
-        $this->post(route('oevs.store'), $this->donneesOev())->assertForbidden();
-        $this->put(route('oevs.update', $oev), $this->donneesOev())->assertForbidden();
+        $this->get(route('oevs.index'))->assertAccesRefuse();
+        $this->get(route('oevs.create'))->assertAccesRefuse();
+        $this->post(route('oevs.store'), $this->donneesOev())->assertAccesRefuse();
+        $this->put(route('oevs.update', $oev), $this->donneesOev())->assertAccesRefuse();
 
         // Un dossier non soumis ne lui est pas visible…
-        $this->get(route('oevs.show', $oev))->assertForbidden();
+        $this->get(route('oevs.show', $oev))->assertAccesRefuse();
 
         // …il le voit une fois soumis, avec ses boutons de décision
         $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
@@ -898,7 +898,7 @@ class OevTest extends TestCase
             ->assertDontSee('Constituer dossier enfant')
             ->assertDontSee('Validation des dossiers')
             ->assertSee('Intégration des OEV');
-        $this->get(route('oevs.index'))->assertForbidden();
+        $this->get(route('oevs.index'))->assertAccesRefuse();
         $this->get(route('oevs.show', $oev))->assertOk()
             ->assertSee('Intégrer comme OEV')
             ->assertDontSee('Conforme — valider');

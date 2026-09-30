@@ -75,8 +75,8 @@ class LocaliteParametreTest extends TestCase
         $agent = User::factory()->create();
         $agent->assignRole('agent DGFE');
 
-        $this->actingAs($agent)->get(route('localites.regions.index'))->assertForbidden();
-        $this->actingAs($agent)->get(route('parametres.edit'))->assertForbidden();
+        $this->actingAs($agent)->get(route('localites.regions.index'))->assertAccesRefuse();
+        $this->actingAs($agent)->get(route('parametres.edit'))->assertAccesRefuse();
     }
 
     public function test_crud_region_province_commune(): void

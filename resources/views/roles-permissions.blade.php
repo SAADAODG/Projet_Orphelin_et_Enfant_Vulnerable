@@ -9,9 +9,6 @@
     <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#ajouterRoleModal" aria-label="Ajouter un rôle" title="Ajouter un rôle"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
   </div>
 
-  @if (session('success')) <div class="alert alert-success mt-3">{{ session('success') }}</div> @endif
-  @if (session('error')) <div class="alert alert-danger mt-3">{{ session('error') }}</div> @endif
-  @if ($errors->any()) <div class="alert alert-danger mt-3">{{ $errors->first() }}</div> @endif
 
   <section class="panel mt-3">
     <div class="panel-header"><div><h2 class="h5 mb-1">Rôles existants</h2><p class="text-muted mb-0">{{ $roles->count() }} rôle(s) configuré(s).</p></div></div>
@@ -33,7 +30,7 @@
               @endif
             </details>
           </td>
-          <td class="text-end"><div class="btn-group btn-group-sm"><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#modifierRole{{ $role->id }}" aria-label="Modifier le rôle" title="Modifier"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>@if ($role->name !== 'superAdmin')<form method="POST" action="{{ route('roles-permissions.destroy', $role) }}" onsubmit="return confirm('Supprimer ce rôle ?');">@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit" aria-label="Supprimer le rôle" title="Supprimer"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></form>@endif</div></td>
+          <td class="text-end"><div class="btn-group btn-group-sm"><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#modifierRole{{ $role->id }}" aria-label="Modifier le rôle" title="Modifier"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>@if ($role->name !== 'superAdmin')<form method="POST" action="{{ route('roles-permissions.destroy', $role) }}" data-confirm="Supprimer ce rôle ?" data-confirm-danger>@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit" aria-label="Supprimer le rôle" title="Supprimer"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></form>@endif</div></td>
         </tr>
       @empty
         <tr><td colspan="3" class="text-center text-muted py-4">Aucun rôle configuré.</td></tr>

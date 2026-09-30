@@ -52,6 +52,10 @@ class Oev extends Model
     public const ETAT_INTEGRE = 'integre';
     public const ETAT_REJETE = 'rejete';
 
+    /** Niveau ayant prononcé le rejet (colonne rejete_niveau). */
+    public const REJET_DR = 'DR';
+    public const REJET_CENTRAL = 'Central';
+
     public const ETATS = [
         self::ETAT_BROUILLON => 'En constitution',
         self::ETAT_SOUMIS => 'Soumis au DR',
@@ -396,8 +400,8 @@ class Oev extends Model
     {
         return match (true) {
             $utilisateur === null => null,
-            $this->attendDecisionDr() && $utilisateur->can('valider dossiers') => 'DR',
-            $this->statut_dossier === self::ETAT_VALIDE && $utilisateur->can('intégrer OEV') => 'Central',
+            $this->attendDecisionDr() && $utilisateur->can('valider dossiers') => self::REJET_DR,
+            $this->statut_dossier === self::ETAT_VALIDE && $utilisateur->can('intégrer OEV') => self::REJET_CENTRAL,
             default => null,
         };
     }
@@ -447,12 +451,23 @@ class Oev extends Model
         };
     }
 
-    /** Dossiers visibles par l'utilisateur : ceux de sa zone, à l'étape où il intervient. */
+    /**
+     * Dossiers visibles par l'utilisateur : ceux de sa zone, à l'étape où il intervient.
+     * Parmi les dossiers rejetés, le niveau central ne voit que ceux qu'il a lui-même rejetés :
+     * un rejet du DR porte sur un dossier qui n'est jamais arrivé au central.
+     */
     public function scopeVisiblesPar(Builder $query, User $utilisateur): Builder
     {
         $etats = self::etatsVisiblesPar($utilisateur);
+        $centralSeul = ! $utilisateur->supervise()
+            && ! $utilisateur->canAny(['constituer dossiers', 'valider dossiers'])
+            && $utilisateur->can('intégrer OEV');
 
-        return $query->dansLePerimetreDe($utilisateur)->when($etats !== null, fn ($q) => $q->whereIn('statut_dossier', $etats));
+        return $query->dansLePerimetreDe($utilisateur)
+            ->when($etats !== null, fn ($q) => $q->whereIn('statut_dossier', $etats))
+            ->when($centralSeul, fn ($q) => $q->where(fn ($q) => $q
+                ->where('statut_dossier', '!=', self::ETAT_REJETE)
+                ->orWhere('rejete_niveau', self::REJET_CENTRAL)));
     }
 
     public function estVisiblePar(User $utilisateur): bool

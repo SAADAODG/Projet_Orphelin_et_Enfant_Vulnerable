@@ -33,8 +33,8 @@ class GestionUtilisateurTest extends TestCase
     {
         $dp = User::factory()->create()->assignRole('DP');
 
-        $this->actingAs($dp)->get(route('users.index'))->assertForbidden();
-        $this->post(route('users.store'), ['name' => 'X', 'email' => 'x@oev.bf', 'password' => 'secret123', 'password_confirmation' => 'secret123', 'role' => 'DP'])->assertForbidden();
+        $this->actingAs($dp)->get(route('users.index'))->assertAccesRefuse();
+        $this->post(route('users.store'), ['name' => 'X', 'email' => 'x@oev.bf', 'password' => 'secret123', 'password_confirmation' => 'secret123', 'role' => 'DP'])->assertAccesRefuse();
         $this->assertDatabaseMissing('users', ['email' => 'x@oev.bf']);
     }
 
@@ -46,7 +46,7 @@ class GestionUtilisateurTest extends TestCase
         $this->actingAs($responsable)->get(route('users.index'))->assertOk()
             ->assertDontSee('data-bs-target="#ajouterUtilisateurModal"', false)
             ->assertDontSee('data-bs-target="#modifierUtilisateur' . $autre->id . '"', false);
-        $this->delete(route('users.destroy', $autre))->assertForbidden();
+        $this->delete(route('users.destroy', $autre))->assertAccesRefuse();
         $this->assertNotSoftDeleted($autre);
     }
 }

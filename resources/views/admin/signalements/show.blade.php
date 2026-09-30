@@ -23,16 +23,6 @@
       </div>
     </div>
 
-    @if (session('success'))
-      <div class="alert alert-success border-0 py-2 small" role="status">
-        <i class="bi bi-check-circle me-1" aria-hidden="true"></i>{{ session('success') }}
-      </div>
-    @endif
-    @if ($errors->any())
-      <div class="alert alert-danger border-0 py-2 small" role="alert">
-        <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>La clôture n'a pas pu être enregistrée : vérifiez le formulaire en bas de page.
-      </div>
-    @endif
 
     <!-- L'enfant -->
     <section class="sig-bloc">
@@ -115,7 +105,7 @@
       @if ($signalement->statut === Signalement::EN_ATTENTE && $peutTraiter)
         <p class="sig-aide">Examinez le signalement. S'il est validé, le déclarant sera informé qu'un agent le contactera pour une visite à domicile.</p>
         <div class="sig-actions">
-          <form method="POST" action="{{ route('admin.signalements.valider', $signalement) }}" onsubmit="return confirm('Valider ce signalement ?');">
+          <form method="POST" action="{{ route('admin.signalements.valider', $signalement) }}" data-confirm="Valider ce signalement ?">
             @csrf
             @method('PATCH')
             <button type="submit" class="btn btn-success btn-sm px-3"><i class="bi bi-check2-circle" aria-hidden="true"></i> Valider</button>

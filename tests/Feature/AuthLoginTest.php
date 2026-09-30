@@ -76,7 +76,8 @@ class AuthLoginTest extends TestCase
         $this->from('/login')->post(route('password.email'), ['email' => 'agent@oev.bf'])->assertRedirect('/login');
         Notification::assertSentTo($user, ResetPassword::class);
 
-        $this->get('/login')->assertSee('un lien de réinitialisation vient de lui être envoyé', false);
+        // Message affiché par SweetAlert (partials/alertes)
+        $this->get('/login')->assertSee('"type":"success"', false)->assertSee('alertes-flash', false);
     }
 
     public function test_mot_de_passe_oublie_ne_revele_pas_les_adresses_inconnues(): void

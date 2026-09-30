@@ -135,6 +135,7 @@
   </footer>
 
   <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
+  @include('partials.alertes')
   @stack('scripts')
 </body>
 </html>

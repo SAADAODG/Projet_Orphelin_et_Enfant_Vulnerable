@@ -40,7 +40,8 @@ class ProfileAndPasswordTest extends TestCase
 
     public function test_registration_route_is_removed(): void
     {
-        $this->get('/register')->assertNotFound();
+        // Page inexistante : retour à l'accueil avec une alerte, pas de page d'erreur
+        $this->get('/register')->assertRedirect(route('public.home'))->assertSessionHas('warning');
     }
 
     public function test_user_can_change_their_password_from_settings(): void

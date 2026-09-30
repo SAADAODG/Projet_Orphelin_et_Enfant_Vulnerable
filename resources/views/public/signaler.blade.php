@@ -29,12 +29,6 @@
   <div class="container px-3 px-lg-4">
     <div class="row g-4 justify-content-center">
       <div class="col-12 col-lg-8">
-        @if ($errors->any())
-          <div class="alert alert-danger border-0 shadow-sm rounded-3" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            Certains champs sont incomplets. Vérifiez les zones en rouge ci-dessous.
-          </div>
-        @endif
 
         <form action="{{ route('public.signaler.store') }}" method="POST" class="signal-form" novalidate>
           @csrf

@@ -39,7 +39,6 @@
       <form class="panel needs-validation" method="POST" action="{{ route('profile.update') }}" novalidate>
         @csrf
         @method('PUT')
-        @if (session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
         <div class="panel-header">
           <div>
             <h2 class="h5 mb-1 section-title"><i class="bi bi-person-gear" aria-hidden="true"></i><span>Informations personnelles</span></h2>

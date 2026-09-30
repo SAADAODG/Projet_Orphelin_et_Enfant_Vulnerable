@@ -15,7 +15,6 @@
     </div>
   </div>
 
-  @include('partials.flash')
 
   <section class="row g-3">
     <div class="col-12 col-xl-8">
@@ -193,7 +192,7 @@
                 <input class="form-control form-control-sm" type="text" name="url" value="{{ $link->url }}" placeholder="URL ou chemin (/signaler)" required>
                 <button class="btn btn-light btn-sm" type="submit" title="Enregistrer"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
               </form>
-              <form method="POST" action="{{ route('quick-links.destroy', $link) }}" onsubmit="return confirm('Supprimer le lien « {{ $link->libelle }} » ?');">
+              <form method="POST" action="{{ route('quick-links.destroy', $link) }}" data-confirm="Supprimer le lien « {{ $link->libelle }} » ?" data-confirm-danger>
                 @csrf
                 @method('DELETE')
                 <button class="btn btn-outline-danger btn-sm" type="submit" title="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>
@@ -238,7 +237,7 @@
                 <input class="form-control form-control-sm" type="text" name="url" value="{{ $service->url }}" placeholder="URL ou # si aucune page" required>
                 <button class="btn btn-light btn-sm" type="submit" title="Enregistrer"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
               </form>
-              <form method="POST" action="{{ route('services.destroy', $service) }}" onsubmit="return confirm('Supprimer le service « {{ $service->libelle }} » ?');">
+              <form method="POST" action="{{ route('services.destroy', $service) }}" data-confirm="Supprimer le service « {{ $service->libelle }} » ?" data-confirm-danger>
                 @csrf
                 @method('DELETE')
                 <button class="btn btn-outline-danger btn-sm" type="submit" title="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>

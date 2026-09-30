@@ -267,6 +267,7 @@
       }, 30000);
     })();
   </script>
+  @include('partials.alertes')
   @stack('scripts')
 </body>
 </html>
