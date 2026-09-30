@@ -5,15 +5,32 @@ namespace App\Http\Controllers;
 use App\Models\Oev;
 use App\Models\OevDocument;
 use App\Models\Region;
+use App\Models\User;
+use App\Support\Perimetre;
+use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class OevController extends Controller
+class OevController extends Controller implements HasMiddleware
 {
+    /** Un dossier hors de la zone de l'utilisateur, ou pas encore arrivé à l'étape où il intervient, n'est pas accessible. */
+    public static function middleware(): array
+    {
+        return [
+            function (Request $request, Closure $next) {
+                $oev = $request->route('oev');
+                abort_if($oev instanceof Oev && ! $oev->estVisiblePar($request->user()), 403);
+
+                return $next($request);
+            },
+        ];
+    }
+
     /** Messages de validation en français, propres au formulaire OEV (la langue de l'application n'est pas modifiée). */
     private const MESSAGES = [
         'required' => 'Le champ « :attribute » est obligatoire.',
@@ -71,7 +88,7 @@ class OevController extends Controller
     {
         return $this->lister($request, 'oevs.validation', [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME], Oev::ETAT_SOUMIS)
             // Information pour le DR : dossiers encore chez les DP (non visibles tant qu'ils ne sont pas soumis)
-            ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->count());
+            ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->dansLePerimetreDe($request->user())->count());
     }
 
     /** Niveau central — « Intégration des OEV » : dossiers validés à intégrer, compléments en attente, OEV intégrés. */
@@ -87,7 +104,7 @@ class OevController extends Controller
         $statut = array_key_exists((string) $statut, Oev::STATUTS) ? $statut : null;
         $recherche = trim((string) $request->query('q'));
 
-        $oevs = Oev::etat(Oev::ETAT_INTEGRE)
+        $oevs = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
             ->with(['region', 'province', 'commune'])
             ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
@@ -102,7 +119,7 @@ class OevController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $parStatut = Oev::etat(Oev::ETAT_INTEGRE)
+        $parStatut = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
             ->selectRaw('statut, count(*) as total')->groupBy('statut')
             ->pluck('total', 'statut');
 
@@ -113,9 +130,13 @@ class OevController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('oevs.form', ['oev' => new Oev(), 'documents' => collect(), 'localites' => Region::arborescence()]);
+        // Le DP ne constitue que des dossiers de sa province : elle est proposée d'office
+        $perimetre = Perimetre::pour($request->user());
+        $oev = new Oev(['region_id' => $perimetre->region?->id, 'province_id' => $perimetre->province?->id]);
+
+        return view('oevs.form', ['oev' => $oev, 'documents' => collect(), 'localites' => Region::arborescence()]);
     }
 
     public function store(Request $request)
@@ -325,6 +346,7 @@ class OevController extends Controller
         $recherche = trim((string) $request->query('q'));
 
         $oevs = Oev::withCount('documents')
+            ->visiblesPar($request->user())
             ->etat(...($etat ? [$etat] : $etats))
             ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
@@ -344,7 +366,7 @@ class OevController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $compteurs = Oev::query()->etat(...$etats)
+        $compteurs = Oev::query()->visiblesPar($request->user())->etat(...$etats)
             ->selectRaw('statut_dossier, count(*) as total')->groupBy('statut_dossier')
             ->pluck('total', 'statut_dossier');
 
@@ -444,7 +466,7 @@ class OevController extends Controller
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
 
-        $messagesFichiers = [];
+        $messagesFichiers = $this->limiterALaZone($request, $regles);
         foreach (array_keys(Oev::DOCUMENTS) as $type) {
             $max = Oev::tailleMaxFichierKo($type);
             $regles[$type] = $type === 'photo'
@@ -470,6 +492,34 @@ class OevController extends Controller
         $validated['contact_tuteur'] = Oev::formaterTelephone($validated['contact_tuteur']);
 
         return collect($validated)->except(array_keys(Oev::DOCUMENTS))->all();
+    }
+
+    /**
+     * Un DP ne saisit que des dossiers de sa province, un DR (complément) que de sa région.
+     * Ajoute la règle correspondante à $regles et renvoie son message d'erreur.
+     */
+    private function limiterALaZone(Request $request, array &$regles): array
+    {
+        $perimetre = Perimetre::pour($request->user());
+
+        if (! $perimetre->defini) {
+            $champ = $perimetre->niveau === User::NIVEAU_REGION ? 'region_id' : 'province_id';
+            $regles[$champ][] = Rule::in([]);
+
+            return ["{$champ}.in" => 'Votre compte n’est rattaché à aucune localité : demandez à un administrateur de le compléter.'];
+        }
+        if ($perimetre->province) {
+            $regles['province_id'][] = Rule::in([$perimetre->province->id]);
+
+            return ['province_id.in' => "Vous ne pouvez enregistrer que des dossiers de votre province ({$perimetre->province->nom})."];
+        }
+        if ($perimetre->region) {
+            $regles['region_id'][] = Rule::in([$perimetre->region->id]);
+
+            return ['region_id.in' => "Vous ne pouvez enregistrer que des dossiers de votre région ({$perimetre->region->nom})."];
+        }
+
+        return [];
     }
 
     private function enregistrerDocuments(Request $request, Oev $oev): void

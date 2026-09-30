@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\PasswordResetController;
@@ -63,24 +64,32 @@ Route::post('/reset-password', [PasswordResetController::class, 'reset'])->name(
 
 // --- Routes Administration (Espace Agent & DAPPN) ---
 Route::middleware('auth')->prefix('admin')->group(function () {
-    Route::get('/dashboard', function () {
-        return view('index');
-    })->name('dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
-    // Module « Liste des signalements »
-    Route::get('/signalements', [AdminSignalementController::class, 'index'])->name('admin.signalements.index');
-    Route::get('/signalements/non-lus', [AdminSignalementController::class, 'nonLus'])->name('admin.signalements.non-lus');
-    Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
-    Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
-    Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
-    Route::patch('/signalements/{signalement}/cloturer', [AdminSignalementController::class, 'cloturer'])->name('admin.signalements.cloturer');
+    // Module « Signalements » : le DP traite ceux de sa province, le DR consulte ceux de sa région
+    Route::middleware('can:voir signalements')->group(function () {
+        Route::get('/signalements', [AdminSignalementController::class, 'index'])->name('admin.signalements.index');
+        Route::get('/signalements/non-lus', [AdminSignalementController::class, 'nonLus'])->name('admin.signalements.non-lus');
+        Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
+    });
+    Route::middleware('can:traiter signalements')->group(function () {
+        Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
+        Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
+        Route::patch('/signalements/{signalement}/cloturer', [AdminSignalementController::class, 'cloturer'])->name('admin.signalements.cloturer');
+    });
 
-    // Module « Gestion de plainte »
-    Route::get('/plaintes', [AdminPlainteController::class, 'index'])->name('admin.plaintes.index');
-    Route::get('/plaintes/{plainte}', [AdminPlainteController::class, 'show'])->name('admin.plaintes.show');
-    Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->name('admin.plaintes.statut');
+    // Module « Gestion de plainte » : niveau central
+    Route::middleware('can:voir plaintes')->group(function () {
+        Route::get('/plaintes', [AdminPlainteController::class, 'index'])->name('admin.plaintes.index');
+        Route::get('/plaintes/{plainte}', [AdminPlainteController::class, 'show'])->name('admin.plaintes.show');
+    });
+    Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->middleware('can:traiter plaintes')->name('admin.plaintes.statut');
 
-    Route::resource('users', UserController::class)->except(['create', 'edit', 'show']);
+    // Gestion des utilisateurs
+    Route::get('/users', [UserController::class, 'index'])->middleware('can:voir utilisateurs')->name('users.index');
+    Route::post('/users', [UserController::class, 'store'])->middleware('can:créer utilisateurs')->name('users.store');
+    Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->middleware('can:modifier utilisateurs')->name('users.update');
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('can:supprimer utilisateurs')->name('users.destroy');
     Route::middleware('role:superAdmin|administrateur')->group(function () {
         Route::get('/roles-permissions', [RolePermissionController::class, 'index'])->name('roles-permissions.index');
         Route::post('/roles-permissions', [RolePermissionController::class, 'store'])->name('roles-permissions.store');

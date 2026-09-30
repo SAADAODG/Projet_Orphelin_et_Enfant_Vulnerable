@@ -4,14 +4,32 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Signalement;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
-class SignalementController extends Controller
+/**
+ * Signalements du public : le DP traite ceux de sa province, le DR consulte ceux de sa région.
+ */
+class SignalementController extends Controller implements HasMiddleware
 {
+    /** Un signalement hors de la zone de l'utilisateur n'est pas accessible. */
+    public static function middleware(): array
+    {
+        return [
+            function (Request $request, Closure $next) {
+                $signalement = $request->route('signalement');
+                abort_if($signalement instanceof Signalement && ! $signalement->estDansLePerimetreDe($request->user()), 403);
+
+                return $next($request);
+            },
+        ];
+    }
+
     /**
      * Liste des signalements, filtrable par statut.
      */
@@ -26,6 +44,7 @@ class SignalementController extends Controller
         $decision = $statut === Signalement::CLOTURE ? $request->query('decision') : null;
 
         $signalements = Signalement::with(['province', 'commune'])
+            ->dansLePerimetreDe($request->user())
             ->when($statut, fn ($query) => $query->where('statut', $statut))
             ->when($decision, fn ($query) => $query->where('decision', $decision))
             ->when($request->filled('q'), function ($query) use ($request) {
@@ -41,12 +60,12 @@ class SignalementController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $compteurs = Signalement::query()
+        $compteurs = Signalement::dansLePerimetreDe($request->user())
             ->selectRaw('statut, count(*) as total')
             ->groupBy('statut')
             ->pluck('total', 'statut');
 
-        $decisions = Signalement::query()
+        $decisions = Signalement::dansLePerimetreDe($request->user())
             ->where('statut', Signalement::CLOTURE)
             ->selectRaw('decision, count(*) as total')
             ->groupBy('decision')
@@ -142,8 +161,8 @@ class SignalementController extends Controller
     /**
      * Nombre de nouveaux signalements (pour la pastille rouge du menu).
      */
-    public function nonLus(): JsonResponse
+    public function nonLus(Request $request): JsonResponse
     {
-        return response()->json(['count' => Signalement::nonLus()->count()]);
+        return response()->json(['count' => Signalement::nonLus()->dansLePerimetreDe($request->user())->count()]);
     }
 }

@@ -114,7 +114,7 @@
     <div class="page-heading-copy">
       <span class="page-icon"><i class="bi {{ $edition ? 'bi-pencil-square' : 'bi-file-earmark-medical' }}" aria-hidden="true"></i></span>
       <div>
-        <p class="eyebrow mb-1">{{ ! $edition ? 'Gestion des demandes' : ($oev->statut_dossier === Oev::ETAT_COMPLEMENT ? 'Validation des dossiers · Complément' : 'Constituer dossier enfant') }}</p>
+        <p class="eyebrow mb-1">{{ ! $edition ? 'Dossiers enfants' : ($oev->statut_dossier === Oev::ETAT_COMPLEMENT ? 'Validation des dossiers · Complément' : 'Constituer dossier enfant') }}</p>
         <h1 class="h3 mb-1">{{ $edition ? 'Modifier le dossier ' . $oev->reference() : 'Constituer dossier enfant' }}</h1>
         <p class="text-muted mb-0">Remplissez les étapes puis vérifiez le récapitulatif avant d’enregistrer.</p>
       </div>

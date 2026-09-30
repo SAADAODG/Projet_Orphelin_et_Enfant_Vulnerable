@@ -32,10 +32,12 @@ class AppServiceProvider extends ServiceProvider
         // Dates relatives en français (« il y a 2 heures »)
         Carbon::setLocale('fr');
 
-        // Pastilles rouges des modules « Signalements » et « Gestion de plainte » dans l'espace agent
+        // Pastilles rouges des modules « Signalements » (zone de l'utilisateur) et « Gestion de plainte »,
+        // calculées seulement pour les modules auxquels l'utilisateur a accès
         View::composer('layouts.app', function ($view) {
-            $view->with('signalementsNonLus', Signalement::nonLus()->count());
-            $view->with('plaintesNonLues', Plainte::nonLues()->count());
+            $utilisateur = auth()->user();
+            $view->with('signalementsNonLus', $utilisateur?->can('voir signalements') ? Signalement::nonLus()->dansLePerimetreDe($utilisateur)->count() : 0);
+            $view->with('plaintesNonLues', $utilisateur?->can('voir plaintes') ? Plainte::nonLues()->count() : 0);
         });
 
         // Identité du site, liens rapides et services (Paramètres généraux) : partagés avec les

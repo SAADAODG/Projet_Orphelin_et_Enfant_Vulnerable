@@ -5,6 +5,8 @@ namespace App\Models\Concerns;
 use App\Models\Commune;
 use App\Models\Province;
 use App\Models\Region;
+use App\Models\User;
+use App\Support\Perimetre;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
@@ -44,6 +46,17 @@ trait AppartientALocalite
             'province_id' => [$presence, 'integer', Rule::exists('provinces', 'id')->where('region_id', $request->input('region_id'))],
             'commune_id' => [$presence, 'integer', Rule::exists('communes', 'id')->where('province_id', $request->input('province_id'))],
         ];
+    }
+
+    /** Limite aux enregistrements de la zone de l'utilisateur : sa province (DP), sa région (DR), tout le pays (niveau central). */
+    public function scopeDansLePerimetreDe(Builder $query, User $utilisateur): Builder
+    {
+        return Perimetre::pour($utilisateur)->appliquer($query);
+    }
+
+    public function estDansLePerimetreDe(User $utilisateur): bool
+    {
+        return static::query()->dansLePerimetreDe($utilisateur)->whereKey($this->getKey())->exists();
     }
 
     /** Recherche par nom de région, de province ou de commune (à utiliser dans un orWhere). */

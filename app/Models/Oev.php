@@ -210,6 +210,34 @@ class Oev extends Model
         return $query->whereIn('statut_dossier', $etats);
     }
 
+    /**
+     * États du circuit visibles par l'utilisateur (null = tous) : le DP voit tous les dossiers,
+     * le DR à partir de leur soumission, le niveau central une fois validés par le DR ;
+     * les autres rôles ne voient que les enfants intégrés. La supervision voit tout.
+     */
+    public static function etatsVisiblesPar(User $utilisateur): ?array
+    {
+        return match (true) {
+            $utilisateur->supervise(), $utilisateur->can('constituer dossiers') => null,
+            $utilisateur->can('valider dossiers') => [self::ETAT_SOUMIS, self::ETAT_NON_CONFORME, self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE],
+            $utilisateur->can('intégrer OEV') => [self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE],
+            default => [self::ETAT_INTEGRE],
+        };
+    }
+
+    /** Dossiers visibles par l'utilisateur : ceux de sa zone, à l'étape où il intervient. */
+    public function scopeVisiblesPar(Builder $query, User $utilisateur): Builder
+    {
+        $etats = self::etatsVisiblesPar($utilisateur);
+
+        return $query->dansLePerimetreDe($utilisateur)->when($etats !== null, fn ($q) => $q->whereIn('statut_dossier', $etats));
+    }
+
+    public function estVisiblePar(User $utilisateur): bool
+    {
+        return static::query()->visiblesPar($utilisateur)->whereKey($this->getKey())->exists();
+    }
+
     public function nomComplet(): string
     {
         return $this->nom . ' ' . $this->prenom;

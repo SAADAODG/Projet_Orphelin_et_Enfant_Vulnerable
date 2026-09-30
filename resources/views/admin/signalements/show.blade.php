@@ -110,7 +110,9 @@
     <section class="sig-bloc sig-bloc--decision">
       <h2><i class="bi bi-clipboard-check" aria-hidden="true"></i> Décision</h2>
 
-      @if ($signalement->statut === Signalement::EN_ATTENTE)
+      {{-- Le DP de la province traite ; le DR consulte seulement --}}
+      @php($peutTraiter = auth()->user()->can('traiter signalements'))
+      @if ($signalement->statut === Signalement::EN_ATTENTE && $peutTraiter)
         <p class="sig-aide">Examinez le signalement. S'il est validé, le déclarant sera informé qu'un agent le contactera pour une visite à domicile.</p>
         <div class="sig-actions">
           <form method="POST" action="{{ route('admin.signalements.valider', $signalement) }}" onsubmit="return confirm('Valider ce signalement ?');">
@@ -121,7 +123,7 @@
           <button type="button" class="btn btn-outline-danger btn-sm px-3" data-bs-toggle="modal" data-bs-target="#rejetModal"><i class="bi bi-x-circle" aria-hidden="true"></i> Rejeter</button>
         </div>
 
-      @elseif ($signalement->statut === Signalement::VALIDE)
+      @elseif ($signalement->statut === Signalement::VALIDE && $peutTraiter)
         <p class="sig-aide">Une fois le contact établi avec l'enfant (visite à domicile), clôturez le signalement avec la décision. Elle sera visible par le déclarant.</p>
         <form method="POST" action="{{ route('admin.signalements.cloturer', $signalement) }}" class="sig-cloture" novalidate>
           @csrf
@@ -154,6 +156,11 @@
           <button type="submit" class="btn btn-primary btn-sm px-3 mt-3"><i class="bi bi-lock" aria-hidden="true"></i> Clôturer le signalement</button>
         </form>
 
+      @elseif (in_array($signalement->statut, [Signalement::EN_ATTENTE, Signalement::VALIDE], true))
+        <p class="sig-aide mb-0"><i class="bi bi-hourglass-split" aria-hidden="true"></i>
+          {{ $signalement->statut === Signalement::EN_ATTENTE ? 'En attente d’examen par la direction provinciale.' : 'Validé : la direction provinciale doit contacter l’enfant puis clôturer le signalement.' }}
+        </p>
+
       @elseif ($signalement->statut === Signalement::CLOTURE)
         <div class="sig-resultat {{ $signalement->decision === Signalement::PRISE_EN_CHARGE ? 'sig-resultat--oui' : 'sig-resultat--non' }}">
           <i class="bi {{ $signalement->decision === Signalement::PRISE_EN_CHARGE ? 'bi-house-heart' : 'bi-slash-circle' }}" aria-hidden="true"></i>
@@ -176,7 +183,7 @@
   </div>
 </div>
 
-@if ($signalement->statut === Signalement::EN_ATTENTE)
+@if ($signalement->statut === Signalement::EN_ATTENTE && $peutTraiter)
   <div class="modal fade" id="rejetModal" tabindex="-1" aria-labelledby="rejetModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <form class="modal-content" method="POST" action="{{ route('admin.signalements.rejeter', $signalement) }}">

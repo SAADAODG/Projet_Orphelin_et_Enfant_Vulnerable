@@ -31,8 +31,10 @@ class OevTest extends TestCase
         Storage::fake('local');
         $this->ouagadougou = Commune::where('nom', 'Ouagadougou')->firstOrFail();
 
-        $this->dp = User::factory()->create()->assignRole('DP');
-        $this->dr = User::factory()->create()->assignRole('DR');
+        // Le DP et le DR ne voient que les dossiers de leur province / région : ceux des tests sont à Ouagadougou
+        $province = $this->ouagadougou->province;
+        $this->dp = User::factory()->create(['region_id' => $province->region_id, 'province_id' => $province->id])->assignRole('DP');
+        $this->dr = User::factory()->create(['region_id' => $province->region_id])->assignRole('DR');
         $this->central = User::factory()->create()->assignRole('agent DGFE');
     }
 
@@ -361,11 +363,16 @@ class OevTest extends TestCase
     {
         $oev = $this->dossierComplet();
 
-        // Pas de validation DR ni d'intégration sur un dossier non soumis
-        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertSessionHasErrors('circuit');
-        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertSessionHasErrors('circuit');
+        // Pas de validation DR ni d'intégration sur un dossier non soumis : il ne leur est même pas visible
+        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertForbidden();
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
         $this->assertSame(Oev::ETAT_BROUILLON, $oev->refresh()->statut_dossier);
         $this->assertNull($oev->code);
+
+        // Soumis au DR : le central ne peut toujours pas l'intégrer avant la validation
+        $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
+        $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
     }
 
     public function test_chaque_niveau_n_a_acces_qu_a_son_etape(): void
