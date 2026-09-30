@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AppartientALocalite;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -12,29 +13,29 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'code', 'nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif',
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
-    'etablissement_precedent', 'moyenne_annuelle', 'appreciation',
+    'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation', 'performance_scolaire', 'performance_difficultes',
     'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
-    'region', 'province', 'commune',
+    'region_id', 'province_id', 'commune_id', 'village_id',
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
     'motif_complement', 'complement_at', 'complement_par',
     'motif_rejet', 'rejete_niveau', 'rejete_at', 'rejete_par',
     // Fiche d'identification (champs OEV)
-    'date_naissance_estimee', 'lieu_naissance', 'nationalite', 'a_acte_naissance', 'numero_identification', 'groupe_population',
+    'date_naissance_estimee', 'lieu_naissance', 'lieu_naissance_commune_id', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
     'quartier', 'lieu_provenance',
     'mere_nom', 'mere_prenoms', 'mere_vivante', 'mere_date_deces', 'mere_deces_confirme',
     'pere_nom', 'pere_prenoms', 'pere_vivant', 'pere_date_deces', 'pere_deces_confirme',
-    'lieu_de_vie', 'lieu_de_vie_precision', 'tuteur_sexe', 'tuteur_lien', 'tuteur_lien_precision', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer',
+    'lieu_de_vie', 'lieu_de_vie_precision', 'tuteur_sexe', 'tuteur_lien', 'tuteur_lien_precision', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer', 'tuteur_raison_arret',
     'vulnerabilites', 'vulnerabilite_precision',
     'situation_scolaire', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision',
-    'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre',
-    'types_handicap', 'maladie_chronique', 'maladie_details',
+    'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
+    'types_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
     'source_revenu', 'niveau_revenu', 'logement',
     'date_identification', 'identifie_par', 'niveau_priorite',
 ])]
 class Oev extends Model
 {
-    use SoftDeletes;
+    use AppartientALocalite, SoftDeletes;
 
     /*
      * Circuit du dossier : le DP constitue puis soumet ; le DR déclare le dossier conforme (validé)
@@ -96,8 +97,12 @@ class Oev extends Model
 
     public const OUI_NON = ['1' => 'Oui', '0' => 'Non'];
 
-    /** Lien du tuteur avec l'enfant. « mere »/« pere » : impossible si le parent est décédé. */
+    /**
+     * Lien du tuteur avec l'enfant. « parents » / « mere » / « pere » : seulement si le ou les parents
+     * sont déclarés vivants ; leurs nom et prénoms sont alors repris de la partie « Parents ».
+     */
     public const LIENS_TUTEUR = [
+        'parents' => 'Les deux parents (père et mère)',
         'mere' => 'Mère',
         'pere' => 'Père',
         'grand_parent' => 'Grand-parent',
@@ -112,6 +117,7 @@ class Oev extends Model
 
     /** Classes par niveau d'étude (la classe doit correspondre au niveau). */
     public const CLASSES = [
+        'prescolaire' => ['PS' => 'Petite section', 'MS' => 'Moyenne section', 'GS' => 'Grande section'],
         'primaire' => ['CP1' => 'CP1', 'CP2' => 'CP2', 'CE1' => 'CE1', 'CE2' => 'CE2', 'CM1' => 'CM1', 'CM2' => 'CM2'],
         'post_primaire_secondaire' => ['6e' => '6e', '5e' => '5e', '4e' => '4e', '3e' => '3e', '2nde' => '2nde', '1ère' => '1ère', 'Tle' => 'Terminale'],
         'superieur' => ['L1' => 'Licence 1', 'L2' => 'Licence 2', 'L3' => 'Licence 3', 'M1' => 'Master 1', 'M2' => 'Master 2', 'BTS' => 'BTS / DUT', 'Doctorat' => 'Doctorat'],
@@ -169,6 +175,7 @@ class Oev extends Model
     ];
 
     public const NIVEAUX_ETUDE = [
+        'prescolaire' => 'Préscolaire (maternelle)',
         'primaire' => 'Cycle primaire',
         'post_primaire_secondaire' => 'Cycle post-primaire et secondaire',
         'superieur' => 'Cycle supérieur',
@@ -184,6 +191,17 @@ class Oev extends Model
         'refus_famille' => 'Refus de la famille',
         'refus_enfant' => 'Refus de l’enfant',
         'autre' => 'Autre',
+    ];
+
+    /** Niveaux où les moyennes sont notées sur 10 (sur 20 ailleurs). */
+    public const NIVEAUX_NOTES_SUR_10 = ['prescolaire', 'primaire'];
+
+    public const PERFORMANCES_SCOLAIRES = [
+        'bonnes' => 'Bonnes',
+        'passables' => 'Passables',
+        'faibles' => 'Faibles',
+        'irregulieres' => 'Irrégulières',
+        'difficultes' => 'Difficultés scolaires',
     ];
 
     public const ETATS_FORMATION = ['en_cours' => 'En cours', 'achevee' => 'Achevée'];
@@ -278,6 +296,9 @@ class Oev extends Model
             'formation_professionnelle' => 'boolean',
             'types_handicap' => 'array',
             'maladie_chronique' => 'boolean',
+            'suivi_clinique' => 'boolean',
+            'formation_duree_mois' => 'integer',
+            'formation_duree_recue_mois' => 'integer',
             'date_identification' => 'date',
         ];
     }
@@ -315,6 +336,12 @@ class Oev extends Model
     public function auteurRejet(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejete_par');
+    }
+
+    /** Village ou secteur de résidence (4ᵉ niveau de localité, facultatif). */
+    public function village(): BelongsTo
+    {
+        return $this->belongsTo(Village::class);
     }
 
     /** Code OEV attribué à l'intégration, ex. OEV-2026-0001. */
@@ -403,6 +430,34 @@ class Oev extends Model
     public function scopeEtat(Builder $query, string ...$etats): Builder
     {
         return $query->whereIn('statut_dossier', $etats);
+    }
+
+    /**
+     * États du circuit visibles par l'utilisateur (null = tous) : le DP voit tous les dossiers,
+     * le DR à partir de leur soumission, le niveau central une fois validés par le DR ;
+     * les autres rôles ne voient que les enfants intégrés. La supervision voit tout.
+     */
+    public static function etatsVisiblesPar(User $utilisateur): ?array
+    {
+        return match (true) {
+            $utilisateur->supervise(), $utilisateur->can('constituer dossiers') => null,
+            $utilisateur->can('valider dossiers') => [self::ETAT_SOUMIS, self::ETAT_NON_CONFORME, self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
+            $utilisateur->can('intégrer OEV') => [self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
+            default => [self::ETAT_INTEGRE],
+        };
+    }
+
+    /** Dossiers visibles par l'utilisateur : ceux de sa zone, à l'étape où il intervient. */
+    public function scopeVisiblesPar(Builder $query, User $utilisateur): Builder
+    {
+        $etats = self::etatsVisiblesPar($utilisateur);
+
+        return $query->dansLePerimetreDe($utilisateur)->when($etats !== null, fn ($q) => $q->whereIn('statut_dossier', $etats));
+    }
+
+    public function estVisiblePar(User $utilisateur): bool
+    {
+        return static::query()->visiblesPar($utilisateur)->whereKey($this->getKey())->exists();
     }
 
     public function nomComplet(): string
@@ -539,6 +594,20 @@ class Oev extends Model
         return count($this->piecesFournies()) >= count($this->piecesRequises());
     }
 
+    /** Équivalent SQL de estComplet() : chaque pièce exigée par les réponses est jointe. */
+    public function scopeDossierComplet(Builder $query): Builder
+    {
+        $fournie = fn (Builder $q, string $type) => $q->whereHas('documents', fn ($d) => $d->where('type', $type));
+
+        return $query
+            ->where(fn ($q) => $fournie($q, 'photo'))
+            ->where(fn ($q) => $fournie($q, 'rib'))
+            ->where(fn ($q) => $q->where('a_acte_naissance', false)->orWhere(fn ($q) => $fournie($q, 'acte_naissance')))
+            ->where(fn ($q) => $q->whereNull('situation_scolaire')->orWhere('situation_scolaire', '!=', 'scolarise')
+                ->orWhere(fn ($q) => $fournie($q, 'certificat_scolarite')))
+            ->where(fn ($q) => $q->where('tuteur_a_cnib', false)->orWhere(fn ($q) => $fournie($q, 'cnib_tuteur')));
+    }
+
     /* ---------- Cohérence des réponses ---------- */
 
     /**
@@ -558,5 +627,51 @@ class Oev extends Model
     public static function classesDuNiveau(?string $niveau): array
     {
         return self::CLASSES[$niveau] ?? [];
+    }
+
+    /** Toutes les classes, du préscolaire au supérieur (ex. pour la classe de l'année précédente). */
+    public static function toutesLesClasses(): array
+    {
+        return array_merge(...array_values(self::CLASSES));
+    }
+
+    /** Niveau d'étude auquel appartient une classe. */
+    public static function niveauDeLaClasse(?string $classe): ?string
+    {
+        foreach (self::CLASSES as $niveau => $classes) {
+            if (array_key_exists((string) $classe, $classes)) {
+                return $niveau;
+            }
+        }
+
+        return null;
+    }
+
+    /** Barème de la moyenne : sur 10 au préscolaire et au primaire, sur 20 ensuite. */
+    public static function baremeMoyenne(?string $classe): int
+    {
+        return in_array(self::niveauDeLaClasse($classe), self::NIVEAUX_NOTES_SUR_10, true) ? 10 : 20;
+    }
+
+    /** Le parent ou les parents qui s'occupent de l'enfant (selon le lien choisi). */
+    public static function parentsTuteurs(?string $lien): array
+    {
+        return match ($lien) {
+            'mere' => ['mere'],
+            'pere' => ['pere'],
+            'parents' => ['pere', 'mere'],
+            default => [],
+        };
+    }
+
+    public function lieuNaissanceCommune(): BelongsTo
+    {
+        return $this->belongsTo(Commune::class, 'lieu_naissance_commune_id');
+    }
+
+    /** Commune de naissance au Burkina, sinon le lieu saisi (autre lieu / étranger). */
+    public function lieuDeNaissance(): ?string
+    {
+        return $this->lieuNaissanceCommune?->nom ?? $this->lieu_naissance;
     }
 }

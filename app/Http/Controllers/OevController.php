@@ -2,17 +2,36 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Commune;
 use App\Models\Oev;
 use App\Models\OevDocument;
+use App\Models\Region;
+use App\Models\User;
+use App\Support\Perimetre;
+use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class OevController extends Controller
+class OevController extends Controller implements HasMiddleware
 {
+    /** Un dossier hors de la zone de l'utilisateur, ou pas encore arrivé à l'étape où il intervient, n'est pas accessible. */
+    public static function middleware(): array
+    {
+        return [
+            function (Request $request, Closure $next) {
+                $oev = $request->route('oev');
+                abort_if($oev instanceof Oev && ! $oev->estVisiblePar($request->user()), 403);
+
+                return $next($request);
+            },
+        ];
+    }
+
     /** Messages de validation en français, propres au formulaire OEV (la langue de l'application n'est pas modifiée). */
     private const MESSAGES = [
         'required' => 'Le champ « :attribute » est obligatoire.',
@@ -25,6 +44,7 @@ class OevController extends Controller
         'numeric' => 'Le champ « :attribute » doit être un nombre.',
         'boolean' => 'Le champ « :attribute » est invalide.',
         'in' => 'La valeur choisie pour « :attribute » est invalide.',
+        'exists' => 'La valeur choisie pour « :attribute » est invalide.',
         'date' => 'Le champ « :attribute » n’est pas une date valide.',
         'regex' => 'Le format du champ « :attribute » est invalide.',
         'file' => '« :attribute » doit être un fichier.',
@@ -52,22 +72,32 @@ class OevController extends Controller
         'type_etablissement' => 'public ou privé',
         'classe' => 'classe',
         'frais_scolarite' => 'frais de scolarité',
-        'region' => 'région',
-        'province' => 'province',
-        'commune' => 'commune',
+        'region_id' => 'région',
+        'province_id' => 'province',
+        'commune_id' => 'commune',
+        'village_id' => 'village / secteur',
         'nom_structure_rib' => 'nom de la structure',
         'date_naissance_estimee' => 'date estimée',
         'lieu_naissance' => 'lieu de naissance',
         'nationalite' => 'nationalité',
         'a_acte_naissance' => 'acte de naissance',
-        'numero_identification' => 'numéro d’identification',
         'groupe_population' => 'groupe de population',
-        'quartier' => 'quartier / village / secteur',
+        'quartier' => 'quartier / précision de l’adresse',
         'lieu_provenance' => 'lieu de provenance',
         'tuteur_sexe' => 'sexe du tuteur',
         'tuteur_lien' => 'lien de parenté du tuteur',
         'tuteur_cnib' => 'numéro CNIB du tuteur',
         'tuteur_pret_continuer' => 'disponibilité du tuteur',
+        'tuteur_raison_arret' => 'raison pour laquelle le tuteur ne peut pas continuer',
+        'lieu_naissance_commune_id' => 'lieu de naissance',
+        'numero_acte_naissance' => 'numéro de l’acte de naissance',
+        'maladie_nom' => 'nom de la maladie',
+        'suivi_clinique' => 'suivi clinique',
+        'classe_precedente' => 'classe de l’année précédente',
+        'performance_scolaire' => 'performances scolaires',
+        'performance_difficultes' => 'explication des difficultés scolaires',
+        'formation_duree_mois' => 'durée de la formation',
+        'formation_duree_recue_mois' => 'durée de formation déjà reçue',
         'mere_nom' => 'nom de la mère',
         'mere_prenoms' => 'prénoms de la mère',
         'mere_vivante' => 'mère vivante',
@@ -84,7 +114,6 @@ class OevController extends Controller
         'vulnerabilite_precision' => 'autre situation de vulnérabilité',
         'types_handicap' => 'type de handicap',
         'maladie_chronique' => 'maladie chronique',
-        'maladie_details' => 'détails sur la maladie',
         'source_revenu' => 'source de revenu',
         'niveau_revenu' => 'niveau de revenu',
         'logement' => 'logement',
@@ -112,7 +141,7 @@ class OevController extends Controller
     {
         return $this->lister($request, 'oevs.validation', [Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT, Oev::ETAT_VALIDE, Oev::ETAT_NON_CONFORME, Oev::ETAT_REJETE], Oev::ETAT_SOUMIS)
             // Information pour le DR : dossiers encore chez les DP (non visibles tant qu'ils ne sont pas soumis)
-            ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->count());
+            ->with('enConstitution', Oev::etat(Oev::ETAT_BROUILLON)->dansLePerimetreDe($request->user())->count());
     }
 
     /** Niveau central — « Intégration des OEV » : dossiers validés à intégrer, compléments en attente, OEV intégrés. */
@@ -128,20 +157,22 @@ class OevController extends Controller
         $statut = array_key_exists((string) $statut, Oev::STATUTS) ? $statut : null;
         $recherche = trim((string) $request->query('q'));
 
-        $oevs = Oev::etat(Oev::ETAT_INTEGRE)
+        $oevs = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
+            ->with(['region', 'province', 'commune'])
             ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
-                    foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'region', 'province', 'commune', 'etablissement_actuel'] as $champ) {
+                    foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'etablissement_actuel'] as $champ) {
                         $q->orWhere($champ, 'like', "%{$recherche}%");
                     }
+                    $q->ouLocaliteContient("%{$recherche}%");
                 });
             })
             ->orderByDesc('integre_at')
             ->paginate(15)
             ->withQueryString();
 
-        $parStatut = Oev::etat(Oev::ETAT_INTEGRE)
+        $parStatut = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
             ->selectRaw('statut, count(*) as total')->groupBy('statut')
             ->pluck('total', 'statut');
 
@@ -152,9 +183,13 @@ class OevController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('oevs.form', ['oev' => new Oev(), 'documents' => collect()]);
+        // Le DP ne constitue que des dossiers de sa province : elle est proposée d'office
+        $perimetre = Perimetre::pour($request->user());
+        $oev = new Oev(['region_id' => $perimetre->region?->id, 'province_id' => $perimetre->province?->id]);
+
+        return view('oevs.form', ['oev' => $oev, 'documents' => collect(), 'localites' => Region::arborescence(avecVillages: true)]);
     }
 
     public function store(Request $request)
@@ -180,7 +215,7 @@ class OevController extends Controller
         // Un dossier en cours de constitution n'est visible que du DP (le DR le voit une fois soumis).
         abort_if($oev->statut_dossier === Oev::ETAT_BROUILLON && ! $request->user()->can('constituer dossiers'), 403);
 
-        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet']);
+        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet', 'region', 'province', 'commune', 'village', 'lieuNaissanceCommune']);
 
         return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
     }
@@ -191,7 +226,7 @@ class OevController extends Controller
             return $refus;
         }
 
-        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type')]);
+        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type'), 'localites' => Region::arborescence(avecVillages: true)]);
     }
 
     public function update(Request $request, Oev $oev)
@@ -401,13 +436,15 @@ class OevController extends Controller
         $recherche = trim((string) $request->query('q'));
 
         $oevs = Oev::with('documents:id,oev_id,type')
+            ->visiblesPar($request->user())
             ->etat(...($etat ? [$etat] : $etats))
             ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
-                    foreach (['code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'region', 'province', 'commune', 'etablissement_actuel'] as $champ) {
+                    foreach (['code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'etablissement_actuel'] as $champ) {
                         $q->orWhere($champ, 'like', "%{$recherche}%");
                     }
+                    $q->ouLocaliteContient("%{$recherche}%");
                 });
             })
             ->latest(match ($etat) {
@@ -420,7 +457,7 @@ class OevController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $compteurs = Oev::query()->etat(...$etats)
+        $compteurs = Oev::query()->visiblesPar($request->user())->etat(...$etats)
             ->selectRaw('statut_dossier, count(*) as total')->groupBy('statut_dossier')
             ->pluck('total', 'statut_dossier');
 
@@ -503,13 +540,60 @@ class OevController extends Controller
         $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
         $scolariseRequis = Rule::requiredIf($estScolarise);
 
-        // Un parent décédé ne peut pas être le tuteur
+        // Parent(s) qui s'occupent de l'enfant : ils doivent être déclarés vivants, et leurs nom et prénoms
+        // (saisis dans la partie « Parents ») sont repris comme ceux du tuteur.
+        $parentsTuteurs = Oev::parentsTuteurs($entree('tuteur_lien'));
+        $tuteurEstParent = $parentsTuteurs !== [];
         $tuteurVivant = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
-            if ($valeur === 'mere' && $entree('mere_vivante') === 'non') {
-                $echec('La mère est déclarée décédée : elle ne peut pas être la tutrice de l’enfant.');
+            foreach (Oev::parentsTuteurs($valeur) as $parent) {
+                $etat = $entree($parent === 'mere' ? 'mere_vivante' : 'pere_vivant');
+                if ($etat === 'non') {
+                    $echec($parent === 'mere'
+                        ? 'La mère est déclarée décédée : elle ne peut pas être la tutrice de l’enfant.'
+                        : 'Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.');
+                } elseif ($etat !== 'oui') {
+                    $echec($parent === 'mere'
+                        ? 'On ne sait pas si la mère est vivante : elle ne peut pas être indiquée comme tutrice.'
+                        : 'On ne sait pas si le père est vivant : il ne peut pas être indiqué comme tuteur.');
+                }
             }
-            if ($valeur === 'pere' && $entree('pere_vivant') === 'non') {
-                $echec('Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.');
+        };
+
+        // Lieu de naissance : une commune du Burkina, ou « autre » (hors du pays / lieu non répertorié) à préciser
+        $lieuNaissanceAutre = $entree('lieu_naissance_commune_id') === 'autre';
+        $communeDeNaissance = function (string $attribut, $valeur, \Closure $echec): void {
+            if ($valeur !== 'autre' && ! Commune::whereKey($valeur)->exists()) {
+                $echec('Choisissez le lieu de naissance dans la liste.');
+            }
+        };
+
+        // Moyenne : sur 10 au préscolaire et au primaire, sur 20 ensuite (selon la classe de l'année précédente)
+        $bareme = Oev::baremeMoyenne($entree('classe_precedente'));
+        $moyenneDansLeBareme = function (string $attribut, $valeur, \Closure $echec) use ($bareme, $entree): void {
+            if (is_numeric($valeur) && $valeur > $bareme) {
+                $classe = Oev::toutesLesClasses()[$entree('classe_precedente')] ?? null;
+                $echec("La moyenne doit être comprise entre 0 et {$bareme}" . ($classe ? " (notation sur {$bareme} en {$classe})." : '.'));
+            }
+        };
+        // Appréciation cohérente avec la classe actuelle : un redoublant reste dans la même classe, un admis en change
+        $appreciationCoherente = function (string $attribut, $valeur, \Closure $echec) use ($entree, $estScolarise): void {
+            $actuelle = $entree('classe');
+            $precedente = $entree('classe_precedente');
+            if (! $estScolarise || ! $actuelle || ! $precedente) {
+                return;
+            }
+            if ($valeur === 'redouble' && $actuelle !== $precedente) {
+                $echec('L’enfant a redoublé : sa classe actuelle devrait être la même que l’année précédente.');
+            }
+            if ($valeur === 'admis' && $actuelle === $precedente) {
+                $echec('L’enfant a été admis : sa classe actuelle ne peut pas être la même que l’année précédente.');
+            }
+        };
+        // Formation : la durée déjà reçue ne peut pas dépasser la durée prévue
+        $dureeRecueCoherente = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
+            $totale = $entree('formation_duree_mois');
+            if (is_numeric($valeur) && is_numeric($totale) && (int) $valeur > (int) $totale) {
+                $echec('La durée déjà reçue ne peut pas dépasser la durée de la formation.');
             }
         };
         // Le père peut être décédé pendant la grossesse (jusqu'à 10 mois avant la naissance), pas avant
@@ -527,27 +611,29 @@ class OevController extends Controller
             'sexe' => ['required', Rule::in(array_keys(Oev::SEXES))],
             'date_naissance' => ['required', 'date', 'before_or_equal:today', 'after:' . now()->subYears(25)->toDateString()],
             'date_naissance_estimee' => ['nullable', 'boolean'],
-            'lieu_naissance' => ['nullable', 'string', 'max:150'],
+            'lieu_naissance_commune_id' => ['nullable', $communeDeNaissance],
+            'lieu_naissance' => ['nullable', Rule::requiredIf($lieuNaissanceAutre), 'string', 'max:150'],
             'nationalite' => ['nullable', 'string', 'max:100'],
             'a_acte_naissance' => ['required', 'boolean'],
-            'numero_identification' => ['nullable', 'string', 'max:100'],
+            'numero_acte_naissance' => ['nullable', 'required_if:a_acte_naissance,1', 'string', 'max:50'],
             'groupe_population' => $choix(Oev::GROUPES_POPULATION),
 
-            // Adresse
-            'region' => ['required', 'string', 'max:100'],
-            'province' => ['required', 'string', 'max:100'],
-            'commune' => ['required', 'string', 'max:100'],
+            // Adresse : région, province et commune choisies dans le référentiel des localités
+            ...Oev::reglesLocalite($request),
+            // Village facultatif, mais forcément dans la commune choisie
+            'village_id' => ['nullable', 'integer', Rule::exists('villages', 'id')->where('commune_id', $request->input('commune_id'))],
             'quartier' => ['nullable', 'string', 'max:150'],
             'lieu_provenance' => ['nullable', 'string', 'max:150'],
 
             // Parents (situation d'orphelin) : « vivant ? » obligatoire, le statut OEV en est déduit
-            'mere_nom' => ['nullable', 'string', 'max:100'],
-            'mere_prenoms' => ['nullable', 'string', 'max:150'],
+            // Nom et prénoms obligatoires pour le parent qui s'occupe de l'enfant (repris comme tuteur)
+            'mere_nom' => ['nullable', Rule::requiredIf(in_array('mere', $parentsTuteurs, true)), 'string', 'max:100'],
+            'mere_prenoms' => ['nullable', Rule::requiredIf(in_array('mere', $parentsTuteurs, true)), 'string', 'max:150'],
             'mere_vivante' => ['required', Rule::in(array_keys(Oev::PARENT_VIVANT))],
             'mere_date_deces' => ['nullable', 'date', 'before_or_equal:today', 'after_or_equal:date_naissance'],
             'mere_deces_confirme' => ['nullable', 'boolean'],
-            'pere_nom' => ['nullable', 'string', 'max:100'],
-            'pere_prenoms' => ['nullable', 'string', 'max:150'],
+            'pere_nom' => ['nullable', Rule::requiredIf(in_array('pere', $parentsTuteurs, true)), 'string', 'max:100'],
+            'pere_prenoms' => ['nullable', Rule::requiredIf(in_array('pere', $parentsTuteurs, true)), 'string', 'max:150'],
             'pere_vivant' => ['required', Rule::in(array_keys(Oev::PARENT_VIVANT))],
             'pere_date_deces' => ['nullable', 'date', 'before_or_equal:today', $decesPereCoherent],
             'pere_deces_confirme' => ['nullable', 'boolean'],
@@ -555,13 +641,15 @@ class OevController extends Controller
             // Tuteur
             'tuteur_lien' => ['required', Rule::in(array_keys(Oev::LIENS_TUTEUR)), $tuteurVivant],
             'tuteur_lien_precision' => ['nullable', 'required_if:tuteur_lien,autre_parent', 'string', 'max:100'],
-            'nom_tuteur' => ['required', 'string', 'max:100'],
-            'prenom_tuteur' => ['required', 'string', 'max:150'],
+            // Nom, prénoms et sexe demandés seulement si le tuteur n'est pas un parent (déjà saisi plus haut)
+            'nom_tuteur' => ['nullable', Rule::requiredIf(! $tuteurEstParent), 'string', 'max:100'],
+            'prenom_tuteur' => ['nullable', Rule::requiredIf(! $tuteurEstParent), 'string', 'max:150'],
             'contact_tuteur' => ['required', 'regex:/^\d{8}$/'],
-            'tuteur_sexe' => ['nullable', Rule::in(['M', 'F'])],
+            'tuteur_sexe' => ['nullable', Rule::requiredIf(! $tuteurEstParent), Rule::in(['M', 'F'])],
             'tuteur_a_cnib' => ['required', 'boolean'],
             'tuteur_cnib' => ['nullable', 'required_if:tuteur_a_cnib,1', 'string', 'max:50'],
-            'tuteur_pret_continuer' => ['nullable', 'boolean'],
+            'tuteur_pret_continuer' => ['required', 'boolean'],
+            'tuteur_raison_arret' => ['nullable', 'required_if:tuteur_pret_continuer,0', 'string', 'max:255'],
 
             // Conditions de vie et vulnérabilités
             'lieu_de_vie' => $choix(Oev::LIEUX_DE_VIE),
@@ -576,7 +664,8 @@ class OevController extends Controller
             'types_handicap.*' => [Rule::in(array_keys(Oev::TYPES_HANDICAP))],
             'nature_handicap' => ['nullable', 'string', 'max:255'],
             'maladie_chronique' => ['nullable', 'boolean'],
-            'maladie_details' => ['nullable', 'required_if:maladie_chronique,1', 'string', 'max:255'],
+            'maladie_nom' => ['nullable', 'required_if:maladie_chronique,1', 'string', 'max:150'],
+            'suivi_clinique' => ['nullable', 'required_if:maladie_chronique,1', 'boolean'],
 
             // Ménage
             'source_revenu' => $choix(Oev::SOURCES_REVENU),
@@ -594,8 +683,12 @@ class OevController extends Controller
             'raison_non_scolarisation' => ['nullable', Rule::requiredIf($nonScolarise), Rule::in(array_keys(Oev::RAISONS_NON_SCOLARISATION))],
             'raison_non_scolarisation_precision' => ['nullable', Rule::requiredIf($nonScolarise && $entree('raison_non_scolarisation') === 'autre'), 'string', 'max:255'],
             'etablissement_precedent' => ['nullable', 'string', 'max:255'],
-            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', 'max:20'],
-            'appreciation' => $choix(Oev::APPRECIATIONS),
+            // La classe de l'année précédente fixe le barème de la moyenne (/10 ou /20)
+            'classe_precedente' => ['nullable', Rule::requiredIf(filled($entree('moyenne_annuelle'))), Rule::in(array_keys(Oev::toutesLesClasses()))],
+            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', $moyenneDansLeBareme],
+            'appreciation' => [...$choix(Oev::APPRECIATIONS), $appreciationCoherente],
+            'performance_scolaire' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::PERFORMANCES_SCOLAIRES))],
+            'performance_difficultes' => ['nullable', Rule::requiredIf($estScolarise && $entree('performance_scolaire') === 'difficultes'), 'string', 'max:255'],
             'systeme_educatif' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
             'etablissement_actuel' => ['nullable', $scolariseRequis, 'string', 'max:255'],
             'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
@@ -606,11 +699,14 @@ class OevController extends Controller
             'formation_etat' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::ETATS_FORMATION))],
             'formation_filiere' => ['nullable', 'required_if:formation_professionnelle,1', 'string', 'max:150'],
             'formation_type_centre' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            'formation_duree_mois' => ['nullable', 'required_if:formation_professionnelle,1', 'integer', 'min:1', 'max:120'],
+            // Formation achevée : la durée reçue est la durée totale (non demandée)
+            'formation_duree_recue_mois' => ['nullable', Rule::requiredIf($entree('formation_professionnelle') === '1' && $entree('formation_etat') === 'en_cours'), 'integer', 'min:0', $dureeRecueCoherente],
 
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
 
-        $messagesFichiers = [];
+        $messagesFichiers = $this->limiterALaZone($request, $regles);
         foreach (array_keys(Oev::DOCUMENTS) as $type) {
             $max = Oev::tailleMaxFichierKo($type);
             $regles[$type] = $type === 'photo'
@@ -644,6 +740,22 @@ class OevController extends Controller
             'mere_vivante.required' => 'Indiquez si la mère de l’enfant est vivante.',
             'pere_vivant.required' => 'Indiquez si le père de l’enfant est vivant.',
             'nom_structure_rib.required' => 'Précisez le nom de la structure titulaire du RIB.',
+            'numero_acte_naissance.required_if' => 'Saisissez le numéro de l’acte de naissance de l’enfant.',
+            'lieu_naissance.required' => 'Précisez le lieu de naissance (ville, pays) s’il n’est pas dans la liste.',
+            'mere_nom.required' => 'La mère s’occupe de l’enfant : saisissez son nom (partie « Mère »).',
+            'mere_prenoms.required' => 'La mère s’occupe de l’enfant : saisissez ses prénoms (partie « Mère »).',
+            'pere_nom.required' => 'Le père s’occupe de l’enfant : saisissez son nom (partie « Père »).',
+            'pere_prenoms.required' => 'Le père s’occupe de l’enfant : saisissez ses prénoms (partie « Père »).',
+            'tuteur_sexe.required' => 'Indiquez le sexe du tuteur.',
+            'tuteur_pret_continuer.required' => 'Indiquez si le parent ou tuteur est prêt à continuer à s’occuper de l’enfant.',
+            'tuteur_raison_arret.required_if' => 'Indiquez pourquoi le parent ou tuteur ne peut pas continuer à s’occuper de l’enfant.',
+            'maladie_nom.required_if' => 'Indiquez le nom de la maladie.',
+            'suivi_clinique.required_if' => 'Indiquez si l’enfant bénéficie d’un suivi clinique.',
+            'classe_precedente.required' => 'Indiquez la classe de l’année précédente (elle détermine si la moyenne est sur 10 ou sur 20).',
+            'performance_scolaire.required' => 'Indiquez les performances scolaires de l’enfant.',
+            'performance_difficultes.required' => 'Expliquez les difficultés scolaires de l’enfant.',
+            'formation_duree_mois.required_if' => 'Indiquez la durée de la formation (en mois).',
+            'formation_duree_recue_mois.required' => 'Indiquez la durée de formation déjà reçue (en mois).',
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
             'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
@@ -651,6 +763,8 @@ class OevController extends Controller
 
         $validated['contact_tuteur'] = Oev::formaterTelephone($validated['contact_tuteur']);
         $validated['date_naissance_estimee'] = (bool) ($validated['date_naissance_estimee'] ?? false);
+        // Liste des villages vide ou désactivée : non envoyée, l'ancien village ne doit pas rester
+        $validated['village_id'] ??= null;
         $validated['statut'] = Oev::calculerStatut($validated['mere_vivante'], $validated['pere_vivant']);
 
         // Les informations masquées par une réponse ne sont pas conservées (ex. date de décès d'une mère vivante).
@@ -665,22 +779,42 @@ class OevController extends Controller
         $effacer($validated['pere_vivant'] !== 'non', ['pere_date_deces', 'pere_deces_confirme']);
         $effacer(($validated['lieu_de_vie'] ?? null) !== 'autre', ['lieu_de_vie_precision']);
         $effacer(! $validated['handicap'], ['types_handicap', 'nature_handicap']);
-        $effacer(! ($validated['maladie_chronique'] ?? false), ['maladie_details']);
         $effacer(! in_array($validated['groupe_population'] ?? null, Oev::GROUPES_MOBILES, true), ['lieu_provenance']);
         $effacer(! $validated['tuteur_a_cnib'], ['tuteur_cnib']);
         $effacer($validated['tuteur_lien'] !== 'autre_parent', ['tuteur_lien_precision']);
-        $effacer($validated['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite']);
+        $effacer((bool) $validated['tuteur_pret_continuer'], ['tuteur_raison_arret']);
+        $effacer(! $validated['a_acte_naissance'], ['numero_acte_naissance']);
+        $effacer(! ($validated['maladie_chronique'] ?? false), ['maladie_nom', 'suivi_clinique']);
+        $effacer($validated['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes']);
+        $effacer(($validated['performance_scolaire'] ?? null) !== 'difficultes', ['performance_difficultes']);
         $effacer(! in_array($validated['situation_scolaire'], ['scolarise', 'descolarise'], true), ['niveau_etude']);
-        $effacer($validated['situation_scolaire'] === 'non_scolarise', ['etablissement_precedent', 'moyenne_annuelle', 'appreciation']);
-        $effacer(blank($validated['etablissement_precedent'] ?? null), ['moyenne_annuelle', 'appreciation']);
+        $effacer($validated['situation_scolaire'] === 'non_scolarise', ['etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation']);
+        $effacer(blank($validated['etablissement_precedent'] ?? null), ['classe_precedente', 'moyenne_annuelle', 'appreciation']);
         $effacer(! in_array($validated['situation_scolaire'], ['non_scolarise', 'descolarise'], true), ['raison_non_scolarisation', 'raison_non_scolarisation_precision']);
         $effacer(($validated['raison_non_scolarisation'] ?? null) !== 'autre', ['raison_non_scolarisation_precision']);
-        $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre']);
+        $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois']);
+        // Formation achevée : toute la durée a été reçue
+        if (($validated['formation_etat'] ?? null) === 'achevee') {
+            $validated['formation_duree_recue_mois'] = $validated['formation_duree_mois'];
+        }
 
-        // Sexe du tuteur déduit quand c'est la mère ou le père
+        // Lieu de naissance : commune du référentiel, ou lieu saisi quand il n'y figure pas
+        if (($validated['lieu_naissance_commune_id'] ?? null) === 'autre') {
+            $validated['lieu_naissance_commune_id'] = null;
+        } else {
+            $validated['lieu_naissance'] = null;
+        }
+
+        // Tuteur = parent(s) : nom et prénoms repris de la partie « Parents », sexe déduit
+        $parents = Oev::parentsTuteurs($validated['tuteur_lien']);
+        if ($parents !== []) {
+            $validated['nom_tuteur'] = collect($parents)->map(fn ($p) => $validated["{$p}_nom"])->unique()->implode(' / ');
+            $validated['prenom_tuteur'] = collect($parents)->map(fn ($p) => $validated["{$p}_prenoms"])->implode(' et ');
+        }
         $validated['tuteur_sexe'] = match ($validated['tuteur_lien']) {
             'mere' => 'F',
             'pere' => 'M',
+            'parents' => null,
             default => $validated['tuteur_sexe'] ?? null,
         };
 
@@ -694,6 +828,34 @@ class OevController extends Controller
         $effacer(! in_array('autre', $vulnerabilites, true), ['vulnerabilite_precision']);
 
         return collect($validated)->except(array_keys(Oev::DOCUMENTS))->all();
+    }
+
+    /**
+     * Un DP ne saisit que des dossiers de sa province, un DR (complément) que de sa région.
+     * Ajoute la règle correspondante à $regles et renvoie son message d'erreur.
+     */
+    private function limiterALaZone(Request $request, array &$regles): array
+    {
+        $perimetre = Perimetre::pour($request->user());
+
+        if (! $perimetre->defini) {
+            $champ = $perimetre->niveau === User::NIVEAU_REGION ? 'region_id' : 'province_id';
+            $regles[$champ][] = Rule::in([]);
+
+            return ["{$champ}.in" => 'Votre compte n’est rattaché à aucune localité : demandez à un administrateur de le compléter.'];
+        }
+        if ($perimetre->province) {
+            $regles['province_id'][] = Rule::in([$perimetre->province->id]);
+
+            return ['province_id.in' => "Vous ne pouvez enregistrer que des dossiers de votre province ({$perimetre->province->nom})."];
+        }
+        if ($perimetre->region) {
+            $regles['region_id'][] = Rule::in([$perimetre->region->id]);
+
+            return ['region_id.in' => "Vous ne pouvez enregistrer que des dossiers de votre région ({$perimetre->region->nom})."];
+        }
+
+        return [];
     }
 
     private function enregistrerDocuments(Request $request, Oev $oev): void

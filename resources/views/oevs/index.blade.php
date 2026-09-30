@@ -12,7 +12,7 @@
     <div class="page-heading-copy">
       <span class="page-icon"><i class="bi bi-file-earmark-medical" aria-hidden="true"></i></span>
       <div>
-        <p class="eyebrow mb-1">Gestion des demandes · Niveau provincial (DP)</p>
+        <p class="eyebrow mb-1">Dossiers enfants · Niveau provincial (DP)</p>
         <h1 class="h3 mb-1">Constituer dossier enfant</h1>
         <p class="text-muted mb-0">Le DP constitue le dossier de l’enfant puis le soumet au DR pour vérification de la conformité.</p>
       </div>

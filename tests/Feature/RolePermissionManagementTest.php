@@ -16,7 +16,7 @@ class RolePermissionManagementTest extends TestCase
     {
         $user = User::factory()->create();
         $user->assignRole(Role::create(['name' => 'administrateur', 'guard_name' => 'web']));
-        $permission = Permission::create(['name' => 'voir demandes', 'guard_name' => 'web']);
+        $permission = Permission::create(['name' => 'voir signalements', 'guard_name' => 'web']);
 
         $response = $this->actingAs($user)->post(route('roles-permissions.store'), [
             'name' => 'coordinateur',
@@ -25,6 +25,6 @@ class RolePermissionManagementTest extends TestCase
 
         $response->assertRedirect(route('roles-permissions.index'));
         $this->assertDatabaseHas('roles', ['name' => 'coordinateur']);
-        $this->assertTrue(Role::findByName('coordinateur')->hasPermissionTo('voir demandes'));
+        $this->assertTrue(Role::findByName('coordinateur')->hasPermissionTo('voir signalements'));
     }
 }

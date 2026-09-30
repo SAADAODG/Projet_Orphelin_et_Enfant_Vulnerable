@@ -111,7 +111,7 @@
                 </td>
                 <td class="d-none d-md-table-cell">{{ $oev->prenom }}</td>
                 <td><span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', Oev::STATUTS) }}</span></td>
-                <td class="d-none d-lg-table-cell small text-nowrap" title="{{ $oev->commune }}, {{ $oev->province }}, {{ $oev->region }}">{{ $oev->commune }} <span class="text-muted">· {{ $oev->province }}</span></td>
+                <td class="d-none d-lg-table-cell small text-nowrap" title="{{ $oev->localiteComplete() }}">{{ $oev->commune?->nom }} <span class="text-muted">· {{ $oev->province?->nom }}</span></td>
                 <td class="d-none d-lg-table-cell small text-nowrap">{{ $oev->integre_at?->format('d/m/Y') }}</td>
                 <td class="text-end"><span class="oev-ouvrir"><i class="bi bi-chevron-right" aria-hidden="true"></i></span></td>
               </tr>

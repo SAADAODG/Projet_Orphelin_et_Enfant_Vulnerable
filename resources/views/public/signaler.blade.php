@@ -101,31 +101,16 @@
               <span class="signal-step-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
               <div>
                 <h2 class="signal-step-title">Où vit l'enfant ?</h2>
-                <p class="signal-step-sub">Sélectionnez la région puis la province.</p>
+                <p class="signal-step-sub">Sélectionnez la région, la province puis la commune.</p>
               </div>
             </div>
 
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label" for="region">Région</label>
-                <select class="form-select @error('region') is-invalid @enderror" id="region" name="region" required>
-                  <option value="">Choisir la région</option>
-                  @foreach (array_keys($localites) as $region)
-                    <option value="{{ $region }}" {{ old('region') === $region ? 'selected' : '' }}>{{ $region }}</option>
-                  @endforeach
-                </select>
-                @error('region')<div class="invalid-feedback">{{ $message }}</div>@enderror
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" for="province">Province</label>
-                <select class="form-select @error('province') is-invalid @enderror" id="province" name="province" data-old="{{ old('province') }}" required disabled>
-                  <option value="">Choisir d'abord la région</option>
-                </select>
-                @error('province')<div class="invalid-feedback">{{ $message }}</div>@enderror
-              </div>
+            @include('partials.localite-selects', ['localites' => $localites, 'colonnes' => ['region_id' => 'col-md-4', 'province_id' => 'col-md-4', 'commune_id' => 'col-md-4']])
+
+            <div class="row g-3 mt-0">
               <div class="col-12">
-                <label class="form-label" for="localite">Ville, village ou quartier</label>
-                <input type="text" class="form-control @error('localite') is-invalid @enderror" id="localite" name="localite" value="{{ old('localite') }}" placeholder="ex : Ouagadougou, secteur 15" required>
+                <label class="form-label" for="localite">Village, quartier ou secteur</label>
+                <input type="text" class="form-control @error('localite') is-invalid @enderror" id="localite" name="localite" value="{{ old('localite') }}" placeholder="ex : secteur 15, quartier Gounghin" required>
                 @error('localite')<div class="invalid-feedback">{{ $message }}</div>@enderror
               </div>
             </div>
@@ -226,23 +211,6 @@
 @push('scripts')
 <script>
   (function () {
-    const localites = @json($localites);
-    const region = document.getElementById('region');
-    const province = document.getElementById('province');
-
-    function remplirProvinces(selection) {
-      const provinces = localites[region.value] || [];
-      province.innerHTML = '';
-      province.add(new Option(provinces.length ? 'Choisir la province' : "Choisir d'abord la région", ''));
-      provinces.forEach(function (nom) {
-        province.add(new Option(nom, nom, false, nom === selection));
-      });
-      province.disabled = provinces.length === 0;
-    }
-
-    region.addEventListener('change', function () { remplirProvinces(''); });
-    remplirProvinces(province.dataset.old);
-
     // Affiche le champ « Précisez » quand « Autre » est choisi
     document.querySelectorAll('[data-toggle-precision]').forEach(function (champ) {
       const bloc = document.getElementById(champ.dataset.togglePrecision);

@@ -49,7 +49,7 @@
         @if ($statut)<input type="hidden" name="statut" value="{{ $statut }}">@endif
         @if ($decision)<input type="hidden" name="decision" value="{{ $decision }}">@endif
         <i class="bi bi-search" aria-hidden="true"></i>
-        <input type="search" name="q" value="{{ request('q') }}" placeholder="Récépissé, nom, province…" aria-label="Rechercher un signalement">
+        <input type="search" name="q" value="{{ request('q') }}" placeholder="Récépissé, nom, province, commune…" aria-label="Rechercher un signalement">
       </form>
     </div>
 
@@ -95,8 +95,8 @@
                 @endforeach
               </td>
               <td>
-                <span class="sig-lieu"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ $signalement->province }}</span>
-                <span class="sig-meta">{{ $signalement->localite }}</span>
+                <span class="sig-lieu"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ $signalement->province?->nom ?? '—' }}</span>
+                <span class="sig-meta">{{ collect([$signalement->commune?->nom, $signalement->localite])->filter()->implode(' — ') }}</span>
               </td>
               <td>
                 <span class="d-block">{{ $signalement->declarant_nom_complet }}</span>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AppartientALocalite;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,8 @@ use Illuminate\Support\Str;
 
 class Signalement extends Model
 {
+    use AppartientALocalite;
+
     public const EN_ATTENTE = 'en_attente';
     public const VALIDE = 'valide';
     public const REJETE = 'rejete';
@@ -87,8 +90,9 @@ class Signalement extends Model
         'enfant_age',
         'vulnerabilite',
         'vulnerabilite_precision',
-        'region',
-        'province',
+        'region_id',
+        'province_id',
+        'commune_id',
         'localite',
         'declarant_nom',
         'declarant_prenom',

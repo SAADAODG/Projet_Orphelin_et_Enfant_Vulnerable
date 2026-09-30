@@ -57,7 +57,7 @@
     <tr><td class="label">Nom et prénom(s)</td><td class="valeur">{{ $signalement->enfant_nom_complet }}</td></tr>
     <tr><td class="label">Âge estimé</td><td class="valeur">{{ $signalement->enfant_age }} ans</td></tr>
     <tr><td class="label">Situation</td><td class="valeur">{{ $signalement->vulnerabilite_libelle }}</td></tr>
-    <tr><td class="label">Localité</td><td class="valeur">{{ $signalement->localite }}, {{ $signalement->province }} ({{ $signalement->region }})</td></tr>
+    <tr><td class="label">Localité</td><td class="valeur">{{ collect([$signalement->localite, $signalement->localiteComplete()])->filter()->implode(', ') }}</td></tr>
   </table>
 
   <h2>Déclarant</h2>

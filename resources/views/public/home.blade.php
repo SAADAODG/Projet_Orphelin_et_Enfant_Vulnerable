@@ -173,7 +173,7 @@
 
         <div class="col-6 col-md-3">
           <div class="stat-pill">
-            <strong>45</strong>
+            <strong>{{ $nombreProvinces }}</strong>
             <span>Provinces couvertes</span>
           </div>
         </div>

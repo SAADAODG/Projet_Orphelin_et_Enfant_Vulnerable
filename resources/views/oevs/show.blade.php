@@ -289,10 +289,9 @@
             {!! $info('Prénom(s)', $oev->prenom) !!}
             {!! $info('Sexe', $oev->libelle('sexe', Oev::SEXES)) !!}
             {!! $info('Date de naissance', $oev->date_naissance->format('d/m/Y') . ' (' . $oev->age() . ' ans)' . ($oev->date_naissance_estimee ? ' — estimée' : '')) !!}
-            {!! $infoSi('Lieu de naissance', $oev->lieu_naissance) !!}
+            {!! $infoSi('Lieu de naissance', $oev->lieuDeNaissance()) !!}
             {!! $infoSi('Nationalité', $oev->nationalite) !!}
-            {!! $infoSi('Acte de naissance', $ouiNon($oev->a_acte_naissance)) !!}
-            {!! $infoSi('N° d’identification', $oev->numero_identification) !!}
+            {!! $infoSi('Acte de naissance', $oev->a_acte_naissance === null ? null : ($oev->a_acte_naissance ? 'Oui' . ($oev->numero_acte_naissance ? ' — n° ' . $oev->numero_acte_naissance : '') : 'Non')) !!}
             {!! $infoSi('Groupe de population', $oev->groupe_population ? $oev->libelle('groupe_population', Oev::GROUPES_POPULATION) : null) !!}
             {!! $info('Statut OEV', $oev->libelle('statut', Oev::STATUTS)) !!}
           </div>
@@ -339,7 +338,10 @@
               {!! $infoSi('Type de handicap', implode(', ', $oev->libelles('types_handicap', Oev::TYPES_HANDICAP))) !!}
               {!! $infoSi('Détails du handicap', $oev->nature_handicap) !!}
             @endif
-            {!! $infoSi('Maladie chronique', $ouiNon($oev->maladie_chronique) . ($oev->maladie_details ? ' — ' . $oev->maladie_details : '')) !!}
+            {!! $infoSi('Maladie', $oev->maladie_chronique === null ? null : ($oev->maladie_chronique ? ($oev->maladie_nom ?: 'Oui') : 'Non')) !!}
+            @if ($oev->maladie_chronique)
+              {!! $infoSi('Suivi clinique', $ouiNon($oev->suivi_clinique)) !!}
+            @endif
             {!! $infoSi('Source de revenu', $oev->source_revenu ? $oev->libelle('source_revenu', Oev::SOURCES_REVENU) : null) !!}
             {!! $infoSi('Niveau de revenu', $oev->niveau_revenu ? $oev->libelle('niveau_revenu', Oev::NIVEAUX) : null) !!}
             {!! $infoSi('Logement', $oev->logement ? $oev->libelle('logement', Oev::LOGEMENTS) : null) !!}
@@ -379,7 +381,8 @@
               <h3>Année précédente</h3>
               <dl>
                 <div><dt>Établissement fréquenté</dt><dd>{{ $oev->etablissement_precedent ?: '—' }}</dd></div>
-                <div><dt>Moyenne annuelle</dt><dd>{{ $oev->moyenne_annuelle !== null ? number_format((float) $oev->moyenne_annuelle, 2, ',', ' ') . ' / 20' : '—' }}</dd></div>
+                <div><dt>Classe</dt><dd>{{ Oev::toutesLesClasses()[$oev->classe_precedente] ?? '—' }}</dd></div>
+                <div><dt>Moyenne annuelle</dt><dd>{{ $oev->moyenne_annuelle !== null ? number_format((float) $oev->moyenne_annuelle, 2, ',', ' ') . ' / ' . Oev::baremeMoyenne($oev->classe_precedente) : '—' }}</dd></div>
                 <div>
                   <dt>Appréciation</dt>
                   <dd>
@@ -398,8 +401,19 @@
               @if ($oev->situation_scolaire === 'scolarise')
                 <dl>
                   <div><dt>Établissement fréquenté</dt><dd>{{ $oev->etablissement_actuel }} @if ($oev->type_etablissement)<span class="badge rounded-pill text-bg-light border ms-1">{{ $oev->libelle('type_etablissement', Oev::TYPES_ETABLISSEMENT) }}</span>@endif</dd></div>
-                  <div><dt>Classe</dt><dd>{{ $oev->classe ?: '—' }}</dd></div>
+                  <div><dt>Classe</dt><dd>{{ Oev::toutesLesClasses()[$oev->classe] ?? ($oev->classe ?: '—') }}</dd></div>
                   <div><dt>Frais de scolarité</dt><dd>{{ $oev->frais_scolarite !== null ? number_format($oev->frais_scolarite, 0, ',', ' ') . ' FCFA' : '—' }}</dd></div>
+                  <div>
+                    <dt>Performances</dt>
+                    <dd>
+                      @if ($oev->performance_scolaire)
+                        <span class="badge rounded-pill text-bg-{{ ['bonnes' => 'success', 'passables' => 'primary', 'faibles' => 'warning', 'irregulieres' => 'warning', 'difficultes' => 'danger'][$oev->performance_scolaire] ?? 'secondary' }}">{{ $oev->libelle('performance_scolaire', Oev::PERFORMANCES_SCOLAIRES) }}</span>
+                        @if ($oev->performance_difficultes)<div class="small fw-normal mt-1">{{ $oev->performance_difficultes }}</div>@endif
+                      @else
+                        —
+                      @endif
+                    </dd>
+                  </div>
                 </dl>
               @else
                 <p class="text-muted small mb-0">L’enfant n’est pas scolarisé cette année.</p>
@@ -411,6 +425,8 @@
               {!! $info('Formation professionnelle', 'Oui' . ($oev->formation_etat ? ' — ' . mb_strtolower($oev->libelle('formation_etat', Oev::ETATS_FORMATION)) : '')) !!}
               {!! $infoSi('Filière', $oev->formation_filiere) !!}
               {!! $infoSi('Type de centre', $oev->formation_type_centre ? $oev->libelle('formation_type_centre', Oev::TYPES_ETABLISSEMENT) : null) !!}
+              {!! $infoSi('Durée de la formation', $oev->formation_duree_mois ? $oev->formation_duree_mois . ' mois' : null) !!}
+              {!! $infoSi('Durée déjà reçue', $oev->formation_duree_recue_mois !== null ? $oev->formation_duree_recue_mois . ' mois' : null) !!}
             </div>
           @endif
         </section>
@@ -432,11 +448,13 @@
           @php
             $detailsTuteur = array_filter([
               'Sexe' => $oev->tuteur_sexe ? ['M' => 'Homme', 'F' => 'Femme'][$oev->tuteur_sexe] ?? null : null,
-              'Lien avec l’enfant' => $oev->tuteur_lien
+              'Qui s’occupe de l’enfant' => $oev->tuteur_lien
                   ? $oev->libelle('tuteur_lien', Oev::LIENS_TUTEUR) . ($oev->tuteur_lien_precision ? ' (' . $oev->tuteur_lien_precision . ')' : '')
                   : null,
               'CNIB' => $oev->tuteur_a_cnib === null ? null : ($oev->tuteur_a_cnib ? ($oev->tuteur_cnib ?: 'Oui') : 'N’en possède pas'),
-              'Prêt à continuer' => $ouiNon($oev->tuteur_pret_continuer),
+              'Prêt à continuer' => $oev->tuteur_pret_continuer === false && $oev->tuteur_raison_arret
+                  ? 'Non — ' . $oev->tuteur_raison_arret
+                  : $ouiNon($oev->tuteur_pret_continuer),
             ]);
           @endphp
           @if ($detailsTuteur)
@@ -452,10 +470,10 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-geo-alt" aria-hidden="true"></i> Localité</h2>
           <ul class="oev-lieu">
-            @foreach (array_filter(['Région' => $oev->region, 'Province' => $oev->province, 'Commune' => $oev->commune, 'Quartier / village' => $oev->quartier]) as $niveau => $lieu)
+            @foreach (array_filter(['Région' => $oev->region?->nom, 'Province' => $oev->province?->nom, 'Commune' => $oev->commune?->nom, 'Village / secteur' => $oev->village?->nom, 'Quartier / précision' => $oev->quartier]) as $niveau => $lieu)
               <li>
                 <span class="oev-lieu-point" aria-hidden="true"></span>
-                <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu }}</strong></div>
+                <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu ?? '—' }}</strong></div>
               </li>
             @endforeach
           </ul>

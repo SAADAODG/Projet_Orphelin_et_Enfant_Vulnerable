@@ -12,7 +12,7 @@
     <div class="page-heading-copy">
       <span class="page-icon"><i class="bi bi-patch-check" aria-hidden="true"></i></span>
       <div>
-        <p class="eyebrow mb-1">Gestion des demandes · Niveau régional (DR)</p>
+        <p class="eyebrow mb-1">Dossiers enfants · Niveau régional (DR)</p>
         <h1 class="h3 mb-1">Validation des dossiers</h1>
         <p class="text-muted mb-0">Le DR vérifie la conformité des dossiers soumis par les DP : conforme (validé et transmis au niveau central) ou non conforme (renvoyé au DP avec un motif).</p>
       </div>

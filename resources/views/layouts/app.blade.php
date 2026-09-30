@@ -10,6 +10,12 @@
   <link rel="stylesheet" href="{{ asset('assets/vendors/fontawesome/css/all.min.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/vendors/bootstrap-icons/bootstrap-icons.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+  {{-- Police de l'interface admin, réglable depuis Paramètres généraux > Apparence (voir
+       config/fonts.php) : {!! !!} car la valeur vient d'une liste fermée, jamais d'une saisie libre. --}}
+  @if ($siteSetting->police_admin_config['stylesheet'])
+    <link rel="stylesheet" href="{{ asset($siteSetting->police_admin_config['stylesheet']) }}">
+  @endif
+  <style>:root { --admin-font: {!! $siteSetting->police_admin_config['family'] !!}; }</style>
   @stack('styles')
 </head>
 
@@ -29,34 +35,36 @@
       </div>
 
       <nav class="sidebar-nav">
+        {{-- Chaque module n'apparaît que si le rôle de l'utilisateur y donne accès --}}
         <div class="nav-section">
           <span class="nav-section-label">Tableau de bord</span>
           <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}" {{ request()->routeIs('dashboard') ? 'aria-current="page"' : '' }}>
             <span class="nav-icon"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
-            <span class="nav-text">Dashboard</span>
+            <span class="nav-text">Tableau de bord</span>
           </a>
         </div>
 
+        @php($ecranOev = match (true) {
+            request()->routeIs('oevs.validation') => 'validation',
+            request()->routeIs('oevs.integration') => 'integration',
+            request()->routeIs('oevs.liste') => 'liste',
+            request()->routeIs('oevs.*') => 'dossiers',
+            default => null,
+        })
+
+        {{-- Du signalement au dossier validé : DP (province) et DR (région) --}}
+        @canany(['voir signalements', 'constituer dossiers', 'valider dossiers'])
         <div class="nav-section">
-          <span class="nav-section-label">Gestion des demandes</span>
-          <a class="nav-link {{ request()->routeIs('admin.signalements.*') ? 'active' : '' }}" href="{{ route('admin.signalements.index') }}">
+          <span class="nav-section-label">Signalements et dossiers</span>
+          @can('voir signalements')
+          <a class="nav-link {{ request()->routeIs('admin.signalements.*') ? 'active' : '' }}" href="{{ route('admin.signalements.index') }}" @if (request()->routeIs('admin.signalements.*')) aria-current="page" @endif>
             <span class="nav-icon position-relative">
               <i class="bi bi-megaphone" aria-hidden="true"></i>
               <span class="notif-dot {{ $signalementsNonLus ? '' : 'd-none' }}" data-notif-signalements data-url="{{ route('admin.signalements.non-lus') }}" aria-label="{{ $signalementsNonLus }} nouveau(x) signalement(s)">{{ $signalementsNonLus > 99 ? '99+' : $signalementsNonLus }}</span>
             </span>
             <span class="nav-text">Signalements</span>
           </a>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-clipboard-check" aria-hidden="true"></i></span>
-            <span class="nav-text">Gestion des demandes</span>
-          </a>
-          @php($ecranOev = match (true) {
-              request()->routeIs('oevs.validation') => 'validation',
-              request()->routeIs('oevs.integration') => 'integration',
-              request()->routeIs('oevs.liste') => 'liste',
-              request()->routeIs('oevs.*') => 'dossiers',
-              default => null,
-          })
+          @endcan
           @can('constituer dossiers')
           <a class="nav-link {{ $ecranOev === 'dossiers' ? 'active' : '' }}" href="{{ route('oevs.index') }}" @if ($ecranOev === 'dossiers') aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-file-earmark-medical" aria-hidden="true"></i></span>
@@ -70,7 +78,9 @@
           </a>
           @endcan
         </div>
+        @endcanany
 
+        @canany(['intégrer OEV', 'voir OEV'])
         <div class="nav-section">
           <span class="nav-section-label">OEV</span>
           @can('intégrer OEV')
@@ -84,32 +94,19 @@
             <span class="nav-icon"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
             <span class="nav-text">Liste des OEV</span>
           </a>
-          @endcan
           <a class="nav-link" href="#">
             <span class="nav-icon"><i class="bi bi-map" aria-hidden="true"></i></span>
             <span class="nav-text">Suivi des OEV</span>
           </a>
+          @endcan
         </div>
+        @endcanany
 
-        <div class="nav-section">
-          <span class="nav-section-label">Administration</span>
-          <a class="nav-link {{ request()->routeIs('users.index') || request()->routeIs('users.create') || request()->routeIs('users.show') ? 'active' : '' }}" href="{{ route('users.index') }}">
-            <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
-            <span class="nav-text">Gestion utilisateur</span>
-          </a>
-          <a class="nav-link {{ request()->routeIs('roles-permissions.*') ? 'active' : '' }}" href="{{ route('roles-permissions.index') }}">
-            <span class="nav-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
-            <span class="nav-text">Gestion role et permission</span>
-          </a>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
-            <span class="nav-text">Gestion des paramètres</span>
-          </a>
-        </div>
-
+        @canany(['voir plaintes', 'voir rapports'])
         <div class="nav-section">
           <span class="nav-section-label">Contrôle</span>
-          <a class="nav-link {{ request()->routeIs('admin.plaintes.*') ? 'active' : '' }}" href="{{ route('admin.plaintes.index') }}">
+          @can('voir plaintes')
+          <a class="nav-link {{ request()->routeIs('admin.plaintes.*') ? 'active' : '' }}" href="{{ route('admin.plaintes.index') }}" @if (request()->routeIs('admin.plaintes.*')) aria-current="page" @endif>
             <span class="nav-icon position-relative">
               <i class="bi bi-chat-text" aria-hidden="true"></i>
               @if ($plaintesNonLues)
@@ -118,11 +115,43 @@
             </span>
             <span class="nav-text">Gestion de plainte</span>
           </a>
+          @endcan
+          @can('voir rapports')
           <a class="nav-link" href="#">
             <span class="nav-icon"><i class="bi bi-funnel" aria-hidden="true"></i></span>
             <span class="nav-text">Filtrage et extraction</span>
           </a>
+          @endcan
         </div>
+        @endcanany
+
+        @if (auth()->user()->canAny(['voir utilisateurs', 'gérer paramètres']) || auth()->user()->supervise())
+        <div class="nav-section">
+          <span class="nav-section-label">Administration</span>
+          @can('voir utilisateurs')
+          <a class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if (request()->routeIs('users.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
+            <span class="nav-text">Gestion utilisateur</span>
+          </a>
+          @endcan
+          @if (auth()->user()->supervise())
+          <a class="nav-link {{ request()->routeIs('roles-permissions.*') ? 'active' : '' }}" href="{{ route('roles-permissions.index') }}" @if (request()->routeIs('roles-permissions.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+            <span class="nav-text">Gestion role et permission</span>
+          </a>
+          @endif
+          @can('gérer paramètres')
+          <a class="nav-link {{ request()->routeIs('localites.*') ? 'active' : '' }}" href="{{ route('localites.regions.index') }}" {{ request()->routeIs('localites.*') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+            <span class="nav-text">Localités</span>
+          </a>
+          <a class="nav-link {{ request()->routeIs('parametres.*') ? 'active' : '' }}" href="{{ route('parametres.edit') }}" {{ request()->routeIs('parametres.*') ? 'aria-current="page"' : '' }}>
+            <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
+            <span class="nav-text">Paramètres généraux</span>
+          </a>
+          @endcan
+        </div>
+        @endif
 
         <a class="nav-link {{ request()->routeIs('profile') ? 'active' : '' }}" href="{{ route('profile') }}">
           <span class="nav-icon"><i class="bi bi-person-badge" aria-hidden="true"></i></span>
@@ -166,14 +195,18 @@
               </button>
               <div class="dropdown-menu dropdown-menu-end notification-menu">
                 <div class="dropdown-header fw-bold text-body">Notifications</div>
+                @can('voir utilisateurs')
                 <a class="dropdown-item" href="{{ route('users.index') }}">
                   <span class="notification-title">New user registered</span>
                   <span class="notification-time">4 minutes ago</span>
                 </a>
+                @endcan
+                @if (auth()->user()->supervise())
                 <a class="dropdown-item" href="{{ route('roles-permissions.index') }}">
                   <span class="notification-title">Vérification des accès terminée</span>
                   <span class="notification-time">Il y a 32 minutes</span>
                 </a>
+                @endif
                 <a class="dropdown-item" href="{{ route('settings') }}">
                   <span class="notification-title">Security review completed</span>
                   <span class="notification-time">1 hour ago</span>

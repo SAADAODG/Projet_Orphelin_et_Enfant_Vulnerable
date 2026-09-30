@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Commune;
 use App\Models\Oev;
 use App\Models\User;
+use App\Models\Village;
+use Database\Seeders\CommuneSeeder;
+use Database\Seeders\LocaliteSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -19,14 +23,19 @@ class OevTest extends TestCase
     private User $dr;
     private User $central;
 
+    private Commune $ouagadougou;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed([RolePermissionSeeder::class, LocaliteSeeder::class, CommuneSeeder::class]);
         Storage::fake('local');
+        $this->ouagadougou = Commune::where('nom', 'Ouagadougou')->firstOrFail();
 
-        $this->dp = User::factory()->create()->assignRole('DP');
-        $this->dr = User::factory()->create()->assignRole('DR');
+        // Le DP et le DR ne voient que les dossiers de leur province / région : ceux des tests sont à Ouagadougou
+        $province = $this->ouagadougou->province;
+        $this->dp = User::factory()->create(['region_id' => $province->region_id, 'province_id' => $province->id])->assignRole('DP');
+        $this->dr = User::factory()->create(['region_id' => $province->region_id])->assignRole('DR');
         $this->central = User::factory()->create()->assignRole('agent DGFE');
     }
 
@@ -41,9 +50,12 @@ class OevTest extends TestCase
             'mere_vivante' => 'oui',
             'pere_vivant' => 'non',
             'a_acte_naissance' => '1',
+            'numero_acte_naissance' => 'AN-2015-0457',
             'tuteur_lien' => 'oncle_tante',
+            'tuteur_sexe' => 'M',
             'tuteur_a_cnib' => '1',
             'tuteur_cnib' => 'B1234567',
+            'tuteur_pret_continuer' => '1',
             'handicap' => '0',
             'situation_scolaire' => 'scolarise',
             'niveau_etude' => 'post_primaire_secondaire',
@@ -52,15 +64,18 @@ class OevTest extends TestCase
             'prenom_tuteur' => 'Issa',
             'contact_tuteur' => '+226 70 00 00 00',
             'etablissement_precedent' => 'École A de Koulouba',
-            'moyenne_annuelle' => '14.5',
+            // CM2 l'an dernier → moyenne sur 10 ; admise, elle est en 6e
+            'classe_precedente' => 'CM2',
+            'moyenne_annuelle' => '7.25',
             'appreciation' => 'admis',
+            'performance_scolaire' => 'bonnes',
             'etablissement_actuel' => 'Lycée Philippe Zinda Kaboré',
             'type_etablissement' => 'public',
             'classe' => '6e',
             'frais_scolarite' => 25000,
-            'region' => 'Centre',
-            'province' => 'Kadiogo',
-            'commune' => 'Ouagadougou',
+            'region_id' => $this->ouagadougou->province->region_id,
+            'province_id' => $this->ouagadougou->province_id,
+            'commune_id' => $this->ouagadougou->id,
         ];
     }
 
@@ -209,7 +224,7 @@ class OevTest extends TestCase
     {
         $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
             'date_naissance_estimee' => '1',
-            'lieu_naissance' => 'Kaya',
+            'lieu_naissance_commune_id' => Commune::where('nom', 'Kaya')->value('id'),
             'nationalite' => 'Burkinabè',
             'a_acte_naissance' => '1',
             'groupe_population' => 'pdi',
@@ -224,6 +239,7 @@ class OevTest extends TestCase
             'source_revenu' => 'aide_famille', 'niveau_revenu' => 'faible', 'logement' => 'site_deplaces',
             'date_identification' => now()->subDays(3)->toDateString(), 'identifie_par' => 'communaute', 'niveau_priorite' => 'eleve',
             'formation_professionnelle' => '1', 'formation_etat' => 'en_cours', 'formation_filiere' => 'Couture', 'formation_type_centre' => 'public',
+            'formation_duree_mois' => '24', 'formation_duree_recue_mois' => '6',
         ]))->assertSessionHasNoErrors();
 
         $oev = Oev::firstOrFail();
@@ -240,6 +256,8 @@ class OevTest extends TestCase
             ->assertSee('10/04/2023')
             ->assertSee('Oncle / tante')
             ->assertSee('Couture')
+            ->assertSee('24 mois')
+            ->assertSee('Kaya')
             ->assertSee('Secteur 12');
     }
 
@@ -290,9 +308,72 @@ class OevTest extends TestCase
             ->post(route('oevs.store'), $this->donneesOev(['pere_vivant' => 'non', 'tuteur_lien' => 'pere']))
             ->assertSessionHasErrors(['tuteur_lien' => 'Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.']);
 
-        // La mère vivante peut l'être, et son sexe est déduit
-        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_lien' => 'mere', 'tuteur_sexe' => 'M']))->assertSessionHasNoErrors();
-        $this->assertSame('F', Oev::firstOrFail()->tuteur_sexe);
+        // Un parent dont on ne sait pas s'il est vivant ne peut pas non plus être choisi
+        $this->post(route('oevs.store'), $this->donneesOev(['mere_vivante' => 'ne_sait_pas', 'tuteur_lien' => 'mere', 'mere_nom' => 'SAWADOGO', 'mere_prenoms' => 'Mariam']))
+            ->assertSessionHasErrors('tuteur_lien');
+
+        // La mère vivante peut l'être : ses nom et prénoms sont exigés dans « Parents »…
+        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_lien' => 'mere', 'nom_tuteur' => '', 'prenom_tuteur' => '', 'tuteur_sexe' => '']))
+            ->assertSessionHasErrors(['mere_nom', 'mere_prenoms'])->assertSessionDoesntHaveErrors(['nom_tuteur', 'prenom_tuteur', 'tuteur_sexe']);
+        // … puis repris comme identité du tuteur, et son sexe est déduit
+        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_lien' => 'mere', 'mere_nom' => 'SAWADOGO', 'mere_prenoms' => 'Mariam', 'nom_tuteur' => '', 'prenom_tuteur' => '', 'tuteur_sexe' => 'M']))
+            ->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame(['F', 'SAWADOGO', 'Mariam'], [$oev->tuteur_sexe, $oev->nom_tuteur, $oev->prenom_tuteur]);
+    }
+
+    public function test_les_deux_parents_peuvent_s_occuper_de_l_enfant(): void
+    {
+        $parents = ['tuteur_lien' => 'parents', 'pere_vivant' => 'oui', 'nom_tuteur' => '', 'prenom_tuteur' => '', 'tuteur_sexe' => '',
+            'pere_nom' => 'OUEDRAOGO', 'pere_prenoms' => 'Salif', 'mere_nom' => 'SAWADOGO', 'mere_prenoms' => 'Mariam'];
+
+        // Impossible si l'un des deux parents est décédé
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['pere_vivant' => 'non'] + $parents))
+            ->assertSessionHasErrors(['tuteur_lien' => 'Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.']);
+
+        $this->post(route('oevs.store'), $this->donneesOev($parents))->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame(['OUEDRAOGO / SAWADOGO', 'Salif et Mariam', null], [$oev->nom_tuteur, $oev->prenom_tuteur, $oev->tuteur_sexe]);
+        $this->get(route('oevs.show', $oev))->assertSee('Les deux parents (père et mère)');
+    }
+
+    public function test_la_raison_est_demandee_si_le_tuteur_ne_peut_pas_continuer(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['tuteur_pret_continuer' => '']))->assertSessionHasErrors('tuteur_pret_continuer');
+        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_pret_continuer' => '0']))->assertSessionHasErrors('tuteur_raison_arret');
+        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_pret_continuer' => '0', 'tuteur_raison_arret' => 'Manque de moyens']))->assertSessionHasNoErrors();
+        $this->get(route('oevs.show', Oev::firstOrFail()))->assertSee('Non — Manque de moyens');
+    }
+
+    public function test_numero_d_acte_et_lieu_de_naissance(): void
+    {
+        $this->actingAs($this->dp);
+
+        // Numéro d'acte exigé seulement si l'enfant a un acte
+        $this->post(route('oevs.store'), $this->donneesOev(['numero_acte_naissance' => '']))->assertSessionHasErrors('numero_acte_naissance');
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'SANS', 'a_acte_naissance' => '0', 'numero_acte_naissance' => '123']))->assertSessionHasNoErrors();
+        $this->assertNull(Oev::where('nom', 'SANS')->value('numero_acte_naissance'), 'Pas de numéro sans acte');
+
+        // Lieu de naissance : une commune de la liste, ou « autre » à préciser
+        $this->post(route('oevs.store'), $this->donneesOev(['lieu_naissance_commune_id' => '999999']))->assertSessionHasErrors('lieu_naissance_commune_id');
+        $this->post(route('oevs.store'), $this->donneesOev(['lieu_naissance_commune_id' => 'autre']))->assertSessionHasErrors('lieu_naissance');
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'ETRANGER', 'lieu_naissance_commune_id' => 'autre', 'lieu_naissance' => 'Abidjan, Côte d’Ivoire']))->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'LOCAL', 'lieu_naissance_commune_id' => $this->ouagadougou->id, 'lieu_naissance' => 'ignoré']))->assertSessionHasNoErrors();
+
+        $local = Oev::where('nom', 'LOCAL')->firstOrFail();
+        $this->assertSame([$this->ouagadougou->id, null], [$local->lieu_naissance_commune_id, $local->lieu_naissance]);
+        $this->assertSame('Abidjan, Côte d’Ivoire', Oev::where('nom', 'ETRANGER')->firstOrFail()->lieuDeNaissance());
+        $this->get(route('oevs.show', $local))->assertSee('AN-2015-0457');
+    }
+
+    public function test_maladie_nom_et_suivi_clinique(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['maladie_chronique' => '1']))
+            ->assertSessionHasErrors(['maladie_nom', 'suivi_clinique']);
+        $this->post(route('oevs.store'), $this->donneesOev(['maladie_chronique' => '1', 'maladie_nom' => 'Drépanocytose', 'suivi_clinique' => '1']))->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertTrue($oev->suivi_clinique);
+        $this->get(route('oevs.show', $oev))->assertSee('Drépanocytose')->assertSee('Suivi clinique');
     }
 
     public function test_les_dates_de_deces_sont_coherentes_avec_la_naissance(): void
@@ -316,7 +397,71 @@ class OevTest extends TestCase
             ->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => '6e']))
             ->assertSessionHasErrors(['classe' => 'La classe choisie ne correspond pas au niveau d’étude.']);
 
-        $this->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2']))->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'classe_precedente' => 'CM1']))->assertSessionHasNoErrors();
+    }
+
+    public function test_la_moyenne_est_sur_10_au_primaire_et_sur_20_ensuite(): void
+    {
+        $this->actingAs($this->dp);
+
+        // CM2 l'an dernier : 12 est impossible (sur 10), 8,5 est accepté
+        $this->post(route('oevs.store'), $this->donneesOev(['classe_precedente' => 'CM2', 'moyenne_annuelle' => '12']))
+            ->assertSessionHasErrors(['moyenne_annuelle' => 'La moyenne doit être comprise entre 0 et 10 (notation sur 10 en CM2).']);
+        // Maternelle : aussi sur 10
+        $this->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CP1', 'classe_precedente' => 'GS', 'moyenne_annuelle' => '10.5']))
+            ->assertSessionHasErrors('moyenne_annuelle');
+        // 6e l'an dernier : sur 20
+        $this->post(route('oevs.store'), $this->donneesOev(['classe' => '5e', 'classe_precedente' => '6e', 'moyenne_annuelle' => '21']))
+            ->assertSessionHasErrors('moyenne_annuelle');
+        $this->post(route('oevs.store'), $this->donneesOev(['classe' => '5e', 'classe_precedente' => '6e', 'moyenne_annuelle' => '14.5']))
+            ->assertSessionHasNoErrors();
+        $this->get(route('oevs.show', Oev::firstOrFail()))->assertSee('14,50 / 20');
+
+        // Une moyenne sans la classe (qui fixe le barème) est refusée
+        $this->post(route('oevs.store'), $this->donneesOev(['classe_precedente' => '']))->assertSessionHasErrors('classe_precedente');
+    }
+
+    public function test_l_appreciation_est_coherente_avec_la_classe_actuelle(): void
+    {
+        $this->actingAs($this->dp);
+
+        $this->post(route('oevs.store'), $this->donneesOev(['classe_precedente' => '6e', 'moyenne_annuelle' => '8', 'appreciation' => 'redouble', 'classe' => '5e']))
+            ->assertSessionHasErrors(['appreciation' => 'L’enfant a redoublé : sa classe actuelle devrait être la même que l’année précédente.']);
+        $this->post(route('oevs.store'), $this->donneesOev(['classe_precedente' => '6e', 'moyenne_annuelle' => '12', 'appreciation' => 'admis', 'classe' => '6e']))
+            ->assertSessionHasErrors('appreciation');
+        $this->post(route('oevs.store'), $this->donneesOev(['classe_precedente' => '6e', 'moyenne_annuelle' => '8', 'appreciation' => 'redouble', 'classe' => '6e']))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_performances_scolaires(): void
+    {
+        $this->actingAs($this->dp);
+
+        $this->post(route('oevs.store'), $this->donneesOev(['performance_scolaire' => '']))->assertSessionHasErrors('performance_scolaire');
+        $this->post(route('oevs.store'), $this->donneesOev(['performance_scolaire' => 'difficultes']))->assertSessionHasErrors('performance_difficultes');
+        $this->post(route('oevs.store'), $this->donneesOev(['performance_scolaire' => 'difficultes', 'performance_difficultes' => 'Lit difficilement']))->assertSessionHasNoErrors();
+        $this->get(route('oevs.show', Oev::firstOrFail()))->assertSee('Difficultés scolaires')->assertSee('Lit difficilement');
+
+        // Non scolarisé : pas de performances demandées ni conservées
+        $donnees = $this->donneesOev(['nom' => 'KABORE', 'situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite']);
+        $this->post(route('oevs.store'), $donnees)->assertSessionHasNoErrors();
+        $this->assertNull(Oev::where('nom', 'KABORE')->value('performance_scolaire'));
+    }
+
+    public function test_formation_professionnelle_et_durees(): void
+    {
+        $this->actingAs($this->dp);
+        $formation = ['formation_professionnelle' => '1', 'formation_etat' => 'en_cours', 'formation_filiere' => 'Couture', 'formation_type_centre' => 'prive'];
+
+        $this->post(route('oevs.store'), $this->donneesOev($formation))->assertSessionHasErrors(['formation_duree_mois', 'formation_duree_recue_mois']);
+        $this->post(route('oevs.store'), $this->donneesOev($formation + ['formation_duree_mois' => '12', 'formation_duree_recue_mois' => '15']))
+            ->assertSessionHasErrors(['formation_duree_recue_mois' => 'La durée déjà reçue ne peut pas dépasser la durée de la formation.']);
+        $this->post(route('oevs.store'), $this->donneesOev($formation + ['formation_duree_mois' => '12', 'formation_duree_recue_mois' => '5']))->assertSessionHasNoErrors();
+        $this->assertSame(5, Oev::firstOrFail()->formation_duree_recue_mois);
+
+        // Formation achevée : la durée reçue n'est pas demandée, elle vaut la durée totale
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'KABORE', 'formation_etat' => 'achevee', 'formation_duree_mois' => '18'] + $formation))->assertSessionHasNoErrors();
+        $this->assertSame(18, Oev::where('nom', 'KABORE')->value('formation_duree_recue_mois'));
     }
 
     public function test_les_vulnerabilites_automatiques_et_grossesse(): void
@@ -336,7 +481,7 @@ class OevTest extends TestCase
     {
         $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
             'lieu_de_vie' => 'autre', 'vulnerabilites' => ['autre'], 'tuteur_lien' => 'autre_parent', 'maladie_chronique' => '1', 'formation_professionnelle' => '1',
-        ]))->assertSessionHasErrors(['lieu_de_vie_precision', 'vulnerabilite_precision', 'tuteur_lien_precision', 'maladie_details', 'formation_etat', 'formation_filiere', 'formation_type_centre']);
+        ]))->assertSessionHasErrors(['lieu_de_vie_precision', 'vulnerabilite_precision', 'tuteur_lien_precision', 'maladie_nom', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois']);
     }
 
     public function test_questions_de_base_obligatoires(): void
@@ -390,11 +535,61 @@ class OevTest extends TestCase
     public function test_les_messages_d_erreur_du_formulaire_sont_en_francais(): void
     {
         $this->actingAs($this->dp)
-            ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region' => '']))
+            ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region_id' => '']))
             ->assertSessionHasErrors([
                 'classe' => 'Le champ « classe » est obligatoire pour un enfant scolarisé.',
-                'region' => 'Le champ « région » est obligatoire.',
+                'region_id' => 'Le champ « région » est obligatoire.',
             ]);
+    }
+
+    public function test_la_localite_est_rattachee_aux_tables_et_doit_etre_coherente(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev())->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame('Ouagadougou', $oev->commune->nom);
+        $this->assertSame('Kadiogo', $oev->province->nom);
+        $this->get(route('oevs.show', $oev))->assertSee('Ouagadougou');
+        $this->get(route('oevs.index', ['q' => 'Kadiogo']))->assertOk()->assertSee('OUEDRAOGO');
+
+        // Une commune qui n'appartient pas à la province choisie est refusée.
+        $autreCommune = Commune::where('province_id', '!=', $this->ouagadougou->province_id)->firstOrFail();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'KABORE', 'commune_id' => $autreCommune->id]))
+            ->assertSessionHasErrors('commune_id');
+
+        // Une commune utilisée par un dossier ne peut pas être supprimée.
+        $admin = User::factory()->create();
+        $admin->assignRole('administrateur');
+        $this->actingAs($admin)->delete(route('localites.communes.destroy', $this->ouagadougou))->assertSessionHas('error');
+        $this->assertModelExists($this->ouagadougou);
+    }
+
+    public function test_le_dossier_peut_etre_rattache_a_un_village_de_la_commune(): void
+    {
+        $village = Village::create(['commune_id' => $this->ouagadougou->id, 'nom' => 'Secteur 12']);
+        $autreCommune = Commune::where('province_id', $this->ouagadougou->province_id)->whereKeyNot($this->ouagadougou->id)->firstOrFail();
+        $villageAilleurs = Village::create(['commune_id' => $autreCommune->id, 'nom' => 'Village-ailleurs']);
+
+        // Le formulaire propose le village dans la liste en cascade
+        $this->actingAs($this->dp)->get(route('oevs.create'))->assertOk()->assertSee('Secteur 12')->assertSee('name="village_id"', false);
+
+        // Un village d'une autre commune est refusé
+        $this->post(route('oevs.store'), $this->donneesOev(['village_id' => $villageAilleurs->id]))->assertSessionHasErrors('village_id');
+
+        $this->post(route('oevs.store'), $this->donneesOev(['village_id' => $village->id]))->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame($village->id, $oev->village_id);
+        $this->get(route('oevs.show', $oev))->assertSee('Secteur 12');
+
+        // Changement de commune sans village (liste vide, donc non envoyée) : l'ancien village est retiré
+        $this->put(route('oevs.update', $oev), $this->donneesOev(['commune_id' => $autreCommune->id]))->assertSessionHasNoErrors();
+        $this->assertNull($oev->refresh()->village_id);
+        $this->assertSame($autreCommune->id, $oev->commune_id);
+
+        // Un village utilisé par un dossier ne peut pas être supprimé
+        $oev->update(['village_id' => $villageAilleurs->id]);
+        $admin = User::factory()->create()->assignRole('administrateur');
+        $this->actingAs($admin)->delete(route('localites.villages.destroy', $villageAilleurs))->assertSessionHas('error');
+        $this->assertModelExists($villageAilleurs);
     }
 
     // ---------- Circuit DP → DR → central ----------
@@ -509,7 +704,7 @@ class OevTest extends TestCase
         $this->get(route('oevs.validation', ['etat' => 'complement']))->assertSee($oev->numero_dossier);
         $this->get(route('oevs.show', $oev))->assertSee('Préciser la classe de l’année en cours')->assertSee('Valider et renvoyer au central');
         $this->get(route('oevs.edit', $oev))->assertOk()->assertSee('Complément demandé par le niveau central');
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'nom_structure_rib' => 'Association Espoir']))
+        $this->put(route('oevs.update', $oev), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'classe_precedente' => 'CM1', 'nom_structure_rib' => 'Association Espoir']))
             ->assertSessionHasNoErrors();
         $this->assertSame('CM2', $oev->refresh()->classe);
         $this->assertSame(Oev::ETAT_COMPLEMENT, $oev->statut_dossier);
@@ -616,12 +811,12 @@ class OevTest extends TestCase
 
         // Le DP ne rejette jamais
         $this->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
-        // Dossier non soumis : ni le DR ni le central ne peuvent le rejeter
-        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertSessionHasErrors('circuit');
+        // Dossier non soumis : ni le DR ni le central ne peuvent le rejeter (ils ne le voient pas encore)
+        $this->actingAs($this->dr)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
 
-        // Dossier soumis : le central ne peut pas encore le rejeter (c'est au DR)
+        // Dossier soumis : le central ne peut pas encore le rejeter (c'est au DR) ; il ne le voit même pas
         $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
-        $this->actingAs($this->central)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertSessionHasErrors('circuit');
+        $this->actingAs($this->central)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'x'])->assertForbidden();
 
         // Dossier validé : c'est au central, plus au DR
         $this->actingAs($this->dr)->post(route('oevs.conforme', $oev));
@@ -633,11 +828,16 @@ class OevTest extends TestCase
     {
         $oev = $this->dossierComplet();
 
-        // Pas de validation DR ni d'intégration sur un dossier non soumis
-        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertSessionHasErrors('circuit');
-        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertSessionHasErrors('circuit');
+        // Pas de validation DR ni d'intégration sur un dossier non soumis : il ne leur est même pas visible
+        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertForbidden();
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
         $this->assertSame(Oev::ETAT_BROUILLON, $oev->refresh()->statut_dossier);
         $this->assertNull($oev->code);
+
+        // Soumis au DR : le central ne peut toujours pas l'intégrer avant la validation
+        $this->actingAs($this->dp)->post(route('oevs.soumettre', $oev));
+        $this->actingAs($this->central)->post(route('oevs.integrer', $oev))->assertForbidden();
+        $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
     }
 
     public function test_chaque_niveau_n_a_acces_qu_a_son_etape(): void
