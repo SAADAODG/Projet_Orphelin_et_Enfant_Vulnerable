@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Plateforme OEV du Ministère de la Famille et de la Solidarité">
   <title>@yield('title', 'Ministère de la Famille et de la Solidarité')</title>
+  @include('partials.favicon')
 
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/vendors/fontawesome/css/all.min.css') }}">

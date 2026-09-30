@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{{ $siteSetting->structure_description ?? $siteSetting->nom_site }}">
   <title>@yield('title', $siteSetting->ministere_tutelle ?? $siteSetting->nom_site)</title>
+  @include('partials.favicon')
 
   {{-- Police du site public, réglable depuis Paramètres généraux > Apparence (voir config/fonts.php) --}}
   @if ($siteSetting->police_public_config['stylesheet'])
