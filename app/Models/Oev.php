@@ -19,6 +19,18 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
     'motif_complement', 'complement_at', 'complement_par',
     'motif_rejet', 'rejete_niveau', 'rejete_at', 'rejete_par',
+    // Fiche d'identification (champs OEV)
+    'date_naissance_estimee', 'lieu_naissance', 'nationalite', 'a_acte_naissance', 'numero_identification', 'groupe_population',
+    'quartier', 'lieu_provenance',
+    'mere_nom', 'mere_prenoms', 'mere_vivante', 'mere_date_deces', 'mere_deces_confirme',
+    'pere_nom', 'pere_prenoms', 'pere_vivant', 'pere_date_deces', 'pere_deces_confirme',
+    'lieu_de_vie', 'lieu_de_vie_precision', 'tuteur_sexe', 'tuteur_lien', 'tuteur_lien_precision', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer',
+    'vulnerabilites', 'vulnerabilite_precision',
+    'situation_scolaire', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision',
+    'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre',
+    'types_handicap', 'maladie_chronique', 'maladie_details',
+    'source_revenu', 'niveau_revenu', 'logement',
+    'date_identification', 'identifie_par', 'niveau_priorite',
 ])]
 class Oev extends Model
 {
@@ -80,6 +92,156 @@ class Oev extends Model
 
     public const TYPES_ETABLISSEMENT = ['public' => 'Public', 'prive' => 'Privé'];
 
+    /* ---------- Listes de la fiche d'identification (retenues pour les OEV) ---------- */
+
+    public const OUI_NON = ['1' => 'Oui', '0' => 'Non'];
+
+    /** Lien du tuteur avec l'enfant. « mere »/« pere » : impossible si le parent est décédé. */
+    public const LIENS_TUTEUR = [
+        'mere' => 'Mère',
+        'pere' => 'Père',
+        'grand_parent' => 'Grand-parent',
+        'oncle_tante' => 'Oncle / tante',
+        'frere_soeur' => 'Frère / sœur',
+        'autre_parent' => 'Autre membre de la famille',
+        'sans_lien' => 'Sans lien de parenté',
+    ];
+
+    /** Groupes de population pour lesquels le lieu de provenance est demandé. */
+    public const GROUPES_MOBILES = ['pdi', 'migrant', 'rapatrie', 'refugie', 'demandeur_asile'];
+
+    /** Classes par niveau d'étude (la classe doit correspondre au niveau). */
+    public const CLASSES = [
+        'primaire' => ['CP1' => 'CP1', 'CP2' => 'CP2', 'CE1' => 'CE1', 'CE2' => 'CE2', 'CM1' => 'CM1', 'CM2' => 'CM2'],
+        'post_primaire_secondaire' => ['6e' => '6e', '5e' => '5e', '4e' => '4e', '3e' => '3e', '2nde' => '2nde', '1ère' => '1ère', 'Tle' => 'Terminale'],
+        'superieur' => ['L1' => 'Licence 1', 'L2' => 'Licence 2', 'L3' => 'Licence 3', 'M1' => 'Master 1', 'M2' => 'Master 2', 'BTS' => 'BTS / DUT', 'Doctorat' => 'Doctorat'],
+    ];
+
+    public const PARENT_VIVANT = ['oui' => 'Oui', 'non' => 'Non (décédé)', 'ne_sait_pas' => 'Ne sait pas'];
+
+    public const GROUPES_POPULATION = [
+        'communaute' => 'Membre de la communauté',
+        'pdi' => 'Personne déplacée interne (PDI)',
+        'migrant' => 'Migrant',
+        'rapatrie' => 'Rapatrié',
+        'refugie' => 'Réfugié',
+        'demandeur_asile' => 'Demandeur d’asile',
+        'apatride' => 'Apatride',
+        'autre' => 'Autre',
+    ];
+
+    public const LIEUX_DE_VIE = [
+        'famille_biologique' => 'Famille biologique',
+        'famille_elargie' => 'Famille élargie ou étendue',
+        'famille_accueil' => 'Famille d’accueil',
+        'structure_accueil' => 'Structure d’accueil / institution',
+        'frere_soeur_adulte' => 'Frère ou sœur d’âge adulte',
+        'vit_seul' => 'Vit seul',
+        'enfant_chef_menage' => 'Sous la responsabilité d’un enfant chef de ménage',
+        'site_deplaces' => 'Camp / site de réfugiés ou déplacés',
+        'rue' => 'En rue',
+        'autre' => 'Autre',
+    ];
+
+    public const VULNERABILITES = [
+        'orphelin' => 'Orphelin',
+        'separe' => 'Séparé',
+        'non_accompagne' => 'Non accompagné',
+        'abandon' => 'Abandon',
+        'negligence' => 'Négligence',
+        'sante_grave' => 'Problème de santé grave',
+        'handicap' => 'Handicap',
+        'sans_acte_naissance' => 'Absence d’acte de naissance',
+        'precarite' => 'Précarité du ménage',
+        'travail' => 'Travail des enfants',
+        'enfant_marie' => 'Enfant marié',
+        'grossesse' => 'Grossesse',
+        'detresse' => 'Détresse psychosociale',
+        'autre' => 'Autre',
+    ];
+
+    public const SITUATIONS_SCOLAIRES = [
+        'scolarise' => 'Scolarisé',
+        'non_scolarise' => 'Non scolarisé',
+        'descolarise' => 'Déscolarisé',
+        'non_formelle' => 'Éducation non formelle',
+        'foyer_coranique' => 'Foyer coranique',
+    ];
+
+    public const NIVEAUX_ETUDE = [
+        'primaire' => 'Cycle primaire',
+        'post_primaire_secondaire' => 'Cycle post-primaire et secondaire',
+        'superieur' => 'Cycle supérieur',
+    ];
+
+    public const RAISONS_NON_SCOLARISATION = [
+        'financieres' => 'Contraintes financières / matérielles',
+        'infrastructures' => 'Absence d’infrastructures',
+        'insecurite' => 'Insécurité / crise',
+        'sante' => 'Problèmes de santé',
+        'mariage' => 'Mariage',
+        'grossesse' => 'Grossesse',
+        'refus_famille' => 'Refus de la famille',
+        'refus_enfant' => 'Refus de l’enfant',
+        'autre' => 'Autre',
+    ];
+
+    public const ETATS_FORMATION = ['en_cours' => 'En cours', 'achevee' => 'Achevée'];
+
+    public const TYPES_HANDICAP = [
+        'auditif' => 'Déficience auditive',
+        'visuel' => 'Déficience visuelle',
+        'moteur' => 'Déficience motrice / mobilité',
+        'mental' => 'Handicap mental',
+    ];
+
+    public const SOURCES_REVENU = [
+        'fonds_propres' => 'Fonds propres de la famille',
+        'aide_famille' => 'Aide d’autres membres de la famille',
+        'ong_services' => 'Soutien d’ONG / services sociaux',
+        'mendicite' => 'Pratique de la mendicité',
+    ];
+
+    public const NIVEAUX = ['faible' => 'Faible', 'moyen' => 'Moyen', 'eleve' => 'Élevé'];
+
+    public const LOGEMENTS = [
+        'proprietaire' => 'Propriétaire',
+        'location' => 'Maison louée',
+        'zone_non_lotie' => 'Zone non lotie',
+        'site_deplaces' => 'Site / camp de réfugiés ou déplacés',
+        'abri_precaire' => 'Abri précaire ou inadéquat',
+        'sans_abri' => 'Sans-abri / vit dans la rue',
+    ];
+
+    public const IDENTIFIE_PAR = [
+        'institution' => 'Une institution / école',
+        'communaute' => 'La communauté',
+        'famille' => 'La famille',
+        'travailleur_social' => 'Le travailleur social',
+        'services_sociaux' => 'Visite aux services sociaux',
+        'particulier' => 'Un particulier',
+    ];
+
+    /**
+     * Statut OEV déduit de la situation des parents : un parent décédé (« non ») fait de l'enfant un orphelin ;
+     * sinon (vivants ou inconnus) l'enfant est considéré comme vulnérable.
+     */
+    public static function calculerStatut(?string $mereVivante, ?string $pereVivant): string
+    {
+        return match (true) {
+            $mereVivante === 'non' && $pereVivant === 'non' => 'orphelin_double',
+            $mereVivante === 'non' => 'orphelin_mere',
+            $pereVivant === 'non' => 'orphelin_pere',
+            default => 'vulnerable',
+        };
+    }
+
+    /** Libellés d'un champ à choix multiples (tableau de codes), ex. vulnérabilités. */
+    public function libelles(string $champ, array $liste): array
+    {
+        return collect((array) $this->{$champ})->map(fn ($code) => $liste[$code] ?? $code)->values()->all();
+    }
+
     /** Pièces constituant le dossier d'un OEV. */
     public const DOCUMENTS = [
         'acte_naissance' => 'Acte de naissance',
@@ -104,6 +266,19 @@ class Oev extends Model
             'integre_at' => 'datetime',
             'complement_at' => 'datetime',
             'rejete_at' => 'datetime',
+            'date_naissance_estimee' => 'boolean',
+            'a_acte_naissance' => 'boolean',
+            'mere_date_deces' => 'date',
+            'mere_deces_confirme' => 'boolean',
+            'pere_date_deces' => 'date',
+            'pere_deces_confirme' => 'boolean',
+            'tuteur_pret_continuer' => 'boolean',
+            'tuteur_a_cnib' => 'boolean',
+            'vulnerabilites' => 'array',
+            'formation_professionnelle' => 'boolean',
+            'types_handicap' => 'array',
+            'maladie_chronique' => 'boolean',
+            'date_identification' => 'date',
         ];
     }
 
@@ -214,10 +389,6 @@ class Oev extends Model
             || ($this->statut_dossier === self::ETAT_COMPLEMENT && $utilisateur->can('valider dossiers'));
     }
 
-    public function estComplet(): bool
-    {
-        return $this->nombreDocuments() >= count(self::DOCUMENTS);
-    }
 
     public function libelleEtat(): string
     {
@@ -312,35 +483,80 @@ class Oev extends Model
         return $liste[$this->{$champ}] ?? (string) $this->{$champ};
     }
 
-    public function nombreDocuments(): int
+    /* ---------- Pièces du dossier : seules celles qui s'appliquent à l'enfant sont exigées ---------- */
+
+    /**
+     * Pièces exigées pour cet enfant, d'après ses réponses :
+     * pas d'acte de naissance → pas d'acte à charger ; non scolarisé → pas de certificat de scolarité ;
+     * tuteur sans CNIB → pas de CNIB à charger. La photo et le RIB sont toujours demandés.
+     *
+     * @return array<string, string> type => libellé
+     */
+    public function piecesRequises(): array
     {
-        return $this->documents_count ?? ($this->relationLoaded('documents') ? $this->documents->count() : $this->documents()->count());
+        return array_filter(self::DOCUMENTS, fn ($type) => self::pieceRequise($type, [
+            'a_acte_naissance' => $this->a_acte_naissance,
+            'situation_scolaire' => $this->situation_scolaire,
+            'tuteur_a_cnib' => $this->tuteur_a_cnib,
+        ]), ARRAY_FILTER_USE_KEY);
     }
 
-    /** aucun | incomplet | complet */
-    public function etatDossier(): string
+    /** Règle d'exigence d'une pièce à partir des réponses (utilisée aussi à la validation). */
+    public static function pieceRequise(string $type, array $reponses): bool
     {
-        $nombre = $this->nombreDocuments();
+        $faux = fn ($valeur) => $valeur === false || $valeur === 0 || $valeur === '0';
 
-        return match (true) {
-            $nombre === 0 => 'aucun',
-            $nombre >= count(self::DOCUMENTS) => 'complet',
-            default => 'incomplet',
+        return match ($type) {
+            'acte_naissance' => ! $faux($reponses['a_acte_naissance'] ?? null),
+            'certificat_scolarite' => ($reponses['situation_scolaire'] ?? null) === 'scolarise',
+            'cnib_tuteur' => ! $faux($reponses['tuteur_a_cnib'] ?? null),
+            default => true,
         };
     }
 
-    public function scopeDossierComplet(Builder $query): Builder
+    /** Raison pour laquelle une pièce n'est pas demandée (affichée au DP). */
+    public const RAISONS_PIECE_NON_REQUISE = [
+        'acte_naissance' => 'l’enfant n’a pas d’acte de naissance',
+        'certificat_scolarite' => 'l’enfant n’est pas scolarisé',
+        'cnib_tuteur' => 'le tuteur n’a pas de CNIB',
+    ];
+
+    /** Types des pièces exigées déjà fournies. */
+    public function piecesFournies(): array
     {
-        return $query->has('documents', '>=', count(self::DOCUMENTS));
+        $types = $this->relationLoaded('documents') ? $this->documents->pluck('type')->all() : $this->documents()->pluck('type')->all();
+
+        return array_values(array_intersect(array_keys($this->piecesRequises()), $types));
     }
 
-    public function scopeDossierIncomplet(Builder $query): Builder
+    public function nombreDocuments(): int
     {
-        return $query->has('documents', '>=', 1)->has('documents', '<', count(self::DOCUMENTS));
+        return count($this->piecesFournies());
     }
 
-    public function scopeSansDossier(Builder $query): Builder
+    public function estComplet(): bool
     {
-        return $query->doesntHave('documents');
+        return count($this->piecesFournies()) >= count($this->piecesRequises());
+    }
+
+    /* ---------- Cohérence des réponses ---------- */
+
+    /**
+     * Vulnérabilités déduites des réponses (cochées automatiquement, non modifiables à la main) :
+     * orphelin si un parent est décédé, handicap, absence d'acte de naissance.
+     */
+    public static function vulnerabilitesAutomatiques(array $donnees): array
+    {
+        return array_keys(array_filter([
+            'orphelin' => ($donnees['mere_vivante'] ?? null) === 'non' || ($donnees['pere_vivant'] ?? null) === 'non',
+            'handicap' => (bool) ($donnees['handicap'] ?? false),
+            'sans_acte_naissance' => isset($donnees['a_acte_naissance']) && ! $donnees['a_acte_naissance'],
+        ]));
+    }
+
+    /** Classes proposées pour un niveau d'étude. */
+    public static function classesDuNiveau(?string $niveau): array
+    {
+        return self::CLASSES[$niveau] ?? [];
     }
 }

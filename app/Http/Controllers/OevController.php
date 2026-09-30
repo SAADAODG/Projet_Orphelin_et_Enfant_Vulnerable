@@ -56,6 +56,49 @@ class OevController extends Controller
         'province' => 'province',
         'commune' => 'commune',
         'nom_structure_rib' => 'nom de la structure',
+        'date_naissance_estimee' => 'date estimée',
+        'lieu_naissance' => 'lieu de naissance',
+        'nationalite' => 'nationalité',
+        'a_acte_naissance' => 'acte de naissance',
+        'numero_identification' => 'numéro d’identification',
+        'groupe_population' => 'groupe de population',
+        'quartier' => 'quartier / village / secteur',
+        'lieu_provenance' => 'lieu de provenance',
+        'tuteur_sexe' => 'sexe du tuteur',
+        'tuteur_lien' => 'lien de parenté du tuteur',
+        'tuteur_cnib' => 'numéro CNIB du tuteur',
+        'tuteur_pret_continuer' => 'disponibilité du tuteur',
+        'mere_nom' => 'nom de la mère',
+        'mere_prenoms' => 'prénoms de la mère',
+        'mere_vivante' => 'mère vivante',
+        'mere_date_deces' => 'date du décès de la mère',
+        'mere_deces_confirme' => 'décès de la mère confirmé',
+        'pere_nom' => 'nom du père',
+        'pere_prenoms' => 'prénoms du père',
+        'pere_vivant' => 'père vivant',
+        'pere_date_deces' => 'date du décès du père',
+        'pere_deces_confirme' => 'décès du père confirmé',
+        'lieu_de_vie' => 'lieu de vie de l’enfant',
+        'lieu_de_vie_precision' => 'précision sur le lieu de vie',
+        'vulnerabilites' => 'situations de vulnérabilité',
+        'vulnerabilite_precision' => 'autre situation de vulnérabilité',
+        'types_handicap' => 'type de handicap',
+        'maladie_chronique' => 'maladie chronique',
+        'maladie_details' => 'détails sur la maladie',
+        'source_revenu' => 'source de revenu',
+        'niveau_revenu' => 'niveau de revenu',
+        'logement' => 'logement',
+        'date_identification' => 'date d’identification',
+        'identifie_par' => 'personne ou institution ayant identifié l’enfant',
+        'niveau_priorite' => 'niveau de priorité',
+        'situation_scolaire' => 'situation scolaire',
+        'niveau_etude' => 'niveau d’étude',
+        'raison_non_scolarisation' => 'raison de la non-scolarisation',
+        'raison_non_scolarisation_precision' => 'précision sur la raison',
+        'formation_professionnelle' => 'formation professionnelle',
+        'formation_etat' => 'état de la formation',
+        'formation_filiere' => 'filière de formation',
+        'formation_type_centre' => 'type de centre de formation',
     ];
 
     /** DP — « Constituer dossier enfant » : tous les dossiers, quel que soit leur état. */
@@ -176,7 +219,7 @@ class OevController extends Controller
      */
     private function apresEnregistrement(Request $request, Oev $oev, string $message)
     {
-        $oev->loadCount('documents');
+        $oev->load('documents');
         $redirection = redirect()->route('oevs.show', $oev);
 
         if ($request->boolean('soumettre')) {
@@ -187,13 +230,21 @@ class OevController extends Controller
             }
 
             return $redirection->with('success', $message)->withErrors([
-                'circuit' => 'Le dossier n’a pas été soumis au DR : il manque ' . (count(Oev::DOCUMENTS) - $oev->documents_count) . ' pièce(s).',
+                'circuit' => 'Le dossier n’a pas été soumis au DR : il manque ' . $this->piecesManquantes($oev) . '.',
             ]);
         }
 
         return $redirection->with('success', $oev->estComplet()
             ? "{$message} Le dossier est complet : cliquez sur « Soumettre au DR » pour le transmettre."
             : "{$message} Complétez les pièces puis soumettez-le au DR.");
+    }
+
+    /** Liste lisible des pièces exigées non encore fournies, ex. « l’acte de naissance, la photo ». */
+    private function piecesManquantes(Oev $oev): string
+    {
+        $manquantes = array_diff_key($oev->piecesRequises(), array_flip($oev->piecesFournies()));
+
+        return mb_strtolower(implode(', ', $manquantes));
     }
 
     private function transmettreAuDr(Request $request, Oev $oev): void
@@ -222,7 +273,7 @@ class OevController extends Controller
             return $refus;
         }
         if (! $oev->estComplet()) {
-            return back()->withErrors(['circuit' => 'Le dossier doit comporter les ' . count(Oev::DOCUMENTS) . ' pièces avant d’être soumis au DR.']);
+            return back()->withErrors(['circuit' => 'Le dossier ne peut pas être soumis au DR : il manque ' . $this->piecesManquantes($oev) . '.']);
         }
 
         $this->transmettreAuDr($request, $oev);
@@ -349,7 +400,7 @@ class OevController extends Controller
         $statut = $request->query('statut');
         $recherche = trim((string) $request->query('q'));
 
-        $oevs = Oev::withCount('documents')
+        $oevs = Oev::with('documents:id,oev_id,type')
             ->etat(...($etat ? [$etat] : $etats))
             ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
@@ -441,32 +492,120 @@ class OevController extends Controller
             $request->merge(['contact_tuteur' => Oev::numeroLocal($request->input('contact_tuteur'))]);
         }
 
+        $choix = fn (array $liste) => ['nullable', Rule::in(array_keys($liste))];
+        $entree = fn (string $champ) => $request->input($champ);
+
+        // Conditions entre champs (les mêmes que l'affichage conditionnel du formulaire)
+        $situation = $entree('situation_scolaire');
+        $estScolarise = $situation === 'scolarise';
+        $aEteScolarise = in_array($situation, ['scolarise', 'descolarise'], true);
+        $nonScolarise = in_array($situation, ['non_scolarise', 'descolarise'], true);
+        $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
+        $scolariseRequis = Rule::requiredIf($estScolarise);
+
+        // Un parent décédé ne peut pas être le tuteur
+        $tuteurVivant = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
+            if ($valeur === 'mere' && $entree('mere_vivante') === 'non') {
+                $echec('La mère est déclarée décédée : elle ne peut pas être la tutrice de l’enfant.');
+            }
+            if ($valeur === 'pere' && $entree('pere_vivant') === 'non') {
+                $echec('Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.');
+            }
+        };
+        // Le père peut être décédé pendant la grossesse (jusqu'à 10 mois avant la naissance), pas avant
+        $decesPereCoherent = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
+            $naissance = strtotime((string) $entree('date_naissance'));
+            if ($naissance && strtotime((string) $valeur) < strtotime('-10 months', $naissance)) {
+                $echec('La date du décès du père est incohérente avec la date de naissance de l’enfant.');
+            }
+        };
+
         $regles = [
+            // Identité
             'nom' => ['required', 'string', 'max:100'],
             'prenom' => ['required', 'string', 'max:150'],
             'sexe' => ['required', Rule::in(array_keys(Oev::SEXES))],
             'date_naissance' => ['required', 'date', 'before_or_equal:today', 'after:' . now()->subYears(25)->toDateString()],
-            'statut' => ['required', Rule::in(array_keys(Oev::STATUTS))],
-            'handicap' => ['required', 'boolean'],
-            'nature_handicap' => ['nullable', 'required_if:handicap,1', 'string', 'max:255'],
-            'systeme_educatif' => ['required', Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
+            'date_naissance_estimee' => ['nullable', 'boolean'],
+            'lieu_naissance' => ['nullable', 'string', 'max:150'],
+            'nationalite' => ['nullable', 'string', 'max:100'],
+            'a_acte_naissance' => ['required', 'boolean'],
+            'numero_identification' => ['nullable', 'string', 'max:100'],
+            'groupe_population' => $choix(Oev::GROUPES_POPULATION),
 
-            'nom_tuteur' => ['required', 'string', 'max:100'],
-            'prenom_tuteur' => ['required', 'string', 'max:150'],
-            'contact_tuteur' => ['required', 'regex:/^\d{8}$/'],
-
-            'etablissement_precedent' => ['nullable', 'string', 'max:255'],
-            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', 'max:20'],
-            'appreciation' => ['nullable', Rule::in(array_keys(Oev::APPRECIATIONS))],
-
-            'etablissement_actuel' => ['required', 'string', 'max:255'],
-            'type_etablissement' => ['required', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
-            'classe' => ['required', 'string', 'max:50'],
-            'frais_scolarite' => ['required', 'integer', 'min:0'],
-
+            // Adresse
             'region' => ['required', 'string', 'max:100'],
             'province' => ['required', 'string', 'max:100'],
             'commune' => ['required', 'string', 'max:100'],
+            'quartier' => ['nullable', 'string', 'max:150'],
+            'lieu_provenance' => ['nullable', 'string', 'max:150'],
+
+            // Parents (situation d'orphelin) : « vivant ? » obligatoire, le statut OEV en est déduit
+            'mere_nom' => ['nullable', 'string', 'max:100'],
+            'mere_prenoms' => ['nullable', 'string', 'max:150'],
+            'mere_vivante' => ['required', Rule::in(array_keys(Oev::PARENT_VIVANT))],
+            'mere_date_deces' => ['nullable', 'date', 'before_or_equal:today', 'after_or_equal:date_naissance'],
+            'mere_deces_confirme' => ['nullable', 'boolean'],
+            'pere_nom' => ['nullable', 'string', 'max:100'],
+            'pere_prenoms' => ['nullable', 'string', 'max:150'],
+            'pere_vivant' => ['required', Rule::in(array_keys(Oev::PARENT_VIVANT))],
+            'pere_date_deces' => ['nullable', 'date', 'before_or_equal:today', $decesPereCoherent],
+            'pere_deces_confirme' => ['nullable', 'boolean'],
+
+            // Tuteur
+            'tuteur_lien' => ['required', Rule::in(array_keys(Oev::LIENS_TUTEUR)), $tuteurVivant],
+            'tuteur_lien_precision' => ['nullable', 'required_if:tuteur_lien,autre_parent', 'string', 'max:100'],
+            'nom_tuteur' => ['required', 'string', 'max:100'],
+            'prenom_tuteur' => ['required', 'string', 'max:150'],
+            'contact_tuteur' => ['required', 'regex:/^\d{8}$/'],
+            'tuteur_sexe' => ['nullable', Rule::in(['M', 'F'])],
+            'tuteur_a_cnib' => ['required', 'boolean'],
+            'tuteur_cnib' => ['nullable', 'required_if:tuteur_a_cnib,1', 'string', 'max:50'],
+            'tuteur_pret_continuer' => ['nullable', 'boolean'],
+
+            // Conditions de vie et vulnérabilités
+            'lieu_de_vie' => $choix(Oev::LIEUX_DE_VIE),
+            'lieu_de_vie_precision' => ['nullable', 'required_if:lieu_de_vie,autre', 'string', 'max:150'],
+            'vulnerabilites' => ['nullable', 'array'],
+            'vulnerabilites.*' => [Rule::in(array_keys(Oev::VULNERABILITES))],
+            'vulnerabilite_precision' => ['nullable', Rule::requiredIf(in_array('autre', $vulnerabilitesSaisies, true)), 'string', 'max:255'],
+
+            // Santé
+            'handicap' => ['required', 'boolean'],
+            'types_handicap' => ['nullable', 'array', 'required_if:handicap,1'],
+            'types_handicap.*' => [Rule::in(array_keys(Oev::TYPES_HANDICAP))],
+            'nature_handicap' => ['nullable', 'string', 'max:255'],
+            'maladie_chronique' => ['nullable', 'boolean'],
+            'maladie_details' => ['nullable', 'required_if:maladie_chronique,1', 'string', 'max:255'],
+
+            // Ménage
+            'source_revenu' => $choix(Oev::SOURCES_REVENU),
+            'niveau_revenu' => $choix(Oev::NIVEAUX),
+            'logement' => $choix(Oev::LOGEMENTS),
+
+            // Identification du cas
+            'date_identification' => ['nullable', 'date', 'before_or_equal:today', 'after_or_equal:date_naissance'],
+            'identifie_par' => $choix(Oev::IDENTIFIE_PAR),
+            'niveau_priorite' => $choix(Oev::NIVEAUX),
+
+            // Scolarité
+            'situation_scolaire' => ['required', Rule::in(array_keys(Oev::SITUATIONS_SCOLAIRES))],
+            'niveau_etude' => ['nullable', Rule::requiredIf($aEteScolarise), Rule::in(array_keys(Oev::NIVEAUX_ETUDE))],
+            'raison_non_scolarisation' => ['nullable', Rule::requiredIf($nonScolarise), Rule::in(array_keys(Oev::RAISONS_NON_SCOLARISATION))],
+            'raison_non_scolarisation_precision' => ['nullable', Rule::requiredIf($nonScolarise && $entree('raison_non_scolarisation') === 'autre'), 'string', 'max:255'],
+            'etablissement_precedent' => ['nullable', 'string', 'max:255'],
+            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'appreciation' => $choix(Oev::APPRECIATIONS),
+            'systeme_educatif' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
+            'etablissement_actuel' => ['nullable', $scolariseRequis, 'string', 'max:255'],
+            'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            // La classe doit appartenir au niveau d'étude choisi (ex. pas de « 6e » en primaire)
+            'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($entree('niveau_etude'))))],
+            'frais_scolarite' => ['nullable', $scolariseRequis, 'integer', 'min:0'],
+            'formation_professionnelle' => ['nullable', 'boolean'],
+            'formation_etat' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::ETATS_FORMATION))],
+            'formation_filiere' => ['nullable', 'required_if:formation_professionnelle,1', 'string', 'max:150'],
+            'formation_type_centre' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
 
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
@@ -483,25 +622,84 @@ class OevController extends Controller
             $messagesFichiers["{$type}.max"] = Oev::DOCUMENTS[$type] . ' : fichier trop volumineux (maximum ' . round($max / 1024, 1) . ' Mo).';
         }
 
+        $obligatoireScolarise = 'Le champ « :attribute » est obligatoire pour un enfant scolarisé.';
         $validated = $request->validate($regles, $messagesFichiers + [
-            'nature_handicap.required_if' => 'Précisez la nature du handicap.',
+            'types_handicap.required_if' => 'Précisez le type de handicap.',
+            'required_if' => 'Le champ « :attribute » est obligatoire avec cette réponse.',
+            'systeme_educatif.required' => $obligatoireScolarise,
+            'etablissement_actuel.required' => $obligatoireScolarise,
+            'type_etablissement.required' => $obligatoireScolarise,
+            'classe.required' => $obligatoireScolarise,
+            'frais_scolarite.required' => $obligatoireScolarise,
+            'classe.in' => 'La classe choisie ne correspond pas au niveau d’étude.',
+            'niveau_etude.required' => 'Indiquez le niveau d’étude de l’enfant.',
+            'raison_non_scolarisation.required' => 'Indiquez pourquoi l’enfant n’est pas (ou plus) scolarisé.',
+            'a_acte_naissance.required' => 'Indiquez si l’enfant a un acte de naissance.',
+            'tuteur_a_cnib.required' => 'Indiquez si le tuteur possède une CNIB.',
+            'tuteur_cnib.required_if' => 'Saisissez le numéro de CNIB du tuteur.',
+            'tuteur_lien.required' => 'Indiquez le lien du tuteur avec l’enfant.',
+            'tuteur_lien_precision.required_if' => 'Précisez quel membre de la famille est le tuteur.',
+            'mere_date_deces.after_or_equal' => 'La mère ne peut pas être décédée avant la naissance de l’enfant.',
+            'date_identification.after_or_equal' => 'La date d’identification ne peut pas précéder la naissance de l’enfant.',
+            'mere_vivante.required' => 'Indiquez si la mère de l’enfant est vivante.',
+            'pere_vivant.required' => 'Indiquez si le père de l’enfant est vivant.',
             'nom_structure_rib.required' => 'Précisez le nom de la structure titulaire du RIB.',
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
             'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
         ] + self::MESSAGES, Oev::DOCUMENTS + self::ATTRIBUTS);
 
-        if (! $validated['handicap']) {
-            $validated['nature_handicap'] = null;
-        }
         $validated['contact_tuteur'] = Oev::formaterTelephone($validated['contact_tuteur']);
+        $validated['date_naissance_estimee'] = (bool) ($validated['date_naissance_estimee'] ?? false);
+        $validated['statut'] = Oev::calculerStatut($validated['mere_vivante'], $validated['pere_vivant']);
+
+        // Les informations masquées par une réponse ne sont pas conservées (ex. date de décès d'une mère vivante).
+        $effacer = function (bool $condition, array $champs) use (&$validated): void {
+            if ($condition) {
+                foreach ($champs as $champ) {
+                    $validated[$champ] = null;
+                }
+            }
+        };
+        $effacer($validated['mere_vivante'] !== 'non', ['mere_date_deces', 'mere_deces_confirme']);
+        $effacer($validated['pere_vivant'] !== 'non', ['pere_date_deces', 'pere_deces_confirme']);
+        $effacer(($validated['lieu_de_vie'] ?? null) !== 'autre', ['lieu_de_vie_precision']);
+        $effacer(! $validated['handicap'], ['types_handicap', 'nature_handicap']);
+        $effacer(! ($validated['maladie_chronique'] ?? false), ['maladie_details']);
+        $effacer(! in_array($validated['groupe_population'] ?? null, Oev::GROUPES_MOBILES, true), ['lieu_provenance']);
+        $effacer(! $validated['tuteur_a_cnib'], ['tuteur_cnib']);
+        $effacer($validated['tuteur_lien'] !== 'autre_parent', ['tuteur_lien_precision']);
+        $effacer($validated['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite']);
+        $effacer(! in_array($validated['situation_scolaire'], ['scolarise', 'descolarise'], true), ['niveau_etude']);
+        $effacer($validated['situation_scolaire'] === 'non_scolarise', ['etablissement_precedent', 'moyenne_annuelle', 'appreciation']);
+        $effacer(blank($validated['etablissement_precedent'] ?? null), ['moyenne_annuelle', 'appreciation']);
+        $effacer(! in_array($validated['situation_scolaire'], ['non_scolarise', 'descolarise'], true), ['raison_non_scolarisation', 'raison_non_scolarisation_precision']);
+        $effacer(($validated['raison_non_scolarisation'] ?? null) !== 'autre', ['raison_non_scolarisation_precision']);
+        $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre']);
+
+        // Sexe du tuteur déduit quand c'est la mère ou le père
+        $validated['tuteur_sexe'] = match ($validated['tuteur_lien']) {
+            'mere' => 'F',
+            'pere' => 'M',
+            default => $validated['tuteur_sexe'] ?? null,
+        };
+
+        // Vulnérabilités : celles déduites des réponses sont ajoutées d'office ; « grossesse » ne concerne que les filles
+        $vulnerabilites = array_diff((array) ($validated['vulnerabilites'] ?? []), ['orphelin', 'handicap', 'sans_acte_naissance']);
+        if ($validated['sexe'] !== 'F') {
+            $vulnerabilites = array_diff($vulnerabilites, ['grossesse']);
+        }
+        $vulnerabilites = array_values(array_unique(array_merge(Oev::vulnerabilitesAutomatiques($validated), $vulnerabilites)));
+        $validated['vulnerabilites'] = $vulnerabilites ?: null;
+        $effacer(! in_array('autre', $vulnerabilites, true), ['vulnerabilite_precision']);
 
         return collect($validated)->except(array_keys(Oev::DOCUMENTS))->all();
     }
 
     private function enregistrerDocuments(Request $request, Oev $oev): void
     {
-        foreach (array_keys(Oev::DOCUMENTS) as $type) {
+        // Seules les pièces demandées pour cet enfant sont enregistrées (ex. pas d'acte s'il n'en a pas)
+        foreach (array_keys($oev->piecesRequises()) as $type) {
             if (! $request->hasFile($type)) {
                 continue;
             }

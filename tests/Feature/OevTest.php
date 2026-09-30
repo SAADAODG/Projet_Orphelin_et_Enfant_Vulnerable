@@ -37,8 +37,16 @@ class OevTest extends TestCase
             'prenom' => 'Awa',
             'sexe' => 'F',
             'date_naissance' => now()->subYears(11)->subMonths(2)->toDateString(),
-            'statut' => 'orphelin_pere',
+            // Père décédé, mère vivante → statut « orphelin de père » calculé automatiquement
+            'mere_vivante' => 'oui',
+            'pere_vivant' => 'non',
+            'a_acte_naissance' => '1',
+            'tuteur_lien' => 'oncle_tante',
+            'tuteur_a_cnib' => '1',
+            'tuteur_cnib' => 'B1234567',
             'handicap' => '0',
+            'situation_scolaire' => 'scolarise',
+            'niveau_etude' => 'post_primaire_secondaire',
             'systeme_educatif' => 'classique',
             'nom_tuteur' => 'SAWADOGO',
             'prenom_tuteur' => 'Issa',
@@ -130,11 +138,229 @@ class OevTest extends TestCase
             ->assertSessionHasErrors('nom_structure_rib');
     }
 
-    public function test_la_nature_du_handicap_est_exigee_si_handicap(): void
+    public function test_le_type_de_handicap_est_exige_si_handicap(): void
     {
         $this->actingAs($this->dp)
             ->post(route('oevs.store'), $this->donneesOev(['handicap' => '1']))
-            ->assertSessionHasErrors('nature_handicap');
+            ->assertSessionHasErrors('types_handicap');
+
+        $this->post(route('oevs.store'), $this->donneesOev(['handicap' => '1', 'types_handicap' => ['moteur', 'visuel'], 'nature_handicap' => 'Utilise un fauteuil']))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(['moteur', 'visuel'], Oev::firstOrFail()->types_handicap);
+    }
+
+    // ---------- Fiche d'identification (champs OEV) ----------
+
+    public function test_le_statut_oev_est_calcule_a_partir_des_parents(): void
+    {
+        $this->actingAs($this->dp);
+        $cas = [
+            ['oui', 'non', 'orphelin_pere'],
+            ['non', 'oui', 'orphelin_mere'],
+            ['non', 'non', 'orphelin_double'],
+            ['oui', 'oui', 'vulnerable'],
+            ['ne_sait_pas', 'oui', 'vulnerable'],
+        ];
+        foreach ($cas as $i => [$mere, $pere, $attendu]) {
+            // Un « statut » envoyé à la main est ignoré : seul le calcul fait foi
+            $this->post(route('oevs.store'), $this->donneesOev(['nom' => "ENFANT{$i}", 'mere_vivante' => $mere, 'pere_vivant' => $pere, 'statut' => 'orphelin_double']))
+                ->assertSessionHasNoErrors();
+            $this->assertSame($attendu, Oev::where('nom', "ENFANT{$i}")->value('statut'), "mère={$mere}, père={$pere}");
+        }
+    }
+
+    public function test_la_situation_des_parents_est_obligatoire(): void
+    {
+        $donnees = $this->donneesOev();
+        unset($donnees['mere_vivante'], $donnees['pere_vivant']);
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees)
+            ->assertSessionHasErrors([
+                'mere_vivante' => 'Indiquez si la mère de l’enfant est vivante.',
+                'pere_vivant' => 'Indiquez si le père de l’enfant est vivant.',
+            ]);
+    }
+
+    public function test_un_enfant_non_scolarise_n_a_pas_besoin_d_etablissement(): void
+    {
+        $donnees = $this->donneesOev([
+            'situation_scolaire' => 'non_scolarise',
+            'raison_non_scolarisation' => 'financieres',
+            'niveau_etude' => 'primaire',
+        ]);
+        unset($donnees['etablissement_actuel'], $donnees['type_etablissement'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['systeme_educatif']);
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees)->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame('non_scolarise', $oev->situation_scolaire);
+        $this->assertSame('financieres', $oev->raison_non_scolarisation);
+        $this->assertNull($oev->etablissement_actuel);
+        $this->get(route('oevs.show', $oev))->assertOk()->assertSee('Contraintes financières')->assertSee('n’est pas scolarisé', false);
+    }
+
+    public function test_un_enfant_scolarise_doit_avoir_son_etablissement(): void
+    {
+        $this->actingAs($this->dp)
+            ->post(route('oevs.store'), $this->donneesOev(['etablissement_actuel' => '', 'classe' => '']))
+            ->assertSessionHasErrors(['etablissement_actuel', 'classe']);
+    }
+
+    public function test_les_champs_de_la_fiche_sont_enregistres_et_affiches(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
+            'date_naissance_estimee' => '1',
+            'lieu_naissance' => 'Kaya',
+            'nationalite' => 'Burkinabè',
+            'a_acte_naissance' => '1',
+            'groupe_population' => 'pdi',
+            'quartier' => 'Secteur 12',
+            'lieu_provenance' => 'Djibo',
+            'pere_nom' => 'OUEDRAOGO', 'pere_prenoms' => 'Salif', 'pere_date_deces' => '2023-04-10', 'pere_deces_confirme' => '1',
+            'mere_nom' => 'SAWADOGO', 'mere_prenoms' => 'Mariam',
+            'lieu_de_vie' => 'famille_elargie',
+            'tuteur_sexe' => 'M', 'tuteur_lien' => 'oncle_tante', 'tuteur_cnib' => 'B1234567', 'tuteur_pret_continuer' => '1',
+            'vulnerabilites' => ['orphelin', 'precarite'],
+            'maladie_chronique' => '0',
+            'source_revenu' => 'aide_famille', 'niveau_revenu' => 'faible', 'logement' => 'site_deplaces',
+            'date_identification' => now()->subDays(3)->toDateString(), 'identifie_par' => 'communaute', 'niveau_priorite' => 'eleve',
+            'formation_professionnelle' => '1', 'formation_etat' => 'en_cours', 'formation_filiere' => 'Couture', 'formation_type_centre' => 'public',
+        ]))->assertSessionHasNoErrors();
+
+        $oev = Oev::firstOrFail();
+        $this->assertTrue($oev->date_naissance_estimee);
+        $this->assertSame('pdi', $oev->groupe_population);
+        $this->assertSame('2023-04-10', $oev->pere_date_deces->toDateString());
+        $this->assertSame(['orphelin', 'precarite'], $oev->vulnerabilites);
+        $this->assertTrue($oev->formation_professionnelle);
+
+        $this->get(route('oevs.show', $oev))->assertOk()
+            ->assertSee('Personne déplacée interne (PDI)')
+            ->assertSee('Famille élargie ou étendue')
+            ->assertSee('Précarité du ménage')
+            ->assertSee('10/04/2023')
+            ->assertSee('Oncle / tante')
+            ->assertSee('Couture')
+            ->assertSee('Secteur 12');
+    }
+
+    // ---------- Cohérence entre les réponses ----------
+
+    public function test_sans_acte_de_naissance_la_piece_n_est_pas_demandee(): void
+    {
+        $pieces = $this->pieces();
+        unset($pieces['acte_naissance']);
+
+        // Enregistré et soumis sans acte : le dossier est complet quand même
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0', 'nom_structure_rib' => 'ONG Avenir'])
+            + $pieces + ['soumettre' => '1'])->assertSessionHasNoErrors();
+
+        $oev = Oev::firstOrFail();
+        $this->assertArrayNotHasKey('acte_naissance', $oev->piecesRequises());
+        $this->assertSame(Oev::ETAT_SOUMIS, $oev->statut_dossier);
+        // « Absence d'acte de naissance » est cochée d'office
+        $this->assertContains('sans_acte_naissance', $oev->vulnerabilites);
+    }
+
+    public function test_une_piece_non_demandee_envoyee_quand_meme_est_ignoree(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0', 'nom_structure_rib' => 'ONG'])
+            + $this->pieces())->assertSessionHasNoErrors();
+
+        $this->assertFalse(Oev::firstOrFail()->documents()->where('type', 'acte_naissance')->exists());
+    }
+
+    public function test_enfant_non_scolarise_et_tuteur_sans_cnib_moins_de_pieces(): void
+    {
+        $donnees = $this->donneesOev(['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'tuteur_a_cnib' => '0', 'nom_structure_rib' => 'ONG']);
+        unset($donnees['etablissement_actuel'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['type_etablissement'], $donnees['systeme_educatif']);
+        $pieces = array_intersect_key($this->pieces(), array_flip(['acte_naissance', 'photo', 'rib']));
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees + $pieces + ['soumettre' => '1'])->assertSessionHasNoErrors();
+
+        $oev = Oev::firstOrFail();
+        $this->assertSame(['acte_naissance', 'photo', 'rib'], array_keys($oev->piecesRequises()));
+        $this->assertNull($oev->tuteur_cnib, 'Pas de numéro de CNIB si le tuteur n’en a pas');
+        $this->assertSame(Oev::ETAT_SOUMIS, $oev->statut_dossier);
+        $this->get(route('oevs.show', $oev))->assertSee('Non demandé pour cet enfant')->assertSee('le tuteur n’a pas de CNIB', false);
+    }
+
+    public function test_un_parent_decede_ne_peut_pas_etre_le_tuteur(): void
+    {
+        $this->actingAs($this->dp)
+            ->post(route('oevs.store'), $this->donneesOev(['pere_vivant' => 'non', 'tuteur_lien' => 'pere']))
+            ->assertSessionHasErrors(['tuteur_lien' => 'Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.']);
+
+        // La mère vivante peut l'être, et son sexe est déduit
+        $this->post(route('oevs.store'), $this->donneesOev(['tuteur_lien' => 'mere', 'tuteur_sexe' => 'M']))->assertSessionHasNoErrors();
+        $this->assertSame('F', Oev::firstOrFail()->tuteur_sexe);
+    }
+
+    public function test_les_dates_de_deces_sont_coherentes_avec_la_naissance(): void
+    {
+        $naissance = now()->subYears(5)->toDateString();
+        $this->actingAs($this->dp);
+
+        // Mère décédée avant la naissance : impossible
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $naissance, 'mere_vivante' => 'non', 'mere_date_deces' => now()->subYears(6)->toDateString()]))
+            ->assertSessionHasErrors('mere_date_deces');
+        // Père décédé 2 ans avant la naissance : impossible ; 5 mois avant : possible
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $naissance, 'pere_date_deces' => now()->subYears(7)->toDateString()]))
+            ->assertSessionHasErrors('pere_date_deces');
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $naissance, 'pere_date_deces' => now()->subYears(5)->subMonths(5)->toDateString()]))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_la_classe_doit_correspondre_au_niveau(): void
+    {
+        $this->actingAs($this->dp)
+            ->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => '6e']))
+            ->assertSessionHasErrors(['classe' => 'La classe choisie ne correspond pas au niveau d’étude.']);
+
+        $this->post(route('oevs.store'), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2']))->assertSessionHasNoErrors();
+    }
+
+    public function test_les_vulnerabilites_automatiques_et_grossesse(): void
+    {
+        // Garçon : « grossesse » retirée ; orphelin + handicap ajoutés d'office même si non cochés
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
+            'sexe' => 'M', 'handicap' => '1', 'types_handicap' => ['visuel'], 'vulnerabilites' => ['grossesse', 'travail'],
+        ]))->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(['orphelin', 'handicap', 'travail'], Oev::firstOrFail()->vulnerabilites);
+
+        // Parents vivants : « orphelin » ne peut pas être coché à la main
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'KABORE', 'pere_vivant' => 'oui', 'vulnerabilites' => ['orphelin', 'negligence']]))->assertSessionHasNoErrors();
+        $this->assertSame(['negligence'], Oev::where('nom', 'KABORE')->value('vulnerabilites'));
+    }
+
+    public function test_les_precisions_sont_exigees_quand_on_choisit_autre(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
+            'lieu_de_vie' => 'autre', 'vulnerabilites' => ['autre'], 'tuteur_lien' => 'autre_parent', 'maladie_chronique' => '1', 'formation_professionnelle' => '1',
+        ]))->assertSessionHasErrors(['lieu_de_vie_precision', 'vulnerabilite_precision', 'tuteur_lien_precision', 'maladie_details', 'formation_etat', 'formation_filiere', 'formation_type_centre']);
+    }
+
+    public function test_questions_de_base_obligatoires(): void
+    {
+        $donnees = $this->donneesOev(['situation_scolaire' => 'descolarise']);
+        unset($donnees['a_acte_naissance'], $donnees['tuteur_a_cnib'], $donnees['tuteur_lien'], $donnees['niveau_etude']);
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees)
+            ->assertSessionHasErrors(['a_acte_naissance', 'tuteur_a_cnib', 'tuteur_lien', 'niveau_etude', 'raison_non_scolarisation']);
+    }
+
+    public function test_les_informations_masquees_ne_sont_pas_conservees(): void
+    {
+        // Mère déclarée vivante : une date de décès envoyée par erreur n'est pas enregistrée
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
+            'mere_vivante' => 'oui', 'mere_date_deces' => '2020-01-01',
+            'lieu_de_vie' => 'famille_biologique', 'lieu_de_vie_precision' => 'ne doit pas rester',
+            'formation_professionnelle' => '0', 'formation_filiere' => 'ne doit pas rester',
+        ]))->assertSessionHasNoErrors();
+
+        $oev = Oev::firstOrFail();
+        $this->assertNull($oev->mere_date_deces);
+        $this->assertNull($oev->lieu_de_vie_precision);
+        $this->assertNull($oev->formation_filiere);
     }
 
     public function test_la_date_de_naissance_doit_etre_plausible(): void
@@ -166,7 +392,7 @@ class OevTest extends TestCase
         $this->actingAs($this->dp)
             ->post(route('oevs.store'), $this->donneesOev(['classe' => '', 'region' => '']))
             ->assertSessionHasErrors([
-                'classe' => 'Le champ « classe » est obligatoire.',
+                'classe' => 'Le champ « classe » est obligatoire pour un enfant scolarisé.',
                 'region' => 'Le champ « région » est obligatoire.',
             ]);
     }
@@ -283,7 +509,7 @@ class OevTest extends TestCase
         $this->get(route('oevs.validation', ['etat' => 'complement']))->assertSee($oev->numero_dossier);
         $this->get(route('oevs.show', $oev))->assertSee('Préciser la classe de l’année en cours')->assertSee('Valider et renvoyer au central');
         $this->get(route('oevs.edit', $oev))->assertOk()->assertSee('Complément demandé par le niveau central');
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['classe' => 'CM2', 'nom_structure_rib' => 'Association Espoir']))
+        $this->put(route('oevs.update', $oev), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'nom_structure_rib' => 'Association Espoir']))
             ->assertSessionHasNoErrors();
         $this->assertSame('CM2', $oev->refresh()->classe);
         $this->assertSame(Oev::ETAT_COMPLEMENT, $oev->statut_dossier);
@@ -486,7 +712,7 @@ class OevTest extends TestCase
         $this->actingAs($this->central)->post(route('oevs.integrer', $integre));
         $integre->refresh();
 
-        $enCours = $this->dossierComplet(['nom' => 'KABORE', 'prenom' => 'Paul', 'sexe' => 'M', 'statut' => 'vulnerable']);
+        $enCours = $this->dossierComplet(['nom' => 'KABORE', 'prenom' => 'Paul', 'sexe' => 'M', 'pere_vivant' => 'oui']);
         $this->post(route('oevs.soumettre', $enCours));
 
         // Visible de tous les niveaux (DP, DR, central)

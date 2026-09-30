@@ -124,10 +124,10 @@
               <td>
                 <span class="badge rounded-pill text-bg-{{ $oev->couleurEtat() }}">{{ $oev->libelleEtat() }}</span>
                 @if ($oev->estModifiable())
-                  @if ($oev->documents_count >= count(Oev::DOCUMENTS))
+                  @if ($oev->estComplet())
                     <small class="d-block text-success fw-semibold mt-1"><i class="bi bi-send" aria-hidden="true"></i> Prêt à soumettre au DR</small>
                   @else
-                    <small class="d-block text-muted mt-1">{{ $oev->documents_count }}/{{ count(Oev::DOCUMENTS) }} pièce(s)</small>
+                    <small class="d-block text-muted mt-1">{{ count($oev->piecesFournies()) }}/{{ count($oev->piecesRequises()) }} pièce(s)</small>
                   @endif
                 @endif
               </td>

@@ -9,9 +9,12 @@
 @endpush
 
 @php
-  $totalPieces = count(Oev::DOCUMENTS);
-  $pieces = $documents->count();
-  $pourcentage = (int) round($pieces / $totalPieces * 100);
+  // Seules les pièces qui s'appliquent à cet enfant sont exigées (ex. pas d'acte s'il n'en a pas)
+  $piecesRequises = $oev->piecesRequises();
+  $piecesNonRequises = array_diff_key(Oev::DOCUMENTS, $piecesRequises);
+  $totalPieces = count($piecesRequises);
+  $pieces = count($oev->piecesFournies());
+  $pourcentage = $totalPieces ? (int) round($pieces / $totalPieces * 100) : 100;
   $photo = $documents->get('photo');
   $utilisateur = auth()->user();
   $etat = $oev->statut_dossier;
@@ -96,6 +99,9 @@
       $vide = $valeur === null || $valeur === '';
       return '<div class="oev-info"><span class="oev-info-label">' . e($label) . '</span><span class="oev-info-valeur' . ($vide ? ' is-vide' : '') . '">' . ($vide ? 'Non renseigné' : e($valeur)) . '</span></div>';
   };
+  // Information facultative : n'est affichée que si elle est renseignée
+  $infoSi = fn (string $label, $valeur) => ($valeur === null || $valeur === '') ? '' : $info($label, $valeur);
+  $ouiNon = fn ($booleen) => $booleen === null ? null : ($booleen ? 'Oui' : 'Non');
 @endphp
 
 @section('content')
@@ -176,7 +182,7 @@
           @if ($oev->estComplet())
             Le dossier est complet. Une fois soumis, il ne pourra plus être modifié sauf s’il est jugé non conforme.
           @else
-            Il manque {{ $totalPieces - $pieces }} pièce(s) : le dossier doit être complet pour être soumis.
+            Il manque : {{ mb_strtolower(implode(', ', array_diff_key($piecesRequises, array_flip($oev->piecesFournies())))) }}. Le dossier doit être complet pour être soumis.
           @endif
         </div>
       </div>
@@ -277,24 +283,97 @@
       <div class="d-flex flex-column gap-3 h-100">
         {{-- Enfant --}}
         <section class="oev-carte">
-          <h2 class="oev-carte-titre"><i class="bi bi-person" aria-hidden="true"></i> Informations sur l’enfant</h2>
+          <h2 class="oev-carte-titre"><i class="bi bi-person" aria-hidden="true"></i> Identité de l’enfant</h2>
           <div class="oev-infos">
             {!! $info('Nom', $oev->nom) !!}
             {!! $info('Prénom(s)', $oev->prenom) !!}
             {!! $info('Sexe', $oev->libelle('sexe', Oev::SEXES)) !!}
-            {!! $info('Date de naissance', $oev->date_naissance->format('d/m/Y') . ' (' . $oev->age() . ' ans)') !!}
-            {!! $info('Statut', $oev->libelle('statut', Oev::STATUTS)) !!}
-            {!! $info('Système éducatif', $oev->libelle('systeme_educatif', Oev::SYSTEMES_EDUCATIFS)) !!}
+            {!! $info('Date de naissance', $oev->date_naissance->format('d/m/Y') . ' (' . $oev->age() . ' ans)' . ($oev->date_naissance_estimee ? ' — estimée' : '')) !!}
+            {!! $infoSi('Lieu de naissance', $oev->lieu_naissance) !!}
+            {!! $infoSi('Nationalité', $oev->nationalite) !!}
+            {!! $infoSi('Acte de naissance', $ouiNon($oev->a_acte_naissance)) !!}
+            {!! $infoSi('N° d’identification', $oev->numero_identification) !!}
+            {!! $infoSi('Groupe de population', $oev->groupe_population ? $oev->libelle('groupe_population', Oev::GROUPES_POPULATION) : null) !!}
+            {!! $info('Statut OEV', $oev->libelle('statut', Oev::STATUTS)) !!}
+          </div>
+        </section>
+
+        {{-- Parents --}}
+        <section class="oev-carte">
+          <h2 class="oev-carte-titre"><i class="bi bi-diagram-3" aria-hidden="true"></i> Parents</h2>
+          <div class="row g-3">
+            @foreach (['mere' => ['Mère', 'mere_vivante'], 'pere' => ['Père', 'pere_vivant']] as $parent => [$titreParent, $champVivant])
+              <div class="col-md-6">
+                <div class="oev-annee h-100">
+                  <h3>{{ $titreParent }}</h3>
+                  <dl>
+                    <div><dt>Nom et prénoms</dt><dd>{{ trim($oev->{"{$parent}_nom"} . ' ' . $oev->{"{$parent}_prenoms"}) ?: '—' }}</dd></div>
+                    <div>
+                      <dt>En vie ?</dt>
+                      <dd>
+                        @if ($oev->{$champVivant})
+                          <span class="badge rounded-pill text-bg-{{ ['oui' => 'success', 'non' => 'dark', 'ne_sait_pas' => 'secondary'][$oev->{$champVivant}] ?? 'secondary' }}">{{ $oev->libelle($champVivant, Oev::PARENT_VIVANT) }}</span>
+                        @else
+                          —
+                        @endif
+                      </dd>
+                    </div>
+                    @if ($oev->{$champVivant} === 'non')
+                      <div><dt>Date du décès</dt><dd>{{ $oev->{"{$parent}_date_deces"}?->format('d/m/Y') ?? '—' }}</dd></div>
+                      <div><dt>Décès confirmé</dt><dd>{{ $ouiNon($oev->{"{$parent}_deces_confirme"}) ?? '—' }}</dd></div>
+                    @endif
+                  </dl>
+                </div>
+              </div>
+            @endforeach
+          </div>
+        </section>
+
+        {{-- Situation de l'enfant --}}
+        <section class="oev-carte">
+          <h2 class="oev-carte-titre"><i class="bi bi-house-heart" aria-hidden="true"></i> Situation de l’enfant</h2>
+          <div class="oev-infos">
+            {!! $infoSi('Lieu de vie', $oev->lieu_de_vie ? $oev->libelle('lieu_de_vie', Oev::LIEUX_DE_VIE) . ($oev->lieu_de_vie_precision ? ' — ' . $oev->lieu_de_vie_precision : '') : null) !!}
             {!! $info('Situation de handicap', $oev->handicap ? 'Oui' : 'Non') !!}
             @if ($oev->handicap)
-              {!! $info('Nature du handicap', $oev->nature_handicap) !!}
+              {!! $infoSi('Type de handicap', implode(', ', $oev->libelles('types_handicap', Oev::TYPES_HANDICAP))) !!}
+              {!! $infoSi('Détails du handicap', $oev->nature_handicap) !!}
             @endif
+            {!! $infoSi('Maladie chronique', $ouiNon($oev->maladie_chronique) . ($oev->maladie_details ? ' — ' . $oev->maladie_details : '')) !!}
+            {!! $infoSi('Source de revenu', $oev->source_revenu ? $oev->libelle('source_revenu', Oev::SOURCES_REVENU) : null) !!}
+            {!! $infoSi('Niveau de revenu', $oev->niveau_revenu ? $oev->libelle('niveau_revenu', Oev::NIVEAUX) : null) !!}
+            {!! $infoSi('Logement', $oev->logement ? $oev->libelle('logement', Oev::LOGEMENTS) : null) !!}
           </div>
+          @if ($oev->vulnerabilites)
+            <div class="mt-3">
+              <span class="oev-info-label">Situations de vulnérabilité</span>
+              <div class="d-flex flex-wrap gap-2 mt-1">
+                @foreach ($oev->libelles('vulnerabilites', Oev::VULNERABILITES) as $vulnerabilite)
+                  <span class="oev-puce"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i>{{ $vulnerabilite }}</span>
+                @endforeach
+                @if ($oev->vulnerabilite_precision)
+                  <span class="oev-puce">{{ $oev->vulnerabilite_precision }}</span>
+                @endif
+              </div>
+            </div>
+          @endif
         </section>
 
         {{-- Scolarité --}}
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Scolarité</h2>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            @if ($oev->situation_scolaire)
+              <span class="badge rounded-pill text-bg-{{ $oev->situation_scolaire === 'scolarise' ? 'success' : 'warning' }}">{{ $oev->libelle('situation_scolaire', Oev::SITUATIONS_SCOLAIRES) }}</span>
+            @endif
+            @if ($oev->niveau_etude)<span class="oev-puce">{{ $oev->libelle('niveau_etude', Oev::NIVEAUX_ETUDE) }}</span>@endif
+            @if ($oev->systeme_educatif)<span class="oev-puce">{{ $oev->libelle('systeme_educatif', Oev::SYSTEMES_EDUCATIFS) }}</span>@endif
+          </div>
+          @if ($oev->raison_non_scolarisation)
+            <div class="alert alert-warning py-2 small">
+              <strong>Raison de la non-scolarisation :</strong> {{ $oev->libelle('raison_non_scolarisation', Oev::RAISONS_NON_SCOLARISATION) }}{{ $oev->raison_non_scolarisation_precision ? ' — ' . $oev->raison_non_scolarisation_precision : '' }}
+            </div>
+          @endif
           <div class="oev-annees">
             <div class="oev-annee">
               <h3>Année précédente</h3>
@@ -316,13 +395,24 @@
             <div class="oev-annee-fleche" aria-hidden="true"><i class="bi bi-arrow-right-circle"></i></div>
             <div class="oev-annee is-courante">
               <h3>Année en cours</h3>
-              <dl>
-                <div><dt>Établissement fréquenté</dt><dd>{{ $oev->etablissement_actuel }} <span class="badge rounded-pill text-bg-light border ms-1">{{ $oev->libelle('type_etablissement', Oev::TYPES_ETABLISSEMENT) }}</span></dd></div>
-                <div><dt>Classe</dt><dd>{{ $oev->classe }}</dd></div>
-                <div><dt>Frais de scolarité</dt><dd>{{ number_format($oev->frais_scolarite, 0, ',', ' ') }} FCFA</dd></div>
-              </dl>
+              @if ($oev->situation_scolaire === 'scolarise')
+                <dl>
+                  <div><dt>Établissement fréquenté</dt><dd>{{ $oev->etablissement_actuel }} @if ($oev->type_etablissement)<span class="badge rounded-pill text-bg-light border ms-1">{{ $oev->libelle('type_etablissement', Oev::TYPES_ETABLISSEMENT) }}</span>@endif</dd></div>
+                  <div><dt>Classe</dt><dd>{{ $oev->classe ?: '—' }}</dd></div>
+                  <div><dt>Frais de scolarité</dt><dd>{{ $oev->frais_scolarite !== null ? number_format($oev->frais_scolarite, 0, ',', ' ') . ' FCFA' : '—' }}</dd></div>
+                </dl>
+              @else
+                <p class="text-muted small mb-0">L’enfant n’est pas scolarisé cette année.</p>
+              @endif
             </div>
           </div>
+          @if ($oev->formation_professionnelle)
+            <div class="oev-infos mt-3">
+              {!! $info('Formation professionnelle', 'Oui' . ($oev->formation_etat ? ' — ' . mb_strtolower($oev->libelle('formation_etat', Oev::ETATS_FORMATION)) : '')) !!}
+              {!! $infoSi('Filière', $oev->formation_filiere) !!}
+              {!! $infoSi('Type de centre', $oev->formation_type_centre ? $oev->libelle('formation_type_centre', Oev::TYPES_ETABLISSEMENT) : null) !!}
+            </div>
+          @endif
         </section>
       </div>
     </div>
@@ -339,20 +429,57 @@
               <a class="oev-tel" href="tel:{{ str_replace(' ', '', $oev->contact_tuteur) }}"><i class="bi bi-telephone-fill text-success" aria-hidden="true"></i>{{ $oev->contact_tuteur }}</a>
             </div>
           </div>
+          @php
+            $detailsTuteur = array_filter([
+              'Sexe' => $oev->tuteur_sexe ? ['M' => 'Homme', 'F' => 'Femme'][$oev->tuteur_sexe] ?? null : null,
+              'Lien avec l’enfant' => $oev->tuteur_lien
+                  ? $oev->libelle('tuteur_lien', Oev::LIENS_TUTEUR) . ($oev->tuteur_lien_precision ? ' (' . $oev->tuteur_lien_precision . ')' : '')
+                  : null,
+              'CNIB' => $oev->tuteur_a_cnib === null ? null : ($oev->tuteur_a_cnib ? ($oev->tuteur_cnib ?: 'Oui') : 'N’en possède pas'),
+              'Prêt à continuer' => $ouiNon($oev->tuteur_pret_continuer),
+            ]);
+          @endphp
+          @if ($detailsTuteur)
+            <div class="small d-grid gap-1 mt-3">
+              @foreach ($detailsTuteur as $libelle => $valeur)
+                <div class="d-flex justify-content-between gap-2"><span class="text-muted">{{ $libelle }}</span><strong class="text-end">{{ $valeur }}</strong></div>
+              @endforeach
+            </div>
+          @endif
         </section>
 
         {{-- Localité --}}
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-geo-alt" aria-hidden="true"></i> Localité</h2>
           <ul class="oev-lieu">
-            @foreach (['Région' => $oev->region, 'Province' => $oev->province, 'Commune' => $oev->commune] as $niveau => $lieu)
+            @foreach (array_filter(['Région' => $oev->region, 'Province' => $oev->province, 'Commune' => $oev->commune, 'Quartier / village' => $oev->quartier]) as $niveau => $lieu)
               <li>
                 <span class="oev-lieu-point" aria-hidden="true"></span>
                 <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu }}</strong></div>
               </li>
             @endforeach
           </ul>
+          @if ($oev->lieu_provenance)
+            <div class="small mt-2"><span class="text-muted">Provenance :</span> <strong>{{ $oev->lieu_provenance }}</strong></div>
+          @endif
         </section>
+
+        {{-- Identification du cas --}}
+        @if ($oev->date_identification || $oev->identifie_par || $oev->niveau_priorite)
+          <section class="oev-carte">
+            <h2 class="oev-carte-titre"><i class="bi bi-clipboard-data" aria-hidden="true"></i> Identification du cas</h2>
+            <div class="small d-grid gap-1">
+              @if ($oev->date_identification)<div class="d-flex justify-content-between gap-2"><span class="text-muted">Date d’identification</span><strong>{{ $oev->date_identification->format('d/m/Y') }}</strong></div>@endif
+              @if ($oev->identifie_par)<div class="d-flex justify-content-between gap-2"><span class="text-muted">Identifié par</span><strong class="text-end">{{ $oev->libelle('identifie_par', Oev::IDENTIFIE_PAR) }}</strong></div>@endif
+              @if ($oev->niveau_priorite)
+                <div class="d-flex justify-content-between gap-2">
+                  <span class="text-muted">Priorité</span>
+                  <span class="badge rounded-pill text-bg-{{ ['faible' => 'secondary', 'moyen' => 'warning', 'eleve' => 'danger'][$oev->niveau_priorite] ?? 'secondary' }}">{{ $oev->libelle('niveau_priorite', Oev::NIVEAUX) }}</span>
+                </div>
+              @endif
+            </div>
+          </section>
+        @endif
 
         {{-- Parcours du dossier --}}
         <section class="oev-carte">
@@ -387,8 +514,10 @@
         </div>
 
         <div class="oev-docs">
-          @foreach (Oev::DOCUMENTS as $type => $libelle)
-            @php($document = $documents->get($type))
+          @foreach ($piecesRequises as $type => $libelle)
+            @php
+              $document = $documents->get($type);
+            @endphp
             <article class="oev-doc {{ $document ? 'is-fourni' : 'is-manquant' }}">
               <div class="oev-doc-entete">
                 <span class="oev-doc-icone"><i class="bi {{ $iconesPieces[$type] }}" aria-hidden="true"></i></span>
@@ -422,6 +551,16 @@
             </article>
           @endforeach
         </div>
+
+        @if ($piecesNonRequises)
+          <div class="small text-muted mt-3">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+            Non demandé pour cet enfant :
+            @foreach ($piecesNonRequises as $type => $libelle)
+              <strong>{{ $libelle }}</strong> ({{ Oev::RAISONS_PIECE_NON_REQUISE[$type] ?? 'non applicable' }})@if (! $loop->last), @endif
+            @endforeach
+          </div>
+        @endif
       </section>
     </div>
   </div>
