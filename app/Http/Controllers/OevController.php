@@ -84,6 +84,10 @@ class OevController extends Controller implements HasMiddleware
         'groupe_population' => 'groupe de population',
         'quartier' => 'quartier / précision de l’adresse',
         'lieu_provenance' => 'lieu de provenance',
+        'lieu_provenance_commune_id' => 'lieu de provenance',
+        'gestionnaire_nom' => 'nom du gestionnaire du cas',
+        'gestionnaire_fonction' => 'fonction / structure du gestionnaire du cas',
+        'gestionnaire_contact' => 'téléphone du gestionnaire du cas',
         'tuteur_sexe' => 'sexe du tuteur',
         'tuteur_lien' => 'lien de parenté du tuteur',
         'tuteur_cnib' => 'numéro CNIB du tuteur',
@@ -215,7 +219,7 @@ class OevController extends Controller implements HasMiddleware
         // Un dossier en cours de constitution n'est visible que du DP (le DR le voit une fois soumis).
         abort_if($oev->statut_dossier === Oev::ETAT_BROUILLON && ! $request->user()->can('constituer dossiers'), 403);
 
-        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet', 'region', 'province', 'commune', 'village', 'lieuNaissanceCommune']);
+        $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet', 'region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune']);
 
         return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
     }
@@ -525,8 +529,10 @@ class OevController extends Controller implements HasMiddleware
         $ribExistant = $oev?->documents()->where('type', 'rib')->exists() ?? false;
 
         // Le numéro est saisi sans indicatif (8 chiffres) ; on retire espaces et +226 éventuels avant validation.
-        if ($request->filled('contact_tuteur')) {
-            $request->merge(['contact_tuteur' => Oev::numeroLocal($request->input('contact_tuteur'))]);
+        foreach (['contact_tuteur', 'gestionnaire_contact'] as $champTelephone) {
+            if ($request->filled($champTelephone)) {
+                $request->merge([$champTelephone => Oev::numeroLocal($request->input($champTelephone))]);
+            }
         }
 
         $choix = fn (array $liste) => ['nullable', Rule::in(array_keys($liste))];
@@ -566,6 +572,15 @@ class OevController extends Controller implements HasMiddleware
                 $echec('Choisissez le lieu de naissance dans la liste.');
             }
         };
+        // Lieu de provenance (enfant déplacé, réfugié…) : même principe que le lieu de naissance
+        $groupeMobile = in_array($entree('groupe_population'), Oev::GROUPES_MOBILES, true);
+        $lieuProvenanceAutre = $groupeMobile && $entree('lieu_provenance_commune_id') === 'autre';
+        $communeDeProvenance = function (string $attribut, $valeur, \Closure $echec): void {
+            if ($valeur !== 'autre' && ! Commune::whereKey($valeur)->exists()) {
+                $echec('Choisissez le lieu de provenance dans la liste.');
+            }
+        };
+        $deuxParentsDecedes = $entree('mere_vivante') === 'non' && $entree('pere_vivant') === 'non';
 
         // Moyenne : sur 10 au préscolaire et au primaire, sur 20 ensuite (selon la classe de l'année précédente)
         $bareme = Oev::baremeMoyenne($entree('classe_precedente'));
@@ -582,6 +597,12 @@ class OevController extends Controller implements HasMiddleware
             if (! $estScolarise || ! $actuelle || ! $precedente) {
                 return;
             }
+            // Une classe plus avancée l'an dernier qu'aujourd'hui est signalée sur la classe précédente
+            $rangActuel = Oev::rangClasse($actuelle);
+            $rangPrecedent = Oev::rangClasse($precedente);
+            if ($rangActuel !== null && $rangPrecedent !== null && $rangPrecedent > $rangActuel) {
+                return;
+            }
             if ($valeur === 'redouble' && $actuelle !== $precedente) {
                 $echec('L’enfant a redoublé : sa classe actuelle devrait être la même que l’année précédente.');
             }
@@ -596,11 +617,25 @@ class OevController extends Controller implements HasMiddleware
                 $echec('La durée déjà reçue ne peut pas dépasser la durée de la formation.');
             }
         };
-        // Le père peut être décédé pendant la grossesse (jusqu'à 10 mois avant la naissance), pas avant
+        // Le père peut être décédé pendant la grossesse (jusqu'à 9 mois avant la naissance), pas avant
         $decesPereCoherent = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
             $naissance = strtotime((string) $entree('date_naissance'));
-            if ($naissance && strtotime((string) $valeur) < strtotime('-10 months', $naissance)) {
-                $echec('La date du décès du père est incohérente avec la date de naissance de l’enfant.');
+            if ($naissance && strtotime((string) $valeur) < strtotime('-9 months', $naissance)) {
+                $echec('Le père ne peut pas être décédé plus de 9 mois avant la naissance de l’enfant.');
+            }
+        };
+        // La classe en cours ne peut pas être en dessous de celle de l'année précédente (ex. 5e puis 6e)
+        $classeActuelleCoherente = function (string $attribut, $valeur, \Closure $echec) use ($entree): void {
+            $rangActuel = Oev::rangClasse($valeur);
+            $rangPrecedent = filled($entree('etablissement_precedent')) ? Oev::rangClasse($entree('classe_precedente')) : null;
+            if ($rangActuel !== null && $rangPrecedent !== null && $rangActuel < $rangPrecedent) {
+                $echec('La classe de l’année en cours ne peut pas être inférieure à celle de l’année précédente.');
+            }
+        };
+        // Fonds propres de la famille : impossible quand les deux parents sont décédés
+        $sourceRevenuCoherente = function (string $attribut, $valeur, \Closure $echec) use ($deuxParentsDecedes): void {
+            if ($deuxParentsDecedes && in_array($valeur, Oev::SOURCES_REVENU_PARENTS_VIVANTS, true)) {
+                $echec('Les deux parents sont décédés : la source de revenu ne peut pas être « ' . Oev::SOURCES_REVENU[$valeur] . ' ».');
             }
         };
 
@@ -623,7 +658,8 @@ class OevController extends Controller implements HasMiddleware
             // Village facultatif, mais forcément dans la commune choisie
             'village_id' => ['nullable', 'integer', Rule::exists('villages', 'id')->where('commune_id', $request->input('commune_id'))],
             'quartier' => ['nullable', 'string', 'max:150'],
-            'lieu_provenance' => ['nullable', 'string', 'max:150'],
+            'lieu_provenance_commune_id' => ['nullable', $communeDeProvenance],
+            'lieu_provenance' => ['nullable', Rule::requiredIf($lieuProvenanceAutre), 'string', 'max:150'],
 
             // Parents (situation d'orphelin) : « vivant ? » obligatoire, le statut OEV en est déduit
             // Nom et prénoms obligatoires pour le parent qui s'occupe de l'enfant (repris comme tuteur)
@@ -668,7 +704,7 @@ class OevController extends Controller implements HasMiddleware
             'suivi_clinique' => ['nullable', 'required_if:maladie_chronique,1', 'boolean'],
 
             // Ménage
-            'source_revenu' => $choix(Oev::SOURCES_REVENU),
+            'source_revenu' => [...$choix(Oev::SOURCES_REVENU), $sourceRevenuCoherente],
             'niveau_revenu' => $choix(Oev::NIVEAUX),
             'logement' => $choix(Oev::LOGEMENTS),
 
@@ -676,6 +712,11 @@ class OevController extends Controller implements HasMiddleware
             'date_identification' => ['nullable', 'date', 'before_or_equal:today', 'after_or_equal:date_naissance'],
             'identifie_par' => $choix(Oev::IDENTIFIE_PAR),
             'niveau_priorite' => $choix(Oev::NIVEAUX),
+
+            // Gestionnaire du cas (agent qui suit l'enfant)
+            'gestionnaire_nom' => ['nullable', 'string', 'max:150'],
+            'gestionnaire_fonction' => ['nullable', 'string', 'max:150'],
+            'gestionnaire_contact' => ['nullable', 'regex:/^\d{8}$/'],
 
             // Scolarité
             'situation_scolaire' => ['required', Rule::in(array_keys(Oev::SITUATIONS_SCOLAIRES))],
@@ -693,8 +734,8 @@ class OevController extends Controller implements HasMiddleware
             'etablissement_actuel' => ['nullable', $scolariseRequis, 'string', 'max:255'],
             'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
             // La classe doit appartenir au niveau d'étude choisi (ex. pas de « 6e » en primaire)
-            'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($entree('niveau_etude'))))],
-            'frais_scolarite' => ['nullable', $scolariseRequis, 'integer', 'min:0'],
+            'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($entree('niveau_etude')))), $classeActuelleCoherente],
+            'frais_scolarite' => ['nullable', 'integer', 'min:0'],
             'formation_professionnelle' => ['nullable', 'boolean'],
             'formation_etat' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::ETATS_FORMATION))],
             'formation_filiere' => ['nullable', 'required_if:formation_professionnelle,1', 'string', 'max:150'],
@@ -726,7 +767,6 @@ class OevController extends Controller implements HasMiddleware
             'etablissement_actuel.required' => $obligatoireScolarise,
             'type_etablissement.required' => $obligatoireScolarise,
             'classe.required' => $obligatoireScolarise,
-            'frais_scolarite.required' => $obligatoireScolarise,
             'classe.in' => 'La classe choisie ne correspond pas au niveau d’étude.',
             'niveau_etude.required' => 'Indiquez le niveau d’étude de l’enfant.',
             'raison_non_scolarisation.required' => 'Indiquez pourquoi l’enfant n’est pas (ou plus) scolarisé.',
@@ -759,9 +799,12 @@ class OevController extends Controller implements HasMiddleware
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
             'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
+            'gestionnaire_contact.regex' => 'Le téléphone du gestionnaire du cas doit comporter 8 chiffres (ex : 70 12 34 56).',
+            'lieu_provenance.required' => 'Précisez le lieu de provenance (ville, pays) s’il n’est pas dans la liste.',
         ] + self::MESSAGES, Oev::DOCUMENTS + self::ATTRIBUTS);
 
         $validated['contact_tuteur'] = Oev::formaterTelephone($validated['contact_tuteur']);
+        $validated['gestionnaire_contact'] = filled($validated['gestionnaire_contact'] ?? null) ? Oev::formaterTelephone($validated['gestionnaire_contact']) : null;
         $validated['date_naissance_estimee'] = (bool) ($validated['date_naissance_estimee'] ?? false);
         // Liste des villages vide ou désactivée : non envoyée, l'ancien village ne doit pas rester
         $validated['village_id'] ??= null;
@@ -779,7 +822,7 @@ class OevController extends Controller implements HasMiddleware
         $effacer($validated['pere_vivant'] !== 'non', ['pere_date_deces', 'pere_deces_confirme']);
         $effacer(($validated['lieu_de_vie'] ?? null) !== 'autre', ['lieu_de_vie_precision']);
         $effacer(! $validated['handicap'], ['types_handicap', 'nature_handicap']);
-        $effacer(! in_array($validated['groupe_population'] ?? null, Oev::GROUPES_MOBILES, true), ['lieu_provenance']);
+        $effacer(! in_array($validated['groupe_population'] ?? null, Oev::GROUPES_MOBILES, true), ['lieu_provenance', 'lieu_provenance_commune_id']);
         $effacer(! $validated['tuteur_a_cnib'], ['tuteur_cnib']);
         $effacer($validated['tuteur_lien'] !== 'autre_parent', ['tuteur_lien_precision']);
         $effacer((bool) $validated['tuteur_pret_continuer'], ['tuteur_raison_arret']);
@@ -803,6 +846,12 @@ class OevController extends Controller implements HasMiddleware
             $validated['lieu_naissance_commune_id'] = null;
         } else {
             $validated['lieu_naissance'] = null;
+        }
+        // Lieu de provenance : même principe
+        if (($validated['lieu_provenance_commune_id'] ?? null) === 'autre') {
+            $validated['lieu_provenance_commune_id'] = null;
+        } else {
+            $validated['lieu_provenance'] = null;
         }
 
         // Tuteur = parent(s) : nom et prénoms repris de la partie « Parents », sexe déduit

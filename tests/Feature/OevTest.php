@@ -229,7 +229,8 @@ class OevTest extends TestCase
             'a_acte_naissance' => '1',
             'groupe_population' => 'pdi',
             'quartier' => 'Secteur 12',
-            'lieu_provenance' => 'Djibo',
+            'lieu_provenance_commune_id' => Commune::where('nom', 'Djibo')->value('id'),
+            'gestionnaire_nom' => 'KABORE Issa', 'gestionnaire_fonction' => 'Travailleur social', 'gestionnaire_contact' => '76 11 22 33',
             'pere_nom' => 'OUEDRAOGO', 'pere_prenoms' => 'Salif', 'pere_date_deces' => '2023-04-10', 'pere_deces_confirme' => '1',
             'mere_nom' => 'SAWADOGO', 'mere_prenoms' => 'Mariam',
             'lieu_de_vie' => 'famille_elargie',
@@ -249,7 +250,12 @@ class OevTest extends TestCase
         $this->assertSame(['orphelin', 'precarite'], $oev->vulnerabilites);
         $this->assertTrue($oev->formation_professionnelle);
 
+        $this->assertSame('Djibo', $oev->lieuDeProvenance());
+        $this->assertSame('+226 76 11 22 33', $oev->gestionnaire_contact);
+
         $this->get(route('oevs.show', $oev))->assertOk()
+            ->assertSee('Djibo')
+            ->assertSee('KABORE Issa')
             ->assertSee('Personne déplacée interne (PDI)')
             ->assertSee('Famille élargie ou étendue')
             ->assertSee('Précarité du ménage')
@@ -299,7 +305,8 @@ class OevTest extends TestCase
         $this->assertSame(['acte_naissance', 'photo', 'rib'], array_keys($oev->piecesRequises()));
         $this->assertNull($oev->tuteur_cnib, 'Pas de numéro de CNIB si le tuteur n’en a pas');
         $this->assertSame(Oev::ETAT_SOUMIS, $oev->statut_dossier);
-        $this->get(route('oevs.show', $oev))->assertSee('Non demandé pour cet enfant')->assertSee('le tuteur n’a pas de CNIB', false);
+        // Les pièces non demandées ne sont ni affichées ni décrites
+        $this->get(route('oevs.show', $oev))->assertSee('3 pièce(s) sur 3', false)->assertDontSee('Non demandé')->assertDontSee('Certificat de scolarité');
     }
 
     public function test_un_parent_decede_ne_peut_pas_etre_le_tuteur(): void
@@ -389,6 +396,55 @@ class OevTest extends TestCase
             ->assertSessionHasErrors('pere_date_deces');
         $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $naissance, 'pere_date_deces' => now()->subYears(5)->subMonths(5)->toDateString()]))
             ->assertSessionHasNoErrors();
+        // Plus de 9 mois avant la naissance : impossible
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $naissance, 'pere_date_deces' => now()->subYears(5)->subMonths(10)->toDateString()]))
+            ->assertSessionHasErrors('pere_date_deces');
+        // Mère décédée le jour de la naissance (accouchement) : possible
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'ACCOUCHEMENT', 'date_naissance' => $naissance, 'mere_vivante' => 'non', 'mere_date_deces' => $naissance]))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_le_lieu_de_provenance_est_une_commune_ou_un_autre_lieu_precise(): void
+    {
+        $this->actingAs($this->dp);
+
+        $this->post(route('oevs.store'), $this->donneesOev(['groupe_population' => 'refugie', 'lieu_provenance_commune_id' => '999999']))
+            ->assertSessionHasErrors('lieu_provenance_commune_id');
+        $this->post(route('oevs.store'), $this->donneesOev(['groupe_population' => 'refugie', 'lieu_provenance_commune_id' => 'autre']))
+            ->assertSessionHasErrors('lieu_provenance');
+        $this->post(route('oevs.store'), $this->donneesOev(['groupe_population' => 'refugie', 'lieu_provenance_commune_id' => 'autre', 'lieu_provenance' => 'Mopti, Mali']))
+            ->assertSessionHasNoErrors();
+        $this->assertSame('Mopti, Mali', Oev::firstOrFail()->lieuDeProvenance());
+    }
+
+    public function test_pas_de_fonds_propres_de_la_famille_si_les_deux_parents_sont_decedes(): void
+    {
+        $this->actingAs($this->dp);
+        $orphelinDouble = ['mere_vivante' => 'non', 'pere_vivant' => 'non', 'tuteur_lien' => 'oncle_tante', 'nom_tuteur' => 'KABORE', 'prenom_tuteur' => 'Issa', 'tuteur_sexe' => 'M'];
+
+        $this->post(route('oevs.store'), $this->donneesOev($orphelinDouble + ['source_revenu' => 'fonds_propres']))
+            ->assertSessionHasErrors('source_revenu');
+        $this->post(route('oevs.store'), $this->donneesOev($orphelinDouble + ['source_revenu' => 'aide_famille']))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_la_classe_actuelle_ne_peut_pas_etre_inferieure_a_la_classe_precedente(): void
+    {
+        $this->actingAs($this->dp);
+
+        $this->post(route('oevs.store'), $this->donneesOev(['classe' => '6e', 'classe_precedente' => '5e', 'moyenne_annuelle' => '12', 'appreciation' => 'admis']))
+            ->assertSessionHasErrors(['classe' => 'La classe de l’année en cours ne peut pas être inférieure à celle de l’année précédente.']);
+        $this->post(route('oevs.store'), $this->donneesOev(['classe' => '5e', 'classe_precedente' => '6e', 'moyenne_annuelle' => '12', 'appreciation' => 'admis']))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_les_frais_de_scolarite_sont_facultatifs(): void
+    {
+        $this->actingAs($this->dp)
+            ->post(route('oevs.store'), $this->donneesOev(['frais_scolarite' => '']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(Oev::firstOrFail()->frais_scolarite);
     }
 
     public function test_la_classe_doit_correspondre_au_niveau(): void

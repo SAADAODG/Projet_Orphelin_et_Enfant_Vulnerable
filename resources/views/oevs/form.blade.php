@@ -17,6 +17,9 @@
   $vListe = fn (string $champ) => old($champ, $oev->{$champ} ?? []);
   // Lieu de naissance : id de commune, « autre » si un lieu hors référentiel est saisi
   $lieuNaissanceChoisi = old('lieu_naissance_commune_id', $oev->lieu_naissance_commune_id ?? ($oev->lieu_naissance ? 'autre' : ''));
+  $lieuProvenanceChoisi = old('lieu_provenance_commune_id', $oev->lieu_provenance_commune_id ?? ($oev->lieu_provenance ? 'autre' : ''));
+  // Gestionnaire du cas : l'agent qui saisit le dossier, par défaut
+  $gestionnaireNom = old('gestionnaire_nom', $oev->exists ? $oev->gestionnaire_nom : auth()->user()->name);
   // Classes dont la moyenne est notée sur 10 (préscolaire, primaire)
   $classesSur10 = collect(Oev::NIVEAUX_NOTES_SUR_10)->flatMap(fn ($niveau) => array_keys(Oev::classesDuNiveau($niveau)))->values();
 
@@ -33,11 +36,12 @@
   // Étape à ouvrir en cas d'erreur de validation côté serveur
   $champsParEtape = [
     1 => ['nom', 'prenom', 'sexe', 'date_naissance', 'date_naissance_estimee', 'lieu_naissance_commune_id', 'lieu_naissance', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
-          'region_id', 'province_id', 'commune_id', 'village_id', 'quartier', 'lieu_provenance'],
+          'region_id', 'province_id', 'commune_id', 'village_id', 'quartier', 'lieu_provenance_commune_id', 'lieu_provenance'],
     2 => ['mere_nom', 'mere_prenoms', 'mere_vivante', 'mere_date_deces', 'mere_deces_confirme', 'pere_nom', 'pere_prenoms', 'pere_vivant', 'pere_date_deces', 'pere_deces_confirme',
           'tuteur_lien', 'tuteur_lien_precision', 'nom_tuteur', 'prenom_tuteur', 'contact_tuteur', 'tuteur_sexe', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer', 'tuteur_raison_arret'],
     3 => ['lieu_de_vie', 'lieu_de_vie_precision', 'vulnerabilites', 'vulnerabilite_precision', 'handicap', 'types_handicap', 'nature_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
-          'source_revenu', 'niveau_revenu', 'logement', 'date_identification', 'identifie_par', 'niveau_priorite'],
+          'source_revenu', 'niveau_revenu', 'logement', 'date_identification', 'identifie_par', 'niveau_priorite',
+          'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact'],
     4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
           'appreciation', 'performance_scolaire', 'performance_difficultes', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
           'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois'],
@@ -60,11 +64,6 @@
     'acte_naissance' => 'a_acte_naissance:1',
     'certificat_scolarite' => 'situation_scolaire:scolarise',
     'cnib_tuteur' => 'tuteur_a_cnib:1',
-  ];
-  $conditionsPiecesInverses = [
-    'acte_naissance' => 'a_acte_naissance:0',
-    'certificat_scolarite' => 'situation_scolaire!:scolarise',
-    'cnib_tuteur' => 'tuteur_a_cnib:0',
   ];
 
   // Limites de taille réelles (application ∩ configuration PHP du serveur)
@@ -282,7 +281,25 @@
                   ])
                 </div>
                 <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'quartier', 'label' => 'Quartier / précision de l’adresse', 'valeur' => $v('quartier'), 'max' => 150, 'placeholder' => 'Quartier, hameau, repère… (ou village non encore enregistré)'])</div>
-                <div class="col-md-6" data-si="groupe_population:{{ $groupesMobiles }}">@include('oevs.champs._texte', ['nom' => 'lieu_provenance', 'label' => 'Lieu de provenance de l’enfant', 'valeur' => $v('lieu_provenance'), 'max' => 150, 'placeholder' => 'Localité d’origine avant le déplacement'])</div>
+                {{-- Lieu de provenance (enfant déplacé, réfugié…) : commune du référentiel, ou « autre lieu » à préciser --}}
+                <div class="col-md-6" data-si="groupe_population:{{ $groupesMobiles }}">
+                  <label class="form-label" for="lieu_provenance_commune_id">Lieu de provenance de l’enfant</label>
+                  <select class="form-select @error('lieu_provenance_commune_id') is-invalid @enderror" id="lieu_provenance_commune_id" name="lieu_provenance_commune_id">
+                    <option value="">Sélectionner la commune d’origine…</option>
+                    @foreach ($localites as $regionLieu)
+                      @foreach ($regionLieu['provinces'] as $provinceLieu)
+                        <optgroup label="{{ $provinceLieu['nom'] }} ({{ $regionLieu['nom'] }})">
+                          @foreach ($provinceLieu['communes'] as $communeLieu)
+                            <option value="{{ $communeLieu['id'] }}" @selected((string) $lieuProvenanceChoisi === (string) $communeLieu['id'])>{{ $communeLieu['nom'] }}</option>
+                          @endforeach
+                        </optgroup>
+                      @endforeach
+                    @endforeach
+                    <option value="autre" @selected($lieuProvenanceChoisi === 'autre')>Autre lieu / hors du Burkina Faso</option>
+                  </select>
+                  <div class="invalid-feedback">{{ $errors->first('lieu_provenance_commune_id') ?: 'Choisissez le lieu de provenance dans la liste.' }}</div>
+                </div>
+                <div class="col-md-6" data-si="groupe_population:{{ $groupesMobiles }}&&lieu_provenance_commune_id:autre">@include('oevs.champs._texte', ['nom' => 'lieu_provenance', 'label' => 'Précisez le lieu de provenance', 'valeur' => $v('lieu_provenance'), 'max' => 150, 'requis' => true, 'placeholder' => 'Ville, pays', 'erreur' => 'Précisez le lieu de provenance.'])</div>
               </div>
             </div>
           </div>
@@ -292,8 +309,8 @@
       {{-- ================= ÉTAPE 2 : Parents et tuteur ================= --}}
       <div data-etape="2" hidden>
         <div class="row g-3">
-          @foreach (['mere' => ['titre' => 'Mère', 'vivant' => 'mere_vivante', 'question' => 'La mère est-elle vivante ?', 'icone' => 'bi-gender-female', 'aide' => 'Ne peut pas être antérieure à la naissance de l’enfant.'],
-                     'pere' => ['titre' => 'Père', 'vivant' => 'pere_vivant', 'question' => 'Le père est-il vivant ?', 'icone' => 'bi-gender-male', 'aide' => 'Au plus 10 mois avant la naissance de l’enfant.']] as $parent => $p)
+          @foreach (['mere' => ['titre' => 'Mère', 'vivant' => 'mere_vivante', 'question' => 'La mère est-elle vivante ?', 'icone' => 'bi-gender-female'],
+                     'pere' => ['titre' => 'Père', 'vivant' => 'pere_vivant', 'question' => 'Le père est-il vivant ?', 'icone' => 'bi-gender-male']] as $parent => $p)
             <div class="col-lg-6">
               <div class="oev-bloc">
                 <div class="oev-bloc-titre"><i class="bi {{ $p['icone'] }}" aria-hidden="true"></i> {{ $p['titre'] }}</div>
@@ -305,8 +322,7 @@
                   <div class="col-12" data-si="{{ $p['vivant'] }}:non">
                     <div class="row g-3 oev-sous-bloc">
                       <div class="col-sm-6">
-                        @include('oevs.champs._texte', ['nom' => "{$parent}_date_deces", 'label' => 'Date du décès', 'valeur' => $vDate("{$parent}_date_deces"), 'type' => 'date', 'attributs' => 'max="' . now()->toDateString() . '" data-deces="' . $parent . '"', 'erreur' => 'Date incohérente (future ou trop ancienne).'])
-                        <div class="form-text">{{ $p['aide'] }}</div>
+                        @include('oevs.champs._texte', ['nom' => "{$parent}_date_deces", 'label' => 'Date du décès', 'valeur' => $vDate("{$parent}_date_deces"), 'type' => 'date', 'attributs' => 'max="' . now()->toDateString() . '" data-deces="' . $parent . '"', 'erreur' => $parent === 'mere' ? 'La mère ne peut pas être décédée avant la naissance de l’enfant.' : 'Le père ne peut pas être décédé plus de 9 mois avant la naissance de l’enfant.'])
                       </div>
                       <div class="col-sm-6">@include('oevs.champs._choix', ['nom' => "{$parent}_deces_confirme", 'label' => 'Décès confirmé par une autre source que l’enfant ?', 'options' => Oev::OUI_NON, 'valeur' => $vBool("{$parent}_deces_confirme")])</div>
                     </div>
@@ -326,28 +342,29 @@
 
           <div class="col-12">
             <div class="oev-bloc">
-              <div class="oev-bloc-titre"><i class="bi bi-person-heart" aria-hidden="true"></i> Parent ou tuteur qui s’occupe de l’enfant</div>
+              {{-- Titre adapté aux parents encore en vie : « Père ou tuteur… », « Mère ou tuteur… » ou « Tuteur… » --}}
+              <div class="oev-bloc-titre"><i class="bi bi-person-heart" aria-hidden="true"></i> <span data-titre-tuteur>Parent ou tuteur qui s’occupe de l’enfant</span></div>
               <div class="row g-3">
                 <div class="col-md-4">
                   <label class="form-label" for="tuteur_lien">Qui s’occupe de l’enfant ? <span class="text-danger">*</span></label>
                   <select class="form-select @error('tuteur_lien') is-invalid @enderror" id="tuteur_lien" name="tuteur_lien" required>
                     <option value="">Sélectionner…</option>
                     @foreach (Oev::LIENS_TUTEUR as $cle => $label)
-                      {{-- Les parents ne peuvent être choisis que s'ils sont déclarés vivants --}}
+                      {{-- Les parents ne sont proposés que s'ils sont déclarés vivants --}}
                       <option value="{{ $cle }}" @selected($v('tuteur_lien') === $cle)
-                        @if ($cle === 'mere') data-desactive-si="mere_vivante!:oui" @elseif ($cle === 'pere') data-desactive-si="pere_vivant!:oui" @elseif ($cle === 'parents') data-desactive-si="mere_vivante!:oui||pere_vivant!:oui" @endif>{{ $label }}</option>
+                        @if ($cle === 'mere') data-masquer-si="mere_vivante!:oui" @elseif ($cle === 'pere') data-masquer-si="pere_vivant!:oui" @elseif ($cle === 'parents') data-masquer-si="mere_vivante!:oui||pere_vivant!:oui" @endif>{{ $label }}</option>
                     @endforeach
                   </select>
-                  <div class="form-text">Mère, père ou les deux parents : seulement s’ils sont déclarés vivants.</div>
                   <div class="invalid-feedback">{{ $errors->first('tuteur_lien') ?: 'Indiquez qui s’occupe de l’enfant.' }}</div>
                 </div>
                 <div class="col-md-4" data-si="tuteur_lien:autre_parent">@include('oevs.champs._texte', ['nom' => 'tuteur_lien_precision', 'label' => 'Quel membre de la famille ?', 'valeur' => $v('tuteur_lien_precision'), 'max' => 100, 'requis' => true, 'placeholder' => 'ex : cousin, belle-mère…', 'erreur' => 'Précisez le lien.'])</div>
 
                 {{-- Parent(s) : identité déjà saisie plus haut, simplement rappelée --}}
                 <div class="col-md-8" data-si="tuteur_lien:parents|mere|pere">
-                  <div class="oev-note">
-                    <i class="bi bi-info-circle mt-1" aria-hidden="true"></i>
-                    <span>Nom et prénoms repris de la partie « Parents » : <strong data-rappel-tuteur>—</strong></span>
+                  <span class="form-label d-block">Nom et prénoms</span>
+                  <div class="oev-note align-items-center">
+                    <i class="bi bi-person" aria-hidden="true"></i>
+                    <strong class="text-body" data-rappel-tuteur>—</strong>
                   </div>
                 </div>
 
@@ -428,7 +445,8 @@
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-wallet2" aria-hidden="true"></i> Situation du ménage</div>
               <div class="row g-3">
-                <div class="col-12">@include('oevs.champs._choix', ['nom' => 'source_revenu', 'label' => 'Source du revenu', 'options' => Oev::SOURCES_REVENU, 'valeur' => $v('source_revenu'), 'mode' => 'liste'])</div>
+                <div class="col-12">@include('oevs.champs._choix', ['nom' => 'source_revenu', 'label' => 'Source du revenu', 'options' => Oev::SOURCES_REVENU, 'valeur' => $v('source_revenu'), 'mode' => 'liste',
+                  'masquerSi' => array_fill_keys(Oev::SOURCES_REVENU_PARENTS_VIVANTS, 'mere_vivante:non&&pere_vivant:non')])</div>
                 <div class="col-12">@include('oevs.champs._choix', ['nom' => 'niveau_revenu', 'label' => 'Niveau du revenu', 'options' => Oev::NIVEAUX, 'valeur' => $v('niveau_revenu')])</div>
                 <div class="col-12">@include('oevs.champs._choix', ['nom' => 'logement', 'label' => 'Logement', 'options' => Oev::LOGEMENTS, 'valeur' => $v('logement'), 'mode' => 'liste'])</div>
               </div>
@@ -442,6 +460,26 @@
                 <div class="col-sm-6">@include('oevs.champs._texte', ['nom' => 'date_identification', 'label' => 'Date d’identification', 'valeur' => $vDate('date_identification'), 'type' => 'date', 'attributs' => 'max="' . now()->toDateString() . '" data-apres-naissance', 'erreur' => 'Entre la naissance de l’enfant et aujourd’hui.'])</div>
                 <div class="col-sm-6">@include('oevs.champs._choix', ['nom' => 'identifie_par', 'label' => 'Qui a identifié l’enfant ?', 'options' => Oev::IDENTIFIE_PAR, 'valeur' => $v('identifie_par'), 'mode' => 'liste'])</div>
                 <div class="col-12">@include('oevs.champs._choix', ['nom' => 'niveau_priorite', 'label' => 'Niveau de priorité du cas', 'options' => Oev::NIVEAUX, 'valeur' => $v('niveau_priorite')])</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="oev-bloc">
+              <div class="oev-bloc-titre"><i class="bi bi-person-badge" aria-hidden="true"></i> Gestionnaire du cas</div>
+              <div class="row g-3">
+                <div class="col-md-4">@include('oevs.champs._texte', ['nom' => 'gestionnaire_nom', 'label' => 'Nom et prénom(s)', 'valeur' => $gestionnaireNom, 'max' => 150, 'placeholder' => 'Agent qui suit l’enfant'])</div>
+                <div class="col-md-4">@include('oevs.champs._texte', ['nom' => 'gestionnaire_fonction', 'label' => 'Fonction / structure', 'valeur' => $v('gestionnaire_fonction'), 'max' => 150, 'placeholder' => 'ex : travailleur social, service social de…'])</div>
+                <div class="col-md-4">
+                  <label class="form-label" for="gestionnaire_contact">Téléphone</label>
+                  <div class="input-group">
+                    <span class="input-group-text">{{ Oev::INDICATIF }}</span>
+                    <input class="form-control @error('gestionnaire_contact') is-invalid @enderror" id="gestionnaire_contact" name="gestionnaire_contact" type="tel" inputmode="numeric" data-telephone
+                           value="{{ $v('gestionnaire_contact') ? implode(' ', str_split(Oev::numeroLocal($v('gestionnaire_contact')), 2)) : '' }}"
+                           placeholder="70 12 34 56" pattern="\d{2} \d{2} \d{2} \d{2}">
+                    <div class="invalid-feedback">{{ $errors->first('gestionnaire_contact') ?: 'Saisissez les 8 chiffres du numéro (ex : 70 12 34 56).' }}</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -477,6 +515,44 @@
             </div>
           </div>
 
+          <div class="col-12" data-si="situation_scolaire!:non_scolarise">
+            <div class="oev-bloc">
+              <div class="oev-bloc-titre"><i class="bi bi-clock-history" aria-hidden="true"></i> Année précédente</div>
+              <div class="row g-3">
+                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'etablissement_precedent', 'label' => 'Établissement fréquenté', 'valeur' => $v('etablissement_precedent'), 'max' => 255, 'placeholder' => 'La classe, la moyenne et l’appréciation seront demandées ensuite'])</div>
+                <div class="col-md-3" data-si="etablissement_precedent:*">
+                  <label class="form-label" for="classe_precedente">Classe <span class="text-danger" data-si="moyenne_annuelle:*">*</span></label>
+                  <select class="form-select @error('classe_precedente') is-invalid @enderror" id="classe_precedente" name="classe_precedente">
+                    <option value="">Sélectionner…</option>
+                    @foreach (Oev::CLASSES as $niveau => $classes)
+                      <optgroup label="{{ Oev::NIVEAUX_ETUDE[$niveau] }}">
+                        @foreach ($classes as $cle => $label)<option value="{{ $cle }}" data-rang="{{ Oev::rangClasse($cle) }}" @selected($v('classe_precedente') === $cle)>{{ $label }}</option>@endforeach
+                      </optgroup>
+                    @endforeach
+                  </select>
+                  <div class="invalid-feedback">{{ $errors->first('classe_precedente') ?: 'Indiquez la classe (elle fixe le barème de la moyenne).' }}</div>
+                </div>
+                <div class="col-md-3" data-si="etablissement_precedent:*">
+                  <label class="form-label" for="moyenne_annuelle">Moyenne annuelle obtenue</label>
+                  <div class="input-group">
+                    <input class="form-control @error('moyenne_annuelle') is-invalid @enderror" id="moyenne_annuelle" name="moyenne_annuelle" type="number" step="0.01" min="0" max="20" value="{{ $v('moyenne_annuelle') }}">
+                    <span class="input-group-text" data-bareme>/ 20</span>
+                    <div class="invalid-feedback" data-bareme-erreur>{{ $errors->first('moyenne_annuelle') ?: 'Moyenne entre 0 et 20.' }}</div>
+                  </div>
+                </div>
+                <div class="col-md-6" data-si="etablissement_precedent:*">
+                  <span class="form-label d-block">Appréciation</span>
+                  <div class="oev-choix" role="radiogroup" aria-label="Appréciation">
+                    @foreach (Oev::APPRECIATIONS as $cle => $label)
+                      <input class="btn-check" type="radio" name="appreciation" id="appreciation-{{ $cle }}" value="{{ $cle }}" @checked($v('appreciation') === $cle) data-libelle="{{ $label }}">
+                      <label class="btn btn-outline-{{ $cle === 'admis' ? 'success' : ($cle === 'redouble' ? 'warning' : 'danger') }}" for="appreciation-{{ $cle }}">{{ $label }}</label>
+                    @endforeach
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="col-12" data-si="situation_scolaire:scolarise">
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Année en cours</div>
@@ -497,18 +573,18 @@
                     <option value="" data-invite>Choisissez d’abord le niveau…</option>
                     @foreach (Oev::CLASSES as $niveau => $classes)
                       @foreach ($classes as $cle => $label)
-                        <option value="{{ $cle }}" data-niveau="{{ $niveau }}" @selected($v('classe') === $cle && $v('niveau_etude') === $niveau)>{{ $label }}</option>
+                        <option value="{{ $cle }}" data-niveau="{{ $niveau }}" data-rang="{{ Oev::rangClasse($cle) }}" @selected($v('classe') === $cle && $v('niveau_etude') === $niveau)>{{ $label }}</option>
                       @endforeach
                     @endforeach
                   </select>
-                  <div class="invalid-feedback">{{ $errors->first('classe') ?: 'Choisissez la classe correspondant au niveau.' }}</div>
+                  <div class="invalid-feedback">{{ $errors->first('classe') ?: 'Choisissez la classe correspondant au niveau (pas en dessous de celle de l’année précédente).' }}</div>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label" for="frais_scolarite">Frais de scolarité <span class="text-danger">*</span></label>
+                  <label class="form-label" for="frais_scolarite">Frais de scolarité</label>
                   <div class="input-group">
-                    <input class="form-control @error('frais_scolarite') is-invalid @enderror" id="frais_scolarite" name="frais_scolarite" type="number" min="0" step="1" value="{{ $v('frais_scolarite') }}" required>
+                    <input class="form-control @error('frais_scolarite') is-invalid @enderror" id="frais_scolarite" name="frais_scolarite" type="number" min="0" step="1" value="{{ $v('frais_scolarite') }}">
                     <span class="input-group-text">FCFA</span>
-                    <div class="invalid-feedback">{{ $errors->first('frais_scolarite') ?: 'Indiquez les frais (0 si aucun).' }}</div>
+                    <div class="invalid-feedback">{{ $errors->first('frais_scolarite') ?: 'Montant invalide.' }}</div>
                   </div>
                 </div>
                 <div class="col-12">
@@ -525,45 +601,6 @@
                       @error('performance_scolaire')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                     </div>
                     <div class="col-lg-5" data-si="performance_scolaire:difficultes">@include('oevs.champs._texte', ['nom' => 'performance_difficultes', 'label' => 'Expliquez les difficultés scolaires', 'valeur' => $v('performance_difficultes'), 'max' => 255, 'requis' => true, 'placeholder' => 'ex : difficultés en lecture, absences…', 'erreur' => 'Expliquez les difficultés.'])</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-12" data-si="situation_scolaire!:non_scolarise">
-            <div class="oev-bloc">
-              <div class="oev-bloc-titre"><i class="bi bi-clock-history" aria-hidden="true"></i> Année précédente</div>
-              <div class="row g-3">
-                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'etablissement_precedent', 'label' => 'Établissement fréquenté', 'valeur' => $v('etablissement_precedent'), 'max' => 255, 'placeholder' => 'La classe, la moyenne et l’appréciation seront demandées ensuite'])</div>
-                <div class="col-md-3" data-si="etablissement_precedent:*">
-                  <label class="form-label" for="classe_precedente">Classe <span class="text-danger" data-si="moyenne_annuelle:*">*</span></label>
-                  <select class="form-select @error('classe_precedente') is-invalid @enderror" id="classe_precedente" name="classe_precedente">
-                    <option value="">Sélectionner…</option>
-                    @foreach (Oev::CLASSES as $niveau => $classes)
-                      <optgroup label="{{ Oev::NIVEAUX_ETUDE[$niveau] }}">
-                        @foreach ($classes as $cle => $label)<option value="{{ $cle }}" @selected($v('classe_precedente') === $cle)>{{ $label }}</option>@endforeach
-                      </optgroup>
-                    @endforeach
-                  </select>
-                  <div class="form-text">Moyenne sur 10 en maternelle et au primaire, sur 20 ensuite.</div>
-                  <div class="invalid-feedback">{{ $errors->first('classe_precedente') ?: 'Indiquez la classe (elle fixe le barème de la moyenne).' }}</div>
-                </div>
-                <div class="col-md-3" data-si="etablissement_precedent:*">
-                  <label class="form-label" for="moyenne_annuelle">Moyenne annuelle obtenue</label>
-                  <div class="input-group">
-                    <input class="form-control @error('moyenne_annuelle') is-invalid @enderror" id="moyenne_annuelle" name="moyenne_annuelle" type="number" step="0.01" min="0" max="20" value="{{ $v('moyenne_annuelle') }}">
-                    <span class="input-group-text" data-bareme>/ 20</span>
-                    <div class="invalid-feedback" data-bareme-erreur>{{ $errors->first('moyenne_annuelle') ?: 'Moyenne entre 0 et 20.' }}</div>
-                  </div>
-                </div>
-                <div class="col-md-6" data-si="etablissement_precedent:*">
-                  <span class="form-label d-block">Appréciation</span>
-                  <div class="oev-choix" role="radiogroup" aria-label="Appréciation">
-                    @foreach (Oev::APPRECIATIONS as $cle => $label)
-                      <input class="btn-check" type="radio" name="appreciation" id="appreciation-{{ $cle }}" value="{{ $cle }}" @checked($v('appreciation') === $cle) data-libelle="{{ $label }}">
-                      <label class="btn btn-outline-{{ $cle === 'admis' ? 'success' : ($cle === 'redouble' ? 'warning' : 'danger') }}" for="appreciation-{{ $cle }}">{{ $label }}</label>
-                    @endforeach
                   </div>
                 </div>
               </div>
@@ -633,14 +670,6 @@
                 @error($type)<span class="text-danger small">{{ $message }}</span>@enderror
               </label>
             </div>
-            @isset($conditionsPiecesInverses[$type])
-              <div class="col-sm-6 col-xl-4" data-si="{{ $conditionsPiecesInverses[$type] }}">
-                <div class="oev-note">
-                  <i class="bi bi-slash-circle mt-1" aria-hidden="true"></i>
-                  <span><strong>{{ $libelle }} non demandé(e)</strong><br>{{ ucfirst(Oev::RAISONS_PIECE_NON_REQUISE[$type]) }}.</span>
-                </div>
-              </div>
-            @endisset
           @endforeach
           <div class="col-sm-6 col-xl-4">
             <div class="oev-bloc d-flex flex-column justify-content-center">
@@ -670,7 +699,8 @@
             ]],
             ['Adresse', 'bi-geo-alt', 1, [
               ['Région', 'region_id'], ['Province', 'province_id'], ['Commune', 'commune_id'], ['Village / secteur', 'village_id'], ['Quartier / précision', 'quartier'],
-              ['Lieu de provenance', 'lieu_provenance', null, 'groupe_population:' . $groupesMobiles],
+              ['Lieu de provenance', 'lieu_provenance_commune_id', null, 'groupe_population:' . $groupesMobiles],
+              ['Précision de la provenance', 'lieu_provenance', null, 'groupe_population:' . $groupesMobiles . '&&lieu_provenance_commune_id:autre'],
             ]],
             ['Parents', 'bi-diagram-3', 2, [
               ['Mère', 'mere_nom'], ['Prénoms de la mère', 'mere_prenoms'], ['Mère vivante', 'mere_vivante'],
@@ -692,20 +722,21 @@
               ['Maladie', 'maladie_chronique'], ['Nom de la maladie', 'maladie_nom', null, 'maladie_chronique:1'], ['Suivi clinique', 'suivi_clinique', null, 'maladie_chronique:1'],
               ['Source de revenu', 'source_revenu'], ['Niveau de revenu', 'niveau_revenu'], ['Logement', 'logement'],
               ['Date d’identification', 'date_identification', 'date_simple'], ['Identifié par', 'identifie_par'], ['Priorité', 'niveau_priorite'],
+              ['Gestionnaire du cas', 'gestionnaire_nom'], ['Fonction / structure', 'gestionnaire_fonction'], ['Tél. du gestionnaire', 'gestionnaire_contact', 'telephone'],
             ]],
             ['Scolarité', 'bi-mortarboard', 4, [
               ['Situation scolaire', 'situation_scolaire'], ['Niveau d’étude', 'niveau_etude', null, 'situation_scolaire:scolarise|descolarise'],
               ['Raison', 'raison_non_scolarisation', null, 'situation_scolaire:non_scolarise|descolarise'],
               ['Précision', 'raison_non_scolarisation_precision', null, 'situation_scolaire:non_scolarise|descolarise&&raison_non_scolarisation:autre'],
+              ['Établ. précédent', 'etablissement_precedent', null, 'situation_scolaire!:non_scolarise'],
+              ['Classe précédente', 'classe_precedente', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
+              ['Moyenne annuelle', 'moyenne_annuelle', 'moyenne', 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
+              ['Appréciation', 'appreciation', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
               ['Établ. en cours', 'etablissement_actuel', null, 'situation_scolaire:scolarise'], ['Public / privé', 'type_etablissement', null, 'situation_scolaire:scolarise'],
               ['Système éducatif', 'systeme_educatif', null, 'situation_scolaire:scolarise'], ['Classe', 'classe', null, 'situation_scolaire:scolarise'],
               ['Frais de scolarité', 'frais_scolarite', 'fcfa', 'situation_scolaire:scolarise'],
               ['Performances', 'performance_scolaire', null, 'situation_scolaire:scolarise'],
               ['Difficultés', 'performance_difficultes', null, 'situation_scolaire:scolarise&&performance_scolaire:difficultes'],
-              ['Établ. précédent', 'etablissement_precedent', null, 'situation_scolaire!:non_scolarise'],
-              ['Classe précédente', 'classe_precedente', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Moyenne annuelle', 'moyenne_annuelle', 'moyenne', 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Appréciation', 'appreciation', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
               ['Formation professionnelle', 'formation_professionnelle'], ['État', 'formation_etat', null, 'formation_professionnelle:1'],
               ['Filière', 'formation_filiere', null, 'formation_professionnelle:1'], ['Type de centre', 'formation_type_centre', null, 'formation_professionnelle:1'],
               ['Durée', 'formation_duree_mois', 'mois', 'formation_professionnelle:1'], ['Durée déjà reçue', 'formation_duree_recue_mois', 'mois', 'formation_professionnelle:1&&formation_etat:en_cours'],
@@ -827,13 +858,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // Une option masquée (ex. « Grossesse » pour un garçon) est décochée
     form.querySelectorAll('.oev-case[hidden] input:checked').forEach(function (c) { c.checked = false; });
 
-    // Un parent qui n'est pas déclaré vivant ne peut pas être choisi comme tuteur
-    Array.prototype.forEach.call(champLien.options, function (o) {
-      if (!o.dataset.desactiveSi) { return; }
-      o.disabled = conditionRemplie(o.dataset.desactiveSi);
-      o.textContent = o.textContent.replace(/ — indisponible.*$/, '') + (o.disabled ? ' — indisponible (parent non déclaré vivant)' : '');
-      if (o.disabled && o.selected) { champLien.value = ''; }
+    // Options retirées selon les réponses : parent non déclaré vivant comme tuteur, fonds propres sans parents…
+    form.querySelectorAll('option[data-masquer-si]').forEach(function (o) {
+      var masquee = conditionRemplie(o.dataset.masquerSi);
+      o.hidden = masquee;
+      o.disabled = masquee;
+      if (masquee && o.selected) { o.parentElement.value = ''; }
     });
+
+    // Titre du bloc tuteur selon les parents en vie
+    var mereVivante = valeursDe('mere_vivante')[0] === 'oui', pereVivant = valeursDe('pere_vivant')[0] === 'oui';
+    form.querySelector('[data-titre-tuteur]').textContent = (mereVivante && pereVivant ? 'Parent ou tuteur'
+      : mereVivante ? 'Mère ou tuteur' : pereVivant ? 'Père ou tuteur' : 'Tuteur') + ' qui s’occupe de l’enfant';
 
     // Champs obligatoires selon une autre réponse (ex. nom de la mère si elle s'occupe de l'enfant)
     form.querySelectorAll('[data-requis-si]').forEach(function (c) { c.required = conditionRemplie(c.dataset.requisSi); });
@@ -842,8 +878,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var parentsTuteurs = { mere: ['mere'], pere: ['pere'], parents: ['pere', 'mere'] }[champLien.value] || [];
     rappelTuteur.textContent = parentsTuteurs.map(function (p) {
       var nomComplet = (document.getElementById(p + '_nom').value + ' ' + document.getElementById(p + '_prenoms').value).trim();
-      return (p === 'mere' ? 'Mère : ' : 'Père : ') + (nomComplet || 'à saisir dans la partie « Parents »');
-    }).join(' · ') || '—';
+      return nomComplet || (p === 'mere' ? 'Nom de la mère à saisir plus haut' : 'Nom du père à saisir plus haut');
+    }).join(' et ') || '—';
 
     // Barème de la moyenne selon la classe de l'année précédente : /10 (maternelle, primaire) ou /20
     var bareme = classesSur10.indexOf(document.getElementById('classe_precedente').value) !== -1 ? 10 : 20;
@@ -857,11 +893,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var dureeTotale = document.getElementById('formation_duree_mois').value;
     document.getElementById('formation_duree_recue_mois').max = dureeTotale || '';
 
-    // Classes proposées selon le niveau d'étude
+    // Classes proposées selon le niveau d'étude, et jamais en dessous de la classe de l'année précédente
+    // (ex. 5e l'an dernier : la 6e n'est pas proposée cette année)
     var niveau = champNiveau.value;
+    var champClassePrec = document.getElementById('classe_precedente');
+    var optionPrec = champClassePrec.options[champClassePrec.selectedIndex];
+    var rangPrecedent = conditionRemplie('etablissement_precedent:*') && optionPrec && optionPrec.dataset.rang ? Number(optionPrec.dataset.rang) : null;
     Array.prototype.forEach.call(champClasse.options, function (o) {
       if (o.hasAttribute('data-invite')) { o.textContent = niveau ? 'Sélectionner…' : 'Choisissez d’abord le niveau…'; return; }
-      var visible = o.dataset.niveau === niveau;
+      var visible = o.dataset.niveau === niveau && !(rangPrecedent !== null && o.dataset.rang !== '' && Number(o.dataset.rang) < rangPrecedent);
       o.hidden = !visible;
       o.disabled = !visible;
       if (!visible && o.selected) { champClasse.value = ''; }
@@ -876,7 +916,7 @@ document.addEventListener('DOMContentLoaded', function () {
     identification.min = naissance || '';
     if (naissance) {
       var d = new Date(naissance);
-      d.setMonth(d.getMonth() - 10);
+      d.setMonth(d.getMonth() - 9);
       decesPere.min = d.toISOString().slice(0, 10);
     } else {
       decesPere.min = '';
@@ -922,11 +962,12 @@ document.addEventListener('DOMContentLoaded', function () {
   champDate.addEventListener('change', majAge);
 
   /* ----- Téléphone : 8 chiffres groupés par deux (l'indicatif +226 est affiché à part) ----- */
-  var champTel = document.getElementById('contact_tuteur');
-  champTel.addEventListener('input', function () {
-    var chiffres = champTel.value.replace(/\D/g, '');
-    if (chiffres.length > 8 && chiffres.indexOf('226') === 0) { chiffres = chiffres.slice(3); }
-    champTel.value = chiffres.slice(0, 8).replace(/(\d{2})(?=\d)/g, '$1 ');
+  [document.getElementById('contact_tuteur'), document.getElementById('gestionnaire_contact')].forEach(function (champTel) {
+    champTel.addEventListener('input', function () {
+      var chiffres = champTel.value.replace(/\D/g, '');
+      if (chiffres.length > 8 && chiffres.indexOf('226') === 0) { chiffres = chiffres.slice(3); }
+      champTel.value = chiffres.slice(0, 8).replace(/(\d{2})(?=\d)/g, '$1 ');
+    });
   });
 
   /* ----- Pièces : seules les cartes affichées (pièces demandées) comptent et sont envoyées ----- */

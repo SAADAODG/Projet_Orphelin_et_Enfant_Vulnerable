@@ -11,7 +11,6 @@
 @php
   // Seules les pièces qui s'appliquent à cet enfant sont exigées (ex. pas d'acte s'il n'en a pas)
   $piecesRequises = $oev->piecesRequises();
-  $piecesNonRequises = array_diff_key(Oev::DOCUMENTS, $piecesRequises);
   $totalPieces = count($piecesRequises);
   $pieces = count($oev->piecesFournies());
   $pourcentage = $totalPieces ? (int) round($pieces / $totalPieces * 100) : 100;
@@ -475,13 +474,13 @@
               </li>
             @endforeach
           </ul>
-          @if ($oev->lieu_provenance)
-            <div class="small mt-2"><span class="text-muted">Provenance :</span> <strong>{{ $oev->lieu_provenance }}</strong></div>
+          @if ($oev->lieuDeProvenance())
+            <div class="small mt-2"><span class="text-muted">Provenance :</span> <strong>{{ $oev->lieuDeProvenance() }}</strong></div>
           @endif
         </section>
 
         {{-- Identification du cas --}}
-        @if ($oev->date_identification || $oev->identifie_par || $oev->niveau_priorite)
+        @if ($oev->date_identification || $oev->identifie_par || $oev->niveau_priorite || $oev->gestionnaire_nom)
           <section class="oev-carte">
             <h2 class="oev-carte-titre"><i class="bi bi-clipboard-data" aria-hidden="true"></i> Identification du cas</h2>
             <div class="small d-grid gap-1">
@@ -494,6 +493,14 @@
                 </div>
               @endif
             </div>
+            @if ($oev->gestionnaire_nom || $oev->gestionnaire_fonction || $oev->gestionnaire_contact)
+              <div class="small d-grid gap-1 mt-3 pt-2 border-top">
+                <span class="fw-semibold"><i class="bi bi-person-badge me-1" aria-hidden="true"></i>Gestionnaire du cas</span>
+                @if ($oev->gestionnaire_nom)<div class="d-flex justify-content-between gap-2"><span class="text-muted">Nom</span><strong class="text-end">{{ $oev->gestionnaire_nom }}</strong></div>@endif
+                @if ($oev->gestionnaire_fonction)<div class="d-flex justify-content-between gap-2"><span class="text-muted">Fonction / structure</span><strong class="text-end">{{ $oev->gestionnaire_fonction }}</strong></div>@endif
+                @if ($oev->gestionnaire_contact)<div class="d-flex justify-content-between gap-2"><span class="text-muted">Téléphone</span><a class="fw-bold text-end" href="tel:{{ str_replace(' ', '', $oev->gestionnaire_contact) }}">{{ $oev->gestionnaire_contact }}</a></div>@endif
+              </div>
+            @endif
           </section>
         @endif
 
@@ -567,16 +574,6 @@
             </article>
           @endforeach
         </div>
-
-        @if ($piecesNonRequises)
-          <div class="small text-muted mt-3">
-            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
-            Non demandé pour cet enfant :
-            @foreach ($piecesNonRequises as $type => $libelle)
-              <strong>{{ $libelle }}</strong> ({{ Oev::RAISONS_PIECE_NON_REQUISE[$type] ?? 'non applicable' }})@if (! $loop->last), @endif
-            @endforeach
-          </div>
-        @endif
       </section>
     </div>
   </div>

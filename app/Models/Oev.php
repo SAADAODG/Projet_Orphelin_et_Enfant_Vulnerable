@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'motif_rejet', 'rejete_niveau', 'rejete_at', 'rejete_par',
     // Fiche d'identification (champs OEV)
     'date_naissance_estimee', 'lieu_naissance', 'lieu_naissance_commune_id', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
-    'quartier', 'lieu_provenance',
+    'quartier', 'lieu_provenance', 'lieu_provenance_commune_id',
     'mere_nom', 'mere_prenoms', 'mere_vivante', 'mere_date_deces', 'mere_deces_confirme',
     'pere_nom', 'pere_prenoms', 'pere_vivant', 'pere_date_deces', 'pere_deces_confirme',
     'lieu_de_vie', 'lieu_de_vie_precision', 'tuteur_sexe', 'tuteur_lien', 'tuteur_lien_precision', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer', 'tuteur_raison_arret',
@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'types_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
     'source_revenu', 'niveau_revenu', 'logement',
     'date_identification', 'identifie_par', 'niveau_priorite',
+    'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact',
 ])]
 class Oev extends Model
 {
@@ -223,6 +224,9 @@ class Oev extends Model
         'ong_services' => 'Soutien d’ONG / services sociaux',
         'mendicite' => 'Pratique de la mendicité',
     ];
+
+    /** Sources de revenu impossibles quand les deux parents sont décédés. */
+    public const SOURCES_REVENU_PARENTS_VIVANTS = ['fonds_propres'];
 
     public const NIVEAUX = ['faible' => 'Faible', 'moyen' => 'Moyen', 'eleve' => 'Élevé'];
 
@@ -584,13 +588,6 @@ class Oev extends Model
         };
     }
 
-    /** Raison pour laquelle une pièce n'est pas demandée (affichée au DP). */
-    public const RAISONS_PIECE_NON_REQUISE = [
-        'acte_naissance' => 'l’enfant n’a pas d’acte de naissance',
-        'certificat_scolarite' => 'l’enfant n’est pas scolarisé',
-        'cnib_tuteur' => 'le tuteur n’a pas de CNIB',
-    ];
-
     /** Types des pièces exigées déjà fournies. */
     public function piecesFournies(): array
     {
@@ -662,6 +659,21 @@ class Oev extends Model
         return null;
     }
 
+    /**
+     * Rang d'une classe dans le parcours scolaire (PS = 0 … Terminale, Licence…), pour comparer
+     * l'année précédente et l'année en cours. Null si la classe est inconnue ou sans rang
+     * (BTS / DUT, qui ne se place pas sur la suite Licence – Master).
+     */
+    public static function rangClasse(?string $classe): ?int
+    {
+        if ($classe === null || $classe === 'BTS') {
+            return null;
+        }
+        $rang = array_search($classe, array_keys(self::toutesLesClasses()), true);
+
+        return $rang === false ? null : $rang;
+    }
+
     /** Barème de la moyenne : sur 10 au préscolaire et au primaire, sur 20 ensuite. */
     public static function baremeMoyenne(?string $classe): int
     {
@@ -688,5 +700,16 @@ class Oev extends Model
     public function lieuDeNaissance(): ?string
     {
         return $this->lieuNaissanceCommune?->nom ?? $this->lieu_naissance;
+    }
+
+    public function lieuProvenanceCommune(): BelongsTo
+    {
+        return $this->belongsTo(Commune::class, 'lieu_provenance_commune_id');
+    }
+
+    /** Commune de provenance au Burkina, sinon le lieu saisi (autre lieu / étranger). */
+    public function lieuDeProvenance(): ?string
+    {
+        return $this->lieuProvenanceCommune?->nom ?? $this->lieu_provenance;
     }
 }

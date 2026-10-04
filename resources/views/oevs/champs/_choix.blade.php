@@ -1,19 +1,21 @@
 {{--
   Choix unique : boutons radio (peu d'options) ou liste déroulante.
   Variables : $nom, $label, $options [valeur => libellé], $valeur (valeur actuelle, chaîne),
-              $requis (bool, défaut false), $mode ('boutons' | 'liste', défaut 'boutons'), $aide (texte, optionnel)
+              $requis (bool, défaut false), $mode ('boutons' | 'liste', défaut 'boutons'), $aide (texte, optionnel),
+              $masquerSi ([valeur => condition], mode liste : option retirée quand la condition est remplie)
 --}}
 @php
   $requis = $requis ?? false;
   $mode = $mode ?? 'boutons';
   $valeur = $valeur === null ? null : (string) $valeur;
+  $masquerSi = $masquerSi ?? [];
 @endphp
 @if ($mode === 'liste')
   <label class="form-label" for="{{ $nom }}">{{ $label }} @if ($requis)<span class="text-danger">*</span>@endif</label>
   <select class="form-select @error($nom) is-invalid @enderror" id="{{ $nom }}" name="{{ $nom }}" @if ($requis) required @endif data-recap="{{ $nom }}">
     <option value="">Sélectionner…</option>
     @foreach ($options as $cle => $libelle)
-      <option value="{{ $cle }}" @selected($valeur === (string) $cle)>{{ $libelle }}</option>
+      <option value="{{ $cle }}" @selected($valeur === (string) $cle) @isset($masquerSi[$cle]) data-masquer-si="{{ $masquerSi[$cle] }}" @endisset>{{ $libelle }}</option>
     @endforeach
   </select>
 @else
