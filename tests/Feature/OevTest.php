@@ -224,7 +224,7 @@ class OevTest extends TestCase
     {
         $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev([
             'date_naissance_estimee' => '1',
-            'lieu_naissance_commune_id' => Commune::where('nom', 'Kaya')->value('id'),
+            'lieu_naissance' => 'Kaya',
             'nationalite' => 'Burkinabè',
             'a_acte_naissance' => '1',
             'groupe_population' => 'pdi',
@@ -361,15 +361,15 @@ class OevTest extends TestCase
         $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'SANS', 'a_acte_naissance' => '0', 'numero_acte_naissance' => '123']))->assertSessionHasNoErrors();
         $this->assertNull(Oev::where('nom', 'SANS')->value('numero_acte_naissance'), 'Pas de numéro sans acte');
 
-        // Lieu de naissance : une commune de la liste, ou « autre » à préciser
-        $this->post(route('oevs.store'), $this->donneesOev(['lieu_naissance_commune_id' => '999999']))->assertSessionHasErrors('lieu_naissance_commune_id');
-        $this->post(route('oevs.store'), $this->donneesOev(['lieu_naissance_commune_id' => 'autre']))->assertSessionHasErrors('lieu_naissance');
-        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'ETRANGER', 'lieu_naissance_commune_id' => 'autre', 'lieu_naissance' => 'Abidjan, Côte d’Ivoire']))->assertSessionHasNoErrors();
-        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'LOCAL', 'lieu_naissance_commune_id' => $this->ouagadougou->id, 'lieu_naissance' => 'ignoré']))->assertSessionHasNoErrors();
+        // Lieu de naissance : saisie libre (facultative)
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'ETRANGER', 'lieu_naissance' => 'Abidjan, Côte d’Ivoire']))->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'LOCAL', 'lieu_naissance' => 'Secteur 15, Ouagadougou']))->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'INCONNU', 'lieu_naissance' => '']))->assertSessionHasNoErrors();
 
         $local = Oev::where('nom', 'LOCAL')->firstOrFail();
-        $this->assertSame([$this->ouagadougou->id, null], [$local->lieu_naissance_commune_id, $local->lieu_naissance]);
+        $this->assertSame([null, 'Secteur 15, Ouagadougou'], [$local->lieu_naissance_commune_id, $local->lieu_naissance]);
         $this->assertSame('Abidjan, Côte d’Ivoire', Oev::where('nom', 'ETRANGER')->firstOrFail()->lieuDeNaissance());
+        $this->get(route('oevs.show', $local))->assertSee('Secteur 15, Ouagadougou');
         $this->get(route('oevs.show', $local))->assertSee('AN-2015-0457');
     }
 
@@ -436,6 +436,16 @@ class OevTest extends TestCase
             ->assertSessionHasErrors(['classe' => 'La classe de l’année en cours ne peut pas être inférieure à celle de l’année précédente.']);
         $this->post(route('oevs.store'), $this->donneesOev(['classe' => '5e', 'classe_precedente' => '6e', 'moyenne_annuelle' => '12', 'appreciation' => 'admis']))
             ->assertSessionHasNoErrors();
+    }
+
+    public function test_l_adresse_ne_propose_que_la_province_du_dp(): void
+    {
+        $this->actingAs($this->dp)->get(route('oevs.create'))->assertOk()
+            ->assertViewHas('localitesZone', fn (array $zone) => count($zone) === 1
+                && $zone[0]['id'] === $this->dp->region_id
+                && collect($zone[0]['provinces'])->pluck('id')->all() === [$this->dp->province_id])
+            // Le lieu de naissance et la provenance gardent tout le pays
+            ->assertViewHas('localites', fn (array $localites) => count($localites) > 1);
     }
 
     public function test_les_frais_de_scolarite_sont_facultatifs(): void

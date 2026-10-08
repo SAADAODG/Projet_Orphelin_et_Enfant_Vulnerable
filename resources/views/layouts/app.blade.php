@@ -118,7 +118,7 @@
           </a>
           @endcan
           @can('voir rapports')
-          <a class="nav-link" href="#">
+          <a class="nav-link {{ request()->routeIs('extraction.*') ? 'active' : '' }}" href="{{ route('extraction.index') }}" @if (request()->routeIs('extraction.*')) aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-funnel" aria-hidden="true"></i></span>
             <span class="nav-text">Filtrage et extraction</span>
           </a>
