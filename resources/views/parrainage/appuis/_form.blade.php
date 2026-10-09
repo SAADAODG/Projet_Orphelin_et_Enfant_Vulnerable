@@ -40,7 +40,7 @@
       @if ($appui->exists)
         L’OEV d’un appui enregistré ne change pas : en cas d’erreur, enregistrez un nouvel appui.
       @else
-        Seuls les OEV intégrés de votre zone sont proposés.
+        Seuls les OEV intégrés et actifs de votre zone sont proposés.
       @endif
     </div>
     <div class="list-group mt-1" data-oev-resultats role="listbox" aria-label="OEV trouvés"></div>
@@ -132,7 +132,7 @@
             if (!oevs.length) {
               var vide = document.createElement('div');
               vide.className = 'list-group-item text-muted small';
-              vide.textContent = 'Aucun OEV intégré trouvé dans votre zone.';
+              vide.textContent = 'Aucun OEV intégré et actif trouvé dans votre zone.';
               resultats.append(vide);
             }
             oevs.forEach(function (oev) {

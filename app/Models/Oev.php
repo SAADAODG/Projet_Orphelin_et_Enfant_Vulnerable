@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
     'motif_complement', 'complement_at', 'complement_par',
     'motif_rejet', 'rejete_niveau', 'rejete_at', 'rejete_par',
+    'desactivation_etat', 'desactivation_motif', 'desactivation_commentaire', 'desactivation_demandee_at', 'desactivation_demandee_par', 'desactive_at', 'desactive_par',
     // Fiche d'identification (champs OEV)
     'date_naissance_estimee', 'lieu_naissance', 'lieu_naissance_commune_id', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
     'quartier', 'lieu_provenance', 'lieu_provenance_commune_id',
@@ -56,6 +57,18 @@ class Oev extends Model
     /** Niveau ayant prononcé le rejet (colonne rejete_niveau). */
     public const REJET_DR = 'DR';
     public const REJET_CENTRAL = 'Central';
+
+    /** Désactivation d'un OEV intégré : demandée par le DP, validée par le niveau central. */
+    public const DESACTIVATION_DEMANDEE = 'demandee';
+    public const DESACTIVE = 'desactive';
+
+    public const MOTIFS_DESACTIVATION = [
+        'deces' => 'Décès',
+        'majorite' => 'Devenu majeur',
+        'fin_vulnerabilite' => 'Sortie de la situation de vulnérabilité',
+        'perdu_de_vue' => 'Perdu de vue / a quitté la zone',
+        'autre' => 'Autre',
+    ];
 
     public const ETATS = [
         self::ETAT_BROUILLON => 'En constitution',
@@ -292,6 +305,8 @@ class Oev extends Model
             'integre_at' => 'datetime',
             'complement_at' => 'datetime',
             'rejete_at' => 'datetime',
+            'desactivation_demandee_at' => 'datetime',
+            'desactive_at' => 'datetime',
             'date_naissance_estimee' => 'boolean',
             'a_acte_naissance' => 'boolean',
             'mere_date_deces' => 'date',
@@ -438,6 +453,41 @@ class Oev extends Model
     public function scopeEtat(Builder $query, string ...$etats): Builder
     {
         return $query->whereIn('statut_dossier', $etats);
+    }
+
+    /**
+     * OEV pouvant bénéficier d'une aide (appui partenaire, parrainage de l'État) : intégrés et non désactivés.
+     * Un OEV dont la désactivation est seulement demandée reste bénéficiaire jusqu'à la validation.
+     */
+    public function scopeBeneficiaires(Builder $query): Builder
+    {
+        return $query->etat(self::ETAT_INTEGRE)
+            ->where(fn ($q) => $q->whereNull('desactivation_etat')->orWhere('desactivation_etat', '!=', self::DESACTIVE));
+    }
+
+    public function estDesactive(): bool
+    {
+        return $this->desactivation_etat === self::DESACTIVE;
+    }
+
+    public function desactivationDemandee(): bool
+    {
+        return $this->desactivation_etat === self::DESACTIVATION_DEMANDEE;
+    }
+
+    public function libelleMotifDesactivation(): string
+    {
+        return self::MOTIFS_DESACTIVATION[$this->desactivation_motif] ?? (string) $this->desactivation_motif;
+    }
+
+    public function demandeurDesactivation(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'desactivation_demandee_par');
+    }
+
+    public function auteurDesactivation(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'desactive_par');
     }
 
     /**

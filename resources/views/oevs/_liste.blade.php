@@ -123,6 +123,11 @@
               <td><span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', Oev::STATUTS) }}</span></td>
               <td>
                 <span class="badge rounded-pill text-bg-{{ $oev->couleurEtat() }}">{{ $oev->libelleEtat() }}</span>
+                @if ($oev->estDesactive())
+                  <span class="badge rounded-pill text-bg-dark" title="{{ $oev->libelleMotifDesactivation() }}">Désactivé</span>
+                @elseif ($oev->desactivationDemandee())
+                  <span class="badge rounded-pill text-bg-warning">Désactivation demandée</span>
+                @endif
                 @if ($oev->estModifiable())
                   @if ($oev->estComplet())
                     <small class="d-block text-success fw-semibold mt-1"><i class="bi bi-send" aria-hidden="true"></i> Prêt à soumettre au DR</small>

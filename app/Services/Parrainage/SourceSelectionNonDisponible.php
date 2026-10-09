@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 /**
  * Implémentation provisoire en attendant les modules de Nakoulma : aucune liste n'est disponible.
  *
- * Seule exception, eligiblesParRegion() : elle compte les OEV intégrés de chaque région, faute de
+ * Seule exception, eligiblesParRegion() : elle compte les OEV intégrés et non désactivés de chaque région, faute de
  * critères d'éligibilité définis par le module Sélection. À remplacer par le calcul de ce module.
  */
 class SourceSelectionNonDisponible implements SourceSelection
@@ -21,7 +21,7 @@ class SourceSelectionNonDisponible implements SourceSelection
 
     public function eligiblesParRegion(SessionParrainage $session): array
     {
-        return Oev::etat(Oev::ETAT_INTEGRE)
+        return Oev::beneficiaires()
             ->whereNotNull('region_id')
             ->selectRaw('region_id, count(*) as total')
             ->groupBy('region_id')

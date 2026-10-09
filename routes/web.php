@@ -6,6 +6,7 @@ use App\Http\Controllers\AppuiPartenaireController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DesactivationOevController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
@@ -132,6 +133,10 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::get('/liste-oev', [OevController::class, 'liste'])->name('oevs.liste');
         Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
         Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
+        // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
+        Route::post('/oevs/{oev}/desactiver', [DesactivationOevController::class, 'desactiver'])->name('oevs.desactiver');
+        Route::post('/oevs/{oev}/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('oevs.desactivation.decider');
+        Route::post('/oevs/{oev}/reactiver', [DesactivationOevController::class, 'reactiver'])->name('oevs.reactiver');
     });
     // Filtrage multicritère des dossiers enfants / OEV et export CSV (limités à la zone de l'utilisateur)
     Route::middleware(['can:voir rapports', 'can:voir OEV'])->group(function () {

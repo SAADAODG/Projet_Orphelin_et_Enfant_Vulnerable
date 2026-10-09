@@ -133,7 +133,7 @@ class AppuiPartenaireController extends Controller
         return redirect()->route('parrainage.appuis.index')->with('success', 'Appui mis à jour.');
     }
 
-    /** Recherche d'un OEV intégré de la zone de l'utilisateur, par code, nom ou prénom (liste du formulaire). */
+    /** Recherche d'un OEV intégré et actif de la zone de l'utilisateur, par code, nom ou prénom (liste du formulaire). */
     public function rechercheOev(Request $request): JsonResponse
     {
         $terme = trim((string) $request->query('q', ''));
@@ -266,7 +266,7 @@ class AppuiPartenaireController extends Controller
 
         $validateur = Validator::make($donnees, $this->regles($nature), [
             'oev_id.required' => $ligne['code_oev']
-                ? "OEV « {$ligne['code_oev']} » introuvable, non intégré ou hors de votre zone."
+                ? "OEV « {$ligne['code_oev']} » introuvable, non intégré, désactivé ou hors de votre zone."
                 : 'Code OEV manquant.',
             'nature_appui_id.required' => $ligne['nature'] ? "Nature « {$ligne['nature']} » inconnue." : 'Code nature manquant.',
         ] + $this->messages());
@@ -352,7 +352,7 @@ class AppuiPartenaireController extends Controller
     {
         return [
             'oev_id.required' => 'Choisissez l’OEV appuyé.',
-            'oev_id.in' => 'Cet OEV n’est pas intégré ou n’est pas dans votre zone.',
+            'oev_id.in' => 'Cet OEV n’est pas intégré, a été désactivé ou n’est pas dans votre zone.',
             'parrain_id.required' => 'Choisissez le parrain.',
             'parrain_id.exists' => 'Parrain inconnu ou désactivé.',
             'annee.regex' => 'L’année scolaire s’écrit sous la forme 2026-2027.',
@@ -363,10 +363,10 @@ class AppuiPartenaireController extends Controller
         ];
     }
 
-    /** OEV pour lesquels l'utilisateur peut enregistrer un appui : intégrés, dans sa zone. */
+    /** OEV pour lesquels l'utilisateur peut enregistrer un appui : intégrés, non désactivés, dans sa zone. */
     private function oevsSaisissables(User $utilisateur)
     {
-        return Oev::etat(Oev::ETAT_INTEGRE)->dansLePerimetreDe($utilisateur);
+        return Oev::beneficiaires()->dansLePerimetreDe($utilisateur);
     }
 
     private function verifierAcces(User $utilisateur, AppuiPartenaire $appui): void

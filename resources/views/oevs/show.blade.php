@@ -275,6 +275,10 @@
     </section>
   @endif
 
+  @if ($oev->estIntegre())
+    @include('oevs._desactivation')
+  @endif
+
   <div class="row g-3 mt-1">
     <div class="col-12 col-xl-8">
       <div class="d-flex flex-column gap-3 h-100">
