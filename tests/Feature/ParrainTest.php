@@ -100,17 +100,34 @@ class ParrainTest extends TestCase
         $this->actingAs($this->central)->post(route('parrainage.parrains.store'), [
             'type' => 'entreprise', 'nom' => 'Société Solidaire', 'contact_nom' => 'M. Kaboré', 'telephone' => '+226 70 11 22 33',
             'email' => 'contact@solidaire.bf', 'actif' => '1',
-            'zones_regions' => [$region->id], 'zones_provinces' => [$province->id],
+            'zones' => [
+                ['region_id' => $region->id, 'province_id' => ''],                      // toute la région
+                ['region_id' => $province->region_id, 'province_id' => $province->id],  // une province d'une autre région
+                ['region_id' => $region->id, 'province_id' => $this->ouagadougou->province_id], // redondante : région déjà entière
+                ['region_id' => '', 'province_id' => ''],                               // ligne laissée vide
+            ],
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $parrain = Parrain::where('nom', 'Société Solidaire')->sole();
         $this->assertCount(2, $parrain->zones);
+        $this->assertSame([$province->id], $parrain->zones->pluck('province_id')->filter()->values()->all());
         $this->assertEqualsCanonicalizing([$region->id, $province->region_id], $parrain->zones->pluck('region_id')->all());
         $this->assertSame(1, Parrain::intervenantDans($province->region)->where('id', $parrain->id)->count());
         $this->assertTrue(JournalActivite::de($parrain)->where('action', 'parrain.creation')->exists());
 
         $this->actingAs($this->central)->get(route('parrainage.parrains.show', $parrain))->assertOk()->assertSee('M. Kaboré');
         $this->actingAs($this->central)->get(route('parrainage.parrains.index', ['region_id' => $region->id]))->assertOk()->assertSee('Société Solidaire');
+        $this->actingAs($this->central)->get(route('parrainage.parrains.edit', $parrain))->assertOk()->assertSee('Toute la région');
+    }
+
+    public function test_une_province_doit_appartenir_a_la_region_choisie(): void
+    {
+        $this->actingAs($this->central)->post(route('parrainage.parrains.store'), [
+            'type' => 'ong', 'nom' => 'ONG Mauvaise zone', 'actif' => '1',
+            'zones' => [['region_id' => $this->ouagadougou->province->region_id, 'province_id' => $this->ailleurs->province_id]],
+        ])->assertSessionHasErrors('zones.0.province_id');
+
+        $this->assertDatabaseMissing('parrains', ['nom' => 'ONG Mauvaise zone']);
     }
 
     public function test_seul_le_niveau_central_gere_le_repertoire(): void

@@ -194,16 +194,23 @@ class ParrainController extends Controller
     {
         return [
             'parrain' => $parrain,
-            'regions' => Region::orderBy('nom')->get(['id', 'nom']),
-            'provinces' => Province::with('region:id,nom')->orderBy('nom')->get(['id', 'nom', 'region_id']),
-            'regionsChoisies' => $parrain->zones->pluck('region_id')->filter()->values()->all(),
-            'provincesChoisies' => $parrain->zones->pluck('province_id')->filter()->values()->all(),
+            // Région > provinces, pour les listes déroulantes en cascade de la zone d'intervention
+            'regions' => Region::with(['provinces' => fn ($q) => $q->orderBy('nom')->select(['id', 'nom', 'region_id'])])->orderBy('nom')->get(['id', 'nom']),
+            'zones' => $parrain->zones->map(fn ($zone) => ['region_id' => $zone->region_id, 'province_id' => $zone->province_id])->values()->all(),
         ];
     }
 
-    /** @return array{parrain: array, regions: array<int>, provinces: array<int>} */
+    /**
+     * Zone d'intervention : des lignes « région + province facultative » (zones[n][region_id], zones[n][province_id]).
+     * Sans province, toute la région est couverte.
+     *
+     * @return array{parrain: array, regions: array<int>, provinces: array<int>}
+     */
     private function valider(Request $request): array
     {
+        // Lignes laissées vides (aucune région choisie) ignorées
+        $request->merge(['zones' => array_values(array_filter((array) $request->input('zones', []), fn ($zone) => ! empty($zone['region_id'])))]);
+
         $donnees = $request->validate([
             'type' => ['required', Rule::in(array_keys(Parrain::TYPES))],
             'nom' => ['required', 'string', 'max:200'],
@@ -211,19 +218,26 @@ class ParrainController extends Controller
             'telephone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
             'adresse' => ['nullable', 'string', 'max:255'],
-            'zones_regions' => ['nullable', 'array'],
-            'zones_regions.*' => ['integer', Rule::exists('regions', 'id')],
-            'zones_provinces' => ['nullable', 'array'],
-            'zones_provinces.*' => ['integer', Rule::exists('provinces', 'id')],
+            'zones' => ['array'],
+            'zones.*.region_id' => ['required', 'integer', Rule::exists('regions', 'id')],
+            'zones.*.province_id' => ['nullable', 'integer', function (string $attribut, $valeur, \Closure $echec) use ($request) {
+                $regionId = data_get($request->input(), str_replace('province_id', 'region_id', $attribut));
+                if (! Province::whereKey($valeur)->where('region_id', $regionId)->exists()) {
+                    $echec('La province choisie n’appartient pas à la région.');
+                }
+            }],
         ], [
             'nom.required' => 'Indiquez le nom ou la raison sociale du parrain.',
+            'zones.*.region_id.exists' => 'Région inconnue.',
         ]);
+
+        $zones = collect($donnees['zones'] ?? []);
 
         return [
             'parrain' => collect($donnees)->only(['type', 'nom', 'contact_nom', 'telephone', 'email', 'adresse'])->all()
                 + ['actif' => $request->boolean('actif')],
-            'regions' => array_map('intval', $donnees['zones_regions'] ?? []),
-            'provinces' => array_map('intval', $donnees['zones_provinces'] ?? []),
+            'regions' => $zones->whereNull('province_id')->pluck('region_id')->map(fn ($id) => (int) $id)->all(),
+            'provinces' => $zones->whereNotNull('province_id')->pluck('province_id')->map(fn ($id) => (int) $id)->all(),
         ];
     }
 
@@ -234,7 +248,7 @@ class ParrainController extends Controller
             $parrain->zones()->create(['region_id' => $regionId]);
         }
         // Une province dont toute la région est déjà choisie est redondante
-        $provinces = Province::whereIn('id', $donnees['provinces'])->whereNotIn('region_id', $donnees['regions'])->get(['id', 'region_id']);
+        $provinces = Province::whereIn('id', array_unique($donnees['provinces']))->whereNotIn('region_id', $donnees['regions'])->get(['id', 'region_id']);
         foreach ($provinces as $province) {
             $parrain->zones()->create(['region_id' => $province->region_id, 'province_id' => $province->id]);
         }
