@@ -16,6 +16,7 @@ use App\Http\Controllers\QuickLinkController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SessionParrainageController;
 use App\Http\Controllers\SignalementController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VillageController;
@@ -134,6 +135,23 @@ Route::middleware('auth')->prefix('admin')->group(function () {
     Route::middleware(['can:voir rapports', 'can:voir OEV'])->group(function () {
         Route::get('/filtrage-extraction', [ExtractionController::class, 'index'])->name('extraction.index');
         Route::get('/filtrage-extraction/export', [ExtractionController::class, 'export'])->name('extraction.export');
+    });
+
+    // --- Parrainage : sessions ouvertes par le niveau central, consultées par les DR et DP ---
+    Route::prefix('parrainage')->name('parrainage.')->group(function () {
+        Route::middleware('can:gérer sessions parrainage')->group(function () {
+            Route::get('/sessions/create', [SessionParrainageController::class, 'create'])->name('sessions.create');
+            Route::post('/sessions', [SessionParrainageController::class, 'store'])->name('sessions.store');
+            Route::get('/sessions/{session}/edit', [SessionParrainageController::class, 'edit'])->name('sessions.edit');
+            Route::put('/sessions/{session}', [SessionParrainageController::class, 'update'])->name('sessions.update');
+            Route::put('/sessions/{session}/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('sessions.quotas');
+        });
+        Route::middleware('can:voir parrainage')->group(function () {
+            Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
+            Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
+            // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
+            Route::post('/sessions/{session}/etat', [SessionParrainageController::class, 'changerEtat'])->name('sessions.etat');
+        });
     });
 
     // --- Paramétrage : localités (Régions > Provinces > Communes > Villages) et paramètres généraux du site ---

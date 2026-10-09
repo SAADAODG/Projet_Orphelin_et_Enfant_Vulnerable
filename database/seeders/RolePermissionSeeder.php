@@ -35,6 +35,9 @@ class RolePermissionSeeder extends Seeder
             // Plaintes et avis des usagers : niveau central
             'voir plaintes',
             'traiter plaintes',
+            // Parrainage : sessions gérées par le niveau central, consultées par tous
+            'voir parrainage',
+            'gérer sessions parrainage',
         ];
 
         foreach ($permissions as $permission) {
@@ -54,6 +57,8 @@ class RolePermissionSeeder extends Seeder
                 'intégrer OEV',
                 'voir plaintes',
                 'traiter plaintes',
+                'voir parrainage',
+                'gérer sessions parrainage',
             ],
             'agent DGFE' => [
                 'voir rapports',
@@ -61,12 +66,15 @@ class RolePermissionSeeder extends Seeder
                 'intégrer OEV',
                 'voir plaintes',
                 'traiter plaintes',
+                'voir parrainage',
+                'gérer sessions parrainage',
             ],
             'DR' => [
                 'voir rapports',
                 'voir signalements',
                 'voir OEV',
                 'valider dossiers',
+                'voir parrainage',
             ],
             'DP' => [
                 'voir rapports',
@@ -74,6 +82,7 @@ class RolePermissionSeeder extends Seeder
                 'traiter signalements',
                 'voir OEV',
                 'constituer dossiers',
+                'voir parrainage',
             ],
         ];
 

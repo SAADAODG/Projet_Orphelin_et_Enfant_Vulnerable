@@ -7,6 +7,8 @@ use App\Models\QuickLink;
 use App\Models\Service;
 use App\Models\Signalement;
 use App\Models\SiteSetting;
+use App\Services\Parrainage\SourceSelection;
+use App\Services\Parrainage\SourceSelectionNonDisponible;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +22,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Données des modules Sélection / Paiement / Suivi scolaire : provisoirement indisponibles
+        $this->app->bind(SourceSelection::class, SourceSelectionNonDisponible::class);
     }
 
     /**
@@ -47,7 +50,7 @@ class AppServiceProvider extends ServiceProvider
         // d'assembler le layout (un composer posé sur le seul layout serait invisible dans les
         // @section('title', ...) des pages).
         View::composer([
-            'layouts.*', 'public.*', 'admin.*', 'oevs.*', 'localites.*', 'parametres.*',
+            'layouts.*', 'public.*', 'admin.*', 'oevs.*', 'localites.*', 'parametres.*', 'parrainage.*',
             'index', 'login', 'profile', 'settings', 'users', 'roles-permissions', 'errors.*',
         ], function ($view) {
             // Repli défensif : une page d'erreur (dont 500) doit pouvoir s'afficher même si la
