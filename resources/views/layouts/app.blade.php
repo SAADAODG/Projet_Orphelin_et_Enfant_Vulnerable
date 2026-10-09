@@ -100,7 +100,7 @@
         </div>
         @endcanany
 
-        @can('voir plaintes')
+        @canany(['voir plaintes', 'voir rapports'])
         <div class="nav-section">
           <span class="nav-section-label">Contrôle</span>
           @can('voir plaintes')
@@ -114,9 +114,14 @@
             <span class="nav-text">Gestion de plainte</span>
           </a>
           @endcan
-          {{-- « Filtrage et extraction » (permission « voir rapports ») : à réafficher quand l'écran sera réalisé --}}
+          @can('voir rapports')
+          <a class="nav-link {{ request()->routeIs('extraction.*') ? 'active' : '' }}" href="{{ route('extraction.index') }}" @if (request()->routeIs('extraction.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-funnel" aria-hidden="true"></i></span>
+            <span class="nav-text">Filtrage et extraction</span>
+          </a>
+          @endcan
         </div>
-        @endcan
+        @endcanany
 
         @if (auth()->user()->canAny(['voir utilisateurs', 'gérer paramètres']) || auth()->user()->supervise())
         <div class="nav-section">

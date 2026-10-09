@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\SignalementController as AdminSignalementControll
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\PasswordResetController;
@@ -128,6 +129,11 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::get('/liste-oev', [OevController::class, 'liste'])->name('oevs.liste');
         Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
         Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
+    });
+    // Filtrage multicritère des dossiers enfants / OEV et export CSV (limités à la zone de l'utilisateur)
+    Route::middleware(['can:voir rapports', 'can:voir OEV'])->group(function () {
+        Route::get('/filtrage-extraction', [ExtractionController::class, 'index'])->name('extraction.index');
+        Route::get('/filtrage-extraction/export', [ExtractionController::class, 'export'])->name('extraction.export');
     });
 
     // --- Paramétrage : localités (Régions > Provinces > Communes > Villages) et paramètres généraux du site ---

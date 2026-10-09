@@ -61,6 +61,25 @@ final class Perimetre
         };
     }
 
+    /**
+     * Arborescence de localités (Region::arborescence()) réduite à la zone : la région du DR,
+     * la province du DP ; tout le pays pour le niveau central, rien pour une zone non définie.
+     */
+    public function filtrerArborescence(array $localites): array
+    {
+        if (! $this->defini) {
+            return [];
+        }
+
+        return collect($localites)
+            ->when($this->region, fn ($regions) => $regions->where('id', $this->region->id))
+            ->map(fn (array $region) => $this->province
+                ? ['provinces' => collect($region['provinces'])->where('id', $this->province->id)->values()] + $region
+                : $region)
+            ->values()
+            ->all();
+    }
+
     public function libelle(): string
     {
         return match (true) {

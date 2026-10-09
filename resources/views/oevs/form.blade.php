@@ -16,7 +16,8 @@
   };
   $vListe = fn (string $champ) => old($champ, $oev->{$champ} ?? []);
   // Lieu de naissance : id de commune, « autre » si un lieu hors référentiel est saisi
-  $lieuNaissanceChoisi = old('lieu_naissance_commune_id', $oev->lieu_naissance_commune_id ?? ($oev->lieu_naissance ? 'autre' : ''));
+  // Lieu de naissance saisi librement (un ancien dossier rattaché à une commune affiche son nom)
+  $lieuNaissance = old('lieu_naissance', $oev->lieuDeNaissance());
   $lieuProvenanceChoisi = old('lieu_provenance_commune_id', $oev->lieu_provenance_commune_id ?? ($oev->lieu_provenance ? 'autre' : ''));
   // Gestionnaire du cas : l'agent qui saisit le dossier, par défaut
   $gestionnaireNom = old('gestionnaire_nom', $oev->exists ? $oev->gestionnaire_nom : auth()->user()->name);
@@ -35,7 +36,7 @@
 
   // Étape à ouvrir en cas d'erreur de validation côté serveur
   $champsParEtape = [
-    1 => ['nom', 'prenom', 'sexe', 'date_naissance', 'date_naissance_estimee', 'lieu_naissance_commune_id', 'lieu_naissance', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
+    1 => ['nom', 'prenom', 'sexe', 'date_naissance', 'date_naissance_estimee', 'lieu_naissance', 'nationalite', 'a_acte_naissance', 'numero_acte_naissance', 'groupe_population',
           'region_id', 'province_id', 'commune_id', 'village_id', 'quartier', 'lieu_provenance_commune_id', 'lieu_provenance'],
     2 => ['mere_nom', 'mere_prenoms', 'mere_vivante', 'mere_date_deces', 'mere_deces_confirme', 'pere_nom', 'pere_prenoms', 'pere_vivant', 'pere_date_deces', 'pere_deces_confirme',
           'tuteur_lien', 'tuteur_lien_precision', 'nom_tuteur', 'prenom_tuteur', 'contact_tuteur', 'tuteur_sexe', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer', 'tuteur_raison_arret'],
@@ -240,25 +241,7 @@
                   </div>
                   <div class="text-danger small mt-1" data-erreur-groupe="sexe" hidden>Ce choix est obligatoire.</div>
                 </div>
-                <div class="col-md-4">
-                  {{-- Lieu de naissance : commune du référentiel (groupées par province), ou « autre lieu » à préciser --}}
-                  <label class="form-label" for="lieu_naissance_commune_id">Lieu de naissance</label>
-                  <select class="form-select @error('lieu_naissance_commune_id') is-invalid @enderror" id="lieu_naissance_commune_id" name="lieu_naissance_commune_id">
-                    <option value="">Sélectionner la commune…</option>
-                    @foreach ($localites as $regionLieu)
-                      @foreach ($regionLieu['provinces'] as $provinceLieu)
-                        <optgroup label="{{ $provinceLieu['nom'] }} ({{ $regionLieu['nom'] }})">
-                          @foreach ($provinceLieu['communes'] as $communeLieu)
-                            <option value="{{ $communeLieu['id'] }}" @selected((string) $lieuNaissanceChoisi === (string) $communeLieu['id'])>{{ $communeLieu['nom'] }}</option>
-                          @endforeach
-                        </optgroup>
-                      @endforeach
-                    @endforeach
-                    <option value="autre" @selected($lieuNaissanceChoisi === 'autre')>Autre lieu / hors du Burkina Faso</option>
-                  </select>
-                  <div class="invalid-feedback">{{ $errors->first('lieu_naissance_commune_id') ?: 'Choisissez le lieu de naissance dans la liste.' }}</div>
-                </div>
-                <div class="col-md-4" data-si="lieu_naissance_commune_id:autre">@include('oevs.champs._texte', ['nom' => 'lieu_naissance', 'label' => 'Précisez le lieu de naissance', 'valeur' => $v('lieu_naissance'), 'max' => 150, 'requis' => true, 'placeholder' => 'Ville, pays', 'erreur' => 'Précisez le lieu de naissance.'])</div>
+                <div class="col-md-4">@include('oevs.champs._texte', ['nom' => 'lieu_naissance', 'label' => 'Lieu de naissance', 'valeur' => $lieuNaissance, 'max' => 150, 'placeholder' => 'Ville ou village, pays'])</div>
                 <div class="col-md-4">@include('oevs.champs._texte', ['nom' => 'nationalite', 'label' => 'Nationalité', 'valeur' => $v('nationalite') ?? ($edition ? null : 'Burkinabè'), 'max' => 100])</div>
                 <div class="col-md-4">@include('oevs.champs._choix', ['nom' => 'a_acte_naissance', 'label' => 'L’enfant a-t-il un acte de naissance ?', 'options' => Oev::OUI_NON, 'valeur' => $vBool('a_acte_naissance'), 'requis' => true, 'aide' => 'Détermine si l’acte de naissance est demandé dans les pièces.'])</div>
                 <div class="col-md-4" data-si="a_acte_naissance:1">@include('oevs.champs._texte', ['nom' => 'numero_acte_naissance', 'label' => 'N° de l’acte de naissance', 'valeur' => $v('numero_acte_naissance'), 'max' => 50, 'requis' => true, 'placeholder' => 'Numéro inscrit sur l’acte', 'erreur' => 'Saisissez le numéro de l’acte de naissance.'])</div>
@@ -274,7 +257,7 @@
                 {{-- Région > Province > Commune > Village : listes du référentiel des localités (limitées à la zone de l'agent) --}}
                 <div class="col-12">
                   @include('partials.localite-selects', [
-                    'localites' => $localites,
+                    'localites' => $localitesZone,
                     'avecVillage' => true,
                     'valeurs' => $oev->only(['region_id', 'province_id', 'commune_id', 'village_id']),
                     'colonnes' => ['region_id' => 'col-md-3', 'province_id' => 'col-md-3', 'commune_id' => 'col-md-3', 'village_id' => 'col-md-3'],
@@ -693,7 +676,7 @@
           $recap = [
             ['Enfant', 'bi-person', 1, [
               ['Nom', 'nom'], ['Prénom(s)', 'prenom'], ['Sexe', 'sexe'], ['Date de naissance', 'date_naissance', 'date'], ['Date estimée', 'date_naissance_estimee'],
-              ['Lieu de naissance', 'lieu_naissance_commune_id'], ['Précision du lieu', 'lieu_naissance', null, 'lieu_naissance_commune_id:autre'],
+              ['Lieu de naissance', 'lieu_naissance'],
               ['Nationalité', 'nationalite'], ['Acte de naissance', 'a_acte_naissance'],
               ['N° de l’acte', 'numero_acte_naissance', null, 'a_acte_naissance:1'], ['Groupe de population', 'groupe_population'],
             ]],

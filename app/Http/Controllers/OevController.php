@@ -93,7 +93,6 @@ class OevController extends Controller implements HasMiddleware
         'tuteur_cnib' => 'numéro CNIB du tuteur',
         'tuteur_pret_continuer' => 'disponibilité du tuteur',
         'tuteur_raison_arret' => 'raison pour laquelle le tuteur ne peut pas continuer',
-        'lieu_naissance_commune_id' => 'lieu de naissance',
         'numero_acte_naissance' => 'numéro de l’acte de naissance',
         'maladie_nom' => 'nom de la maladie',
         'suivi_clinique' => 'suivi clinique',
@@ -193,7 +192,19 @@ class OevController extends Controller implements HasMiddleware
         $perimetre = Perimetre::pour($request->user());
         $oev = new Oev(['region_id' => $perimetre->region?->id, 'province_id' => $perimetre->province?->id]);
 
-        return view('oevs.form', ['oev' => $oev, 'documents' => collect(), 'localites' => Region::arborescence(avecVillages: true)]);
+        return view('oevs.form', ['oev' => $oev, 'documents' => collect()] + $this->localitesDuFormulaire($request));
+    }
+
+    /**
+     * Listes de localités du formulaire : tout le pays pour le lieu de naissance et la provenance,
+     * mais seulement la zone de l'agent pour l'adresse (sa province pour le DP, sa région pour le DR),
+     * comme l'exige la validation (voir limiterALaZone).
+     */
+    private function localitesDuFormulaire(Request $request): array
+    {
+        $localites = Region::arborescence(avecVillages: true);
+
+        return ['localites' => $localites, 'localitesZone' => Perimetre::pour($request->user())->filtrerArborescence($localites)];
     }
 
     public function store(Request $request)
@@ -230,7 +241,7 @@ class OevController extends Controller implements HasMiddleware
             return $refus;
         }
 
-        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type'), 'localites' => Region::arborescence(avecVillages: true)]);
+        return view('oevs.form', ['oev' => $oev, 'documents' => $oev->documents()->get()->keyBy('type')] + $this->localitesDuFormulaire($request));
     }
 
     public function update(Request $request, Oev $oev)
@@ -565,13 +576,6 @@ class OevController extends Controller implements HasMiddleware
             }
         };
 
-        // Lieu de naissance : une commune du Burkina, ou « autre » (hors du pays / lieu non répertorié) à préciser
-        $lieuNaissanceAutre = $entree('lieu_naissance_commune_id') === 'autre';
-        $communeDeNaissance = function (string $attribut, $valeur, \Closure $echec): void {
-            if ($valeur !== 'autre' && ! Commune::whereKey($valeur)->exists()) {
-                $echec('Choisissez le lieu de naissance dans la liste.');
-            }
-        };
         // Lieu de provenance (enfant déplacé, réfugié…) : même principe que le lieu de naissance
         $groupeMobile = in_array($entree('groupe_population'), Oev::GROUPES_MOBILES, true);
         $lieuProvenanceAutre = $groupeMobile && $entree('lieu_provenance_commune_id') === 'autre';
@@ -646,8 +650,7 @@ class OevController extends Controller implements HasMiddleware
             'sexe' => ['required', Rule::in(array_keys(Oev::SEXES))],
             'date_naissance' => ['required', 'date', 'before_or_equal:today', 'after:' . now()->subYears(25)->toDateString()],
             'date_naissance_estimee' => ['nullable', 'boolean'],
-            'lieu_naissance_commune_id' => ['nullable', $communeDeNaissance],
-            'lieu_naissance' => ['nullable', Rule::requiredIf($lieuNaissanceAutre), 'string', 'max:150'],
+            'lieu_naissance' => ['nullable', 'string', 'max:150'],
             'nationalite' => ['nullable', 'string', 'max:100'],
             'a_acte_naissance' => ['required', 'boolean'],
             'numero_acte_naissance' => ['nullable', 'required_if:a_acte_naissance,1', 'string', 'max:50'],
@@ -781,7 +784,6 @@ class OevController extends Controller implements HasMiddleware
             'pere_vivant.required' => 'Indiquez si le père de l’enfant est vivant.',
             'nom_structure_rib.required' => 'Précisez le nom de la structure titulaire du RIB.',
             'numero_acte_naissance.required_if' => 'Saisissez le numéro de l’acte de naissance de l’enfant.',
-            'lieu_naissance.required' => 'Précisez le lieu de naissance (ville, pays) s’il n’est pas dans la liste.',
             'mere_nom.required' => 'La mère s’occupe de l’enfant : saisissez son nom (partie « Mère »).',
             'mere_prenoms.required' => 'La mère s’occupe de l’enfant : saisissez ses prénoms (partie « Mère »).',
             'pere_nom.required' => 'Le père s’occupe de l’enfant : saisissez son nom (partie « Père »).',
@@ -841,13 +843,9 @@ class OevController extends Controller implements HasMiddleware
             $validated['formation_duree_recue_mois'] = $validated['formation_duree_mois'];
         }
 
-        // Lieu de naissance : commune du référentiel, ou lieu saisi quand il n'y figure pas
-        if (($validated['lieu_naissance_commune_id'] ?? null) === 'autre') {
-            $validated['lieu_naissance_commune_id'] = null;
-        } else {
-            $validated['lieu_naissance'] = null;
-        }
-        // Lieu de provenance : même principe
+        // Lieu de naissance saisi librement : l'ancien rattachement à une commune est abandonné
+        $validated['lieu_naissance_commune_id'] = null;
+        // Lieu de provenance : commune du référentiel, ou lieu saisi quand il n'y figure pas
         if (($validated['lieu_provenance_commune_id'] ?? null) === 'autre') {
             $validated['lieu_provenance_commune_id'] = null;
         } else {
