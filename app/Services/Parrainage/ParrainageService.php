@@ -2,10 +2,13 @@
 
 namespace App\Services\Parrainage;
 
+use App\Models\AppuiPartenaire;
 use App\Models\JournalActivite;
+use App\Models\NatureAppui;
 use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\User;
+use App\Support\Montant;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -129,6 +132,77 @@ class ParrainageService
         });
 
         return $session->refresh();
+    }
+
+    /**
+     * RG-01 / RG-07 : l'OEV a-t-il déjà un appui PARTENAIRE de cette nature pour cette année ?
+     * Un appui de nature différente ne compte pas (un appui santé n'empêche pas un appui scolaire).
+     *
+     * @param  int  $oevId  Identifiant de l'OEV
+     * @param  string  $annee  Année scolaire, ex : 2026-2027
+     * @param  int|string  $natureAppui  Identifiant ou code de natures_appui ; pour une session, son type
+     *                                    d'appui : « scolaire » ou « formation_professionnelle »
+     *                                    (pour « les_deux », appeler une fois par nature)
+     * @return bool true si au moins un appui partenaire de cette nature existe ; false aussi pour une nature inconnue
+     */
+    public function estDejaAppuye(int $oevId, string $annee, int|string $natureAppui): bool
+    {
+        $nature = NatureAppui::trouver($natureAppui);
+
+        return $nature !== null && AppuiPartenaire::where('oev_id', $oevId)
+            ->where('annee', $annee)
+            ->where('nature_appui_id', $nature->id)
+            ->exists();
+    }
+
+    /**
+     * RG-07 : identifiants des OEV déjà appuyés par un partenaire pour cette nature et cette année,
+     * pour les exclure en masse de la sélection de l'État.
+     *
+     * @param  string  $annee  Année scolaire, ex : 2026-2027
+     * @param  int|string  $natureAppui  Identifiant ou code de natures_appui (voir estDejaAppuye)
+     * @return array<int, int> identifiants d'OEV, sans doublon ; vide pour une nature inconnue
+     */
+    public function getOevAppuyesParPartenaire(string $annee, int|string $natureAppui): array
+    {
+        $nature = NatureAppui::trouver($natureAppui);
+        if ($nature === null) {
+            return [];
+        }
+
+        return AppuiPartenaire::where('annee', $annee)
+            ->where('nature_appui_id', $nature->id)
+            ->distinct()
+            ->orderBy('oev_id')
+            ->pluck('oev_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Contrôle RG-01 à la saisie d'un appui : appuis déjà reçus par l'OEV, la même année et pour la
+     * même nature, d'un partenaire ou de l'État (liste définitive, fournie par le module Sélection).
+     *
+     * @param  int|null  $sansAppuiId  Appui à ignorer (celui que l'on modifie)
+     * @return array<int, string> une phrase par appui existant ; vide s'il n'y a pas de doublon
+     */
+    public function doublonsAppui(int $oevId, string $annee, NatureAppui $nature, ?int $sansAppuiId = null): array
+    {
+        $doublons = AppuiPartenaire::with('parrain')
+            ->where('oev_id', $oevId)
+            ->where('annee', $annee)
+            ->where('nature_appui_id', $nature->id)
+            ->when($sansAppuiId, fn ($q) => $q->whereKeyNot($sansAppuiId))
+            ->get()
+            ->map(fn (AppuiPartenaire $appui) => "Appui « {$nature->libelle} » de {$appui->parrain->nom}"
+                . ($appui->montant ? ' (' . Montant::fcfa($appui->montant) . ')' : ''))
+            ->all();
+
+        if (in_array($nature->code, $this->sourceSelection->naturesAppuiEtat($oevId, $annee), true)) {
+            $doublons[] = "Appui « {$nature->libelle} » de l’État (session de parrainage)";
+        }
+
+        return $doublons;
     }
 
     /**

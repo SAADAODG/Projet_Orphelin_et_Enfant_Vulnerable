@@ -2,12 +2,14 @@
 
 use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
+use App\Http\Controllers\AppuiPartenaireController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
+use App\Http\Controllers\ParrainController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlainteController;
 use App\Http\Controllers\ProfileController;
@@ -146,7 +148,32 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::put('/sessions/{session}', [SessionParrainageController::class, 'update'])->name('sessions.update');
             Route::put('/sessions/{session}/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('sessions.quotas');
         });
+        // Répertoire des parrains : géré par le niveau central
+        Route::middleware('can:gérer parrains')->group(function () {
+            Route::get('/parrains/create', [ParrainController::class, 'create'])->name('parrains.create');
+            Route::post('/parrains', [ParrainController::class, 'store'])->name('parrains.store');
+            Route::get('/parrains/{parrain}/edit', [ParrainController::class, 'edit'])->name('parrains.edit');
+            Route::put('/parrains/{parrain}', [ParrainController::class, 'update'])->name('parrains.update');
+            Route::delete('/parrains/{parrain}', [ParrainController::class, 'destroy'])->name('parrains.destroy');
+            Route::post('/parrains/{parrain}/engagements', [ParrainController::class, 'storeEngagement'])->name('parrains.engagements.store');
+            Route::delete('/parrains/{parrain}/engagements/{engagement}', [ParrainController::class, 'destroyEngagement'])->name('parrains.engagements.destroy');
+        });
+        // Appuis : le DP pour les OEV de sa province, le niveau central pour tout le pays
+        Route::middleware('can:enregistrer appuis')->group(function () {
+            Route::get('/appuis/create', [AppuiPartenaireController::class, 'create'])->name('appuis.create');
+            Route::post('/appuis', [AppuiPartenaireController::class, 'store'])->name('appuis.store');
+            Route::get('/appuis/recherche-oev', [AppuiPartenaireController::class, 'rechercheOev'])->name('appuis.recherche-oev');
+            Route::get('/appuis/modele', [AppuiPartenaireController::class, 'modele'])->name('appuis.modele');
+            Route::get('/appuis/import', [AppuiPartenaireController::class, 'importForm'])->name('appuis.import');
+            Route::post('/appuis/import', [AppuiPartenaireController::class, 'import'])->name('appuis.import.store');
+            Route::get('/appuis/{appui}/edit', [AppuiPartenaireController::class, 'edit'])->name('appuis.edit');
+            Route::put('/appuis/{appui}', [AppuiPartenaireController::class, 'update'])->name('appuis.update');
+        });
         Route::middleware('can:voir parrainage')->group(function () {
+            Route::get('/parrains', [ParrainController::class, 'index'])->name('parrains.index');
+            Route::get('/parrains/{parrain}', [ParrainController::class, 'show'])->name('parrains.show');
+            Route::get('/parrains/{parrain}/engagements/{engagement}/convention', [ParrainController::class, 'convention'])->name('parrains.engagements.convention');
+            Route::get('/appuis', [AppuiPartenaireController::class, 'index'])->name('appuis.index');
             Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
             Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
             // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)

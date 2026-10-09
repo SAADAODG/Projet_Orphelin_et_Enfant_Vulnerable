@@ -55,6 +55,14 @@ interface SourceSelection
     public function etablissements(): Collection;
 
     /**
+     * Natures d'appui que l'OEV reçoit de l'État l'année donnée (liste définitive d'une session),
+     * pour le contrôle RG-01 à la saisie d'un appui partenaire.
+     *
+     * @return array<int, string> codes de natures_appui : « scolaire » et / ou « formation_professionnelle »
+     */
+    public function naturesAppuiEtat(int $oevId, string $annee): array;
+
+    /**
      * Résultats de fin d'année des parrainés (suivi scolaire).
      *
      * @return Collection<int, array{oev_id: int, annee: string, resultat: string}> resultat : admis, redouble ou abandon

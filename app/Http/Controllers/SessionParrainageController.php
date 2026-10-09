@@ -171,7 +171,7 @@ class SessionParrainageController extends Controller
             return $retour->with('error', "La session est « {$session->libelleEtat()} » : les quotas sont figés.");
         }
 
-        $request->merge(['quotas' => array_map(self::normaliserMontant(...), (array) $request->input('quotas', []))]);
+        $request->merge(['quotas' => array_map(Montant::normaliserSaisie(...), (array) $request->input('quotas', []))]);
         $regions = Region::pluck('id')->all();
         $validated = $request->validate([
             'quotas' => ['required', 'array'],
@@ -242,9 +242,9 @@ class SessionParrainageController extends Controller
     private function valider(Request $request, ?SessionParrainage $session = null): array
     {
         $request->merge([
-            'enveloppe' => self::normaliserMontant($request->input('enveloppe')),
-            'plafond_beneficiaire' => self::normaliserMontant($request->input('plafond_beneficiaire')),
-            'contributions' => array_map(self::normaliserMontant(...), (array) $request->input('contributions', [])),
+            'enveloppe' => Montant::normaliserSaisie($request->input('enveloppe')),
+            'plafond_beneficiaire' => Montant::normaliserSaisie($request->input('plafond_beneficiaire')),
+            'contributions' => array_map(Montant::normaliserSaisie(...), (array) $request->input('contributions', [])),
         ]);
 
         $annee = (string) $request->input('annee');
@@ -309,17 +309,6 @@ class SessionParrainageController extends Controller
             ],
             'contributions' => $contributions,
         ];
-    }
-
-    /** « 1 250 000 » ou « 1.250.000 » → 1250000 ; une saisie vide reste vide. */
-    private static function normaliserMontant($valeur): mixed
-    {
-        if (! is_string($valeur)) {
-            return $valeur;
-        }
-        $chiffres = preg_replace('/[\s.\x{00A0}\x{202F}]|fcfa/iu', '', $valeur);
-
-        return $chiffres === '' ? null : $chiffres;
     }
 
     /** Année scolaire en cours : à partir de septembre, celle qui commence. */

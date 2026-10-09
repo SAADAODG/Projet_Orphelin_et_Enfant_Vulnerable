@@ -50,6 +50,11 @@ class SourceSelectionNonDisponible implements SourceSelection
         return collect();
     }
 
+    public function naturesAppuiEtat(int $oevId, string $annee): array
+    {
+        return [];
+    }
+
     public function resultatsScolaires(string $annee): Collection
     {
         return collect();

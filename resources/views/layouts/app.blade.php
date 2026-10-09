@@ -100,13 +100,18 @@
         </div>
         @endcanany
 
-        {{-- Parrainage : Sessions ; Sélection et Suivi scolaire (module de Nakoulma), Parrains et Pilotage à venir --}}
+        {{-- Parrainage : Sessions, Parrains ; Sélection et Suivi scolaire (module de Nakoulma) et Pilotage à venir --}}
         @can('voir parrainage')
         <div class="nav-section">
           <span class="nav-section-label">Parrainage</span>
           <a class="nav-link {{ request()->routeIs('parrainage.sessions.*') ? 'active' : '' }}" href="{{ route('parrainage.sessions.index') }}" @if (request()->routeIs('parrainage.sessions.*')) aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-calendar2-range" aria-hidden="true"></i></span>
             <span class="nav-text">Sessions</span>
+          </a>
+          @php($ecranParrains = request()->routeIs('parrainage.parrains.*', 'parrainage.appuis.*'))
+          <a class="nav-link {{ $ecranParrains ? 'active' : '' }}" href="{{ route('parrainage.parrains.index') }}" @if ($ecranParrains) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
+            <span class="nav-text">Parrains</span>
           </a>
         </div>
         @endcan
