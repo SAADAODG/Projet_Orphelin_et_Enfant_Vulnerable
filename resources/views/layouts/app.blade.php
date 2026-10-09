@@ -56,7 +56,7 @@
         {{-- Du signalement au dossier validé : DP (province) et DR (région) --}}
         @canany(['voir signalements', 'constituer dossiers', 'valider dossiers'])
         <div class="nav-section">
-          <span class="nav-section-label">Signalements et dossiers</span>
+          <span class="nav-section-label">Dossiers</span>
           @can('voir signalements')
           <a class="nav-link {{ request()->routeIs('admin.signalements.*') ? 'active' : '' }}" href="{{ route('admin.signalements.index') }}" @if (request()->routeIs('admin.signalements.*')) aria-current="page" @endif>
             <span class="nav-icon position-relative">
@@ -95,15 +95,12 @@
             <span class="nav-icon"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
             <span class="nav-text">Liste des OEV</span>
           </a>
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-map" aria-hidden="true"></i></span>
-            <span class="nav-text">Suivi des OEV</span>
-          </a>
+          {{-- « Suivi des OEV » : à réafficher quand l'écran sera réalisé --}}
           @endcan
         </div>
         @endcanany
 
-        @canany(['voir plaintes', 'voir rapports'])
+        @can('voir plaintes')
         <div class="nav-section">
           <span class="nav-section-label">Contrôle</span>
           @can('voir plaintes')
@@ -117,14 +114,9 @@
             <span class="nav-text">Gestion de plainte</span>
           </a>
           @endcan
-          @can('voir rapports')
-          <a class="nav-link" href="#">
-            <span class="nav-icon"><i class="bi bi-funnel" aria-hidden="true"></i></span>
-            <span class="nav-text">Filtrage et extraction</span>
-          </a>
-          @endcan
+          {{-- « Filtrage et extraction » (permission « voir rapports ») : à réafficher quand l'écran sera réalisé --}}
         </div>
-        @endcanany
+        @endcan
 
         @if (auth()->user()->canAny(['voir utilisateurs', 'gérer paramètres']) || auth()->user()->supervise())
         <div class="nav-section">

@@ -17,19 +17,33 @@
 <style>
   .mdp-champ .btn { border-color: var(--bs-border-color); color: var(--admin-muted, #6b7280); }
   .mdp-champ .btn:hover, .mdp-champ .btn:focus-visible { color: var(--admin-primary, #2563eb); }
+
+  /* En-tête officiel : armoiries, pays, devise, tutelle */
+  .auth-entete { display: flex; flex-direction: column; align-items: center; text-align: center; gap: .15rem; margin-bottom: 1.5rem; color: var(--admin-text); text-decoration: none; }
+  .auth-entete:hover, .auth-entete:focus { color: var(--admin-text); }
+  .auth-entete img { height: 88px; width: auto; object-fit: contain; margin-bottom: .4rem; }
+  .auth-pays { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .auth-devise { font-size: .8rem; font-style: italic; color: var(--admin-muted); }
+  .auth-drapeau { width: 64px; height: 4px; margin: .5rem 0; border-radius: 2px; background: linear-gradient(to bottom, #ef2b2d 50%, #009e49 50%); }
+  .auth-ministere { font-weight: 600; font-size: .95rem; text-transform: uppercase; }
+  .auth-structure { font-size: .85rem; color: var(--admin-muted); }
+  .auth-plateforme { margin-top: .35rem; font-size: .8rem; font-weight: 600; color: var(--admin-primary, #2563eb); }
 </style>
 @endpush
 
 @section('content')
 <section class="auth-card">
-  <a class="auth-brand" href="{{ route('public.home') }}">
-    <span class="brand-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
-    <span><strong>OEV</strong><small>Accès à l’espace administratif</small></span>
+  <a class="auth-entete" href="{{ route('public.home') }}">
+    <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso">
+    <span class="auth-pays">Burkina Faso</span>
+    <span class="auth-devise">La Patrie ou la Mort, nous Vaincrons</span>
+    <span class="auth-drapeau" aria-hidden="true"></span>
+    <span class="auth-ministere">{{ $siteSetting->ministere_tutelle ?? 'Ministère de la Famille et de la Solidarité' }}</span>
+    @if ($siteSetting->structure_nom_complet ?? $siteSetting->structure_nom)
+      <span class="auth-structure">{{ $siteSetting->structure_nom_complet ?? $siteSetting->structure_nom }}</span>
+    @endif
+    <span class="auth-plateforme">{{ $siteSetting->nom_site ?? 'Programme OEV' }} · Espace administratif</span>
   </a>
-
-  <div class="auth-visual">
-    <img src="{{ asset('assets/images/png/dasher-ui-bootstrap-5.jpg') }}" alt="Interface du tableau de bord OEV">
-  </div>
 
   <form class="needs-validation" method="POST" action="{{ route('login.submit') }}" novalidate>
     @csrf

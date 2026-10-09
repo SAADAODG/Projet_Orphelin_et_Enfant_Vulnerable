@@ -41,6 +41,10 @@ return [
 
     'debug' => (bool) env('APP_DEBUG', false),
 
+    // Module « Signalements » de l'espace admin : MODULE_SIGNALEMENTS=false le masque (menu,
+    // tableau de bord, accès) sans retirer les permissions des rôles
+    'module_signalements' => (bool) env('MODULE_SIGNALEMENTS', true),
+
     /*
     |--------------------------------------------------------------------------
     | Application URL

@@ -17,7 +17,10 @@ use Spatie\Permission\Traits\HasRoles;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles, SoftDeletes;
+    use HasFactory, Notifiable, SoftDeletes;
+    use HasRoles {
+        checkPermissionTo as traitCheckPermissionTo;
+    }
 
     /*
      * Niveau d'intervention dans le circuit du dossier enfant, déduit des permissions du rôle :
@@ -71,6 +74,19 @@ class User extends Authenticatable
             $permissions->contains('constituer dossiers') => self::NIVEAU_PROVINCE,
             default => self::NIVEAU_CENTRAL,
         };
+    }
+
+    /**
+     * Vérification utilisée par can() / @can (via Spatie) : un module désactivé dans la
+     * configuration (MODULE_SIGNALEMENTS=false) n'est accessible à personne, superAdmin compris.
+     */
+    public function checkPermissionTo($permission, ?string $guardName = null): bool
+    {
+        if (! config('app.module_signalements') && in_array($permission, ['voir signalements', 'traiter signalements'], true)) {
+            return false;
+        }
+
+        return $this->traitCheckPermissionTo($permission, $guardName);
     }
 
     public function supervise(): bool
