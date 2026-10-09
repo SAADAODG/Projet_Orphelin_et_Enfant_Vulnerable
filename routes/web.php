@@ -12,6 +12,7 @@ use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\PilotageParrainageController;
 use App\Http\Controllers\PlainteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProvinceController;
@@ -179,6 +180,11 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/parrains/{parrain}', [ParrainController::class, 'show'])->name('parrains.show');
             Route::get('/parrains/{parrain}/engagements/{engagement}/convention', [ParrainController::class, 'convention'])->name('parrains.engagements.convention');
             Route::get('/appuis', [AppuiPartenaireController::class, 'index'])->name('appuis.index');
+            // Pilotage : tableau de bord et extractions, dans la zone de l'utilisateur (droits fins contrôlés dans le contrôleur)
+            Route::get('/pilotage', [PilotageParrainageController::class, 'tableauDeBord'])->name('pilotage.index');
+            Route::get('/pilotage/extractions', [PilotageParrainageController::class, 'extractions'])->name('pilotage.extractions');
+            Route::get('/pilotage/extractions/paiement', [PilotageParrainageController::class, 'paiement'])->name('pilotage.paiement');
+            Route::get('/pilotage/extractions/parrain', [PilotageParrainageController::class, 'listeParrain'])->name('pilotage.liste-parrain');
             Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
             Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
             // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)

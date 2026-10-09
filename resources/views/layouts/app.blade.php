@@ -100,7 +100,7 @@
         </div>
         @endcanany
 
-        {{-- Parrainage : Sessions, Parrains ; Sélection et Suivi scolaire (module de Nakoulma) et Pilotage à venir --}}
+        {{-- Parrainage : Sessions, Parrains, Pilotage ; Sélection et Suivi scolaire (module de Nakoulma) à venir --}}
         @can('voir parrainage')
         <div class="nav-section">
           <span class="nav-section-label">Parrainage</span>
@@ -112,6 +112,10 @@
           <a class="nav-link {{ $ecranParrains ? 'active' : '' }}" href="{{ route('parrainage.parrains.index') }}" @if ($ecranParrains) aria-current="page" @endif>
             <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
             <span class="nav-text">Parrains</span>
+          </a>
+          <a class="nav-link {{ request()->routeIs('parrainage.pilotage.*') ? 'active' : '' }}" href="{{ route('parrainage.pilotage.index') }}" @if (request()->routeIs('parrainage.pilotage.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
+            <span class="nav-text">Pilotage</span>
           </a>
         </div>
         @endcan

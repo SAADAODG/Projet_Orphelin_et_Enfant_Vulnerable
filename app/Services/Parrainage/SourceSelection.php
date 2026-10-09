@@ -34,8 +34,9 @@ interface SourceSelection
 
     /**
      * Liste définitive de la session : un élément par bénéficiaire.
+     * type_appui : « scolaire » ou « formation_professionnelle » (utile pour une session « les_deux »).
      *
-     * @return Collection<int, array{oev_id: int, etablissement_id: int|null, frais_reels: int, montant_retenu: int}>
+     * @return Collection<int, array{oev_id: int, type_appui: string, etablissement_id: int|null, frais_reels: int, montant_retenu: int}>
      */
     public function listeDefinitive(SessionParrainage $session): Collection;
 

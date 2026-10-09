@@ -29,22 +29,8 @@
 @endphp
 
 @push('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/barres.css') }}">
 <style>
-  .db-barre { display: grid; grid-template-columns: minmax(8rem, 11rem) 1fr 2.5rem; align-items: center; gap: .75rem; font-size: .9rem; }
-  .db-barre + .db-barre { margin-top: .7rem; }
-  .db-barre-libelle { color: var(--admin-text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .db-barre-valeur { font-weight: 800; text-align: end; font-variant-numeric: tabular-nums; }
-  .db-piste { height: .6rem; border-radius: 999px; background: var(--admin-surface-soft); box-shadow: inset 0 0 0 1px var(--admin-border); overflow: hidden; }
-  .db-piste > span { display: block; height: 100%; width: var(--v); min-width: 2px; border-radius: inherit; background: var(--db-couleur, var(--admin-primary)); }
-  .db-piste > span[data-zero] { min-width: 0; }
-  .db-primary { --db-couleur: var(--admin-primary); }
-  .db-success { --db-couleur: var(--admin-success); }
-  .db-warning { --db-couleur: var(--admin-warning); }
-  .db-danger { --db-couleur: var(--admin-danger); }
-  .db-info { --db-couleur: #0891b2; }
-  .db-secondary { --db-couleur: var(--admin-muted); }
-  html[data-theme="dark"] .db-info { --db-couleur: #22d3ee; }
-
   .db-colonnes { display: grid; grid-template-columns: repeat({{ $evolution->count() }}, minmax(2.5rem, 1fr)); gap: 1rem; height: 15rem; align-items: end; padding-top: 1.25rem; }
   .db-mois { height: 100%; display: grid; grid-template-rows: 1fr auto; gap: .5rem; text-align: center; color: var(--admin-muted); font-size: .82rem; font-weight: 700; }
   .db-mois-barres { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
@@ -64,8 +50,6 @@
   .metric-card:has(a.stretched-link:focus-visible) { box-shadow: var(--admin-ring); }
 
   @media (max-width: 575.98px) {
-    .db-barre { grid-template-columns: 1fr 2.5rem; }
-    .db-barre .db-piste { grid-column: 1 / -1; grid-row: 2; }
     .db-filtre .form-select { width: 100%; }
   }
 </style>
