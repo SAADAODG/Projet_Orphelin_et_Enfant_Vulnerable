@@ -204,7 +204,8 @@ class OevController extends Controller implements HasMiddleware
      */
     private function localitesDuFormulaire(Request $request): array
     {
-        $localites = Region::arborescence(avecVillages: true);
+        // Sans les ~11 000 villages : ceux de la commune choisie sont chargés à la demande (localites.villages-commune)
+        $localites = Region::arborescence();
 
         return ['localites' => $localites, 'localitesZone' => Perimetre::pour($request->user())->filtrerArborescence($localites)];
     }

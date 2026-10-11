@@ -125,6 +125,18 @@ class SessionParrainage extends Model
         return "{$this->annee} · n°{$this->numero}";
     }
 
+    /** Numéro attribué à une nouvelle session de l'année : le suivant (1 pour la première). */
+    public static function prochainNumero(string $annee): int
+    {
+        return (int) static::where('annee', $annee)->max('numero') + 1;
+    }
+
+    /** Ex : « 75 000 FCFA », ou « Sans plafond ». */
+    public function libellePlafond(): string
+    {
+        return $this->plafond_beneficiaire === null ? 'Sans plafond' : \App\Support\Montant::fcfa($this->plafond_beneficiaire);
+    }
+
     public function libelleEtat(): string
     {
         return self::ETATS[$this->etat] ?? $this->etat;

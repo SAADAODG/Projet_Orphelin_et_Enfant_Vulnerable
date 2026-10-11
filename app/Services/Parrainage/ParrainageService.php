@@ -33,7 +33,7 @@ class ParrainageService
      *     etat: string,
      *     type_appui: string,
      *     enveloppe: int,
-     *     plafond_beneficiaire: int,
+     *     plafond_beneficiaire: int|null,
      *     bloquer_depassement_enveloppe: bool,
      *     quotas_actifs: bool,
      *     quotas: array<int, int>,

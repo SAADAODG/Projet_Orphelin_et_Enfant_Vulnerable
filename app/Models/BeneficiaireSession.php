@@ -73,9 +73,16 @@ class BeneficiaireSession extends Model
         return $query->where('statut', self::ATTENTE);
     }
 
-    /** Montant retenu : le plus petit des frais réels et du plafond ; le plafond quand les frais manquent. */
-    public static function montantPour(?int $frais, int $plafond): int
+    /**
+     * Montant retenu : le plus petit des frais réels et du plafond ; le plafond quand les frais manquent.
+     * Session sans plafond : les frais réels (0 s'ils manquent).
+     */
+    public static function montantPour(?int $frais, ?int $plafond): int
     {
-        return $frais === null ? $plafond : min($frais, $plafond);
+        return match (true) {
+            $frais === null => $plafond ?? 0,
+            $plafond === null => $frais,
+            default => min($frais, $plafond),
+        };
     }
 }

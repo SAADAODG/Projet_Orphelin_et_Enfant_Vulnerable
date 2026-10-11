@@ -225,6 +225,9 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
     });
 
+    // Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)
+    Route::get('/localites/communes/{commune}/villages', [VillageController::class, 'parCommune'])->name('localites.villages-commune');
+
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/settings', [ProfileController::class, 'settings'])->name('settings');

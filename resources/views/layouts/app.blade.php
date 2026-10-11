@@ -27,7 +27,7 @@
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Main navigation">
       <div class="sidebar-header">
         <a class="brand-mark" href="{{ route('dashboard') }}" aria-label="Tableau de bord du Ministère de la Famille et de la Solidarité">
-          <span class="brand-icon"><img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso"></span>
+          <span class="brand-icon"><img src="{{ asset('assets/images/armoiries-240.png') }}" alt="Armoiries du Burkina Faso"></span>
           <span class="brand-copy">
             <span class="brand-title">Ministère de la Famille et de la Solidarité</span>
             <span class="brand-subtitle">Programme OEV</span>

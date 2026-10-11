@@ -8,6 +8,8 @@
 @php
   $figee = $session->exists && ! $session->parametresModifiables();
   $source = old('source_financement', $session->source_financement);
+  // Numéro attribué automatiquement : affiché seulement une fois la session enregistrée
+  $colonne = $session->exists ? 'col-sm-6 col-lg-3' : 'col-sm-6 col-lg-4';
   $montant = fn ($valeur) => $valeur === null || $valeur === '' ? '' : (is_numeric($valeur) ? Montant::nombre($valeur) : $valeur);
 @endphp
 
@@ -26,19 +28,19 @@
     @error('description')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
 
-  <div class="col-sm-6 col-lg-3">
+  <div class="{{ $colonne }}">
     <label class="form-label" for="annee">Année scolaire <span class="text-danger">*</span></label>
     <input class="form-control @error('annee') is-invalid @enderror" id="annee" name="annee" type="text" maxlength="9" pattern="\d{4}-\d{4}"
            value="{{ old('annee', $session->annee) }}" placeholder="2026-2027" required @disabled($figee)>
     @error('annee')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
-  <div class="col-sm-6 col-lg-3">
-    <label class="form-label" for="numero">Numéro de session <span class="text-danger">*</span></label>
-    <input class="form-control @error('numero') is-invalid @enderror" id="numero" name="numero" type="number" min="1" max="99"
-           value="{{ old('numero', $session->numero) }}" required @disabled($figee)>
-    @error('numero')<div class="invalid-feedback">{{ $message }}</div>@enderror
-  </div>
-  <div class="col-sm-6 col-lg-3">
+  @if ($session->exists)
+    <div class="col-sm-6 col-lg-3">
+      <label class="form-label" for="numero">Numéro de session</label>
+      <input class="form-control" id="numero" type="text" value="n°{{ $session->numero }}" readonly>
+    </div>
+  @endif
+  <div class="{{ $colonne }}">
     <label class="form-label" for="type_appui">Type d’appui <span class="text-danger">*</span></label>
     <select class="form-select @error('type_appui') is-invalid @enderror" id="type_appui" name="type_appui" required @disabled($figee)>
       @foreach (SessionParrainage::TYPES_APPUI as $cle => $libelle)
@@ -47,7 +49,7 @@
     </select>
     @error('type_appui')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
-  <div class="col-sm-6 col-lg-3">
+  <div class="{{ $colonne }}">
     <label class="form-label" for="date_ouverture">Date d’ouverture <span class="text-danger">*</span></label>
     <input class="form-control @error('date_ouverture') is-invalid @enderror" id="date_ouverture" name="date_ouverture" type="date"
            value="{{ old('date_ouverture', $session->date_ouverture?->toDateString()) }}" required @disabled($figee)>
@@ -61,9 +63,9 @@
     @error('enveloppe')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
   <div class="col-sm-6">
-    <label class="form-label" for="plafond_beneficiaire">Plafond par bénéficiaire (FCFA) <span class="text-danger">*</span></label>
+    <label class="form-label" for="plafond_beneficiaire">Plafond par bénéficiaire (FCFA)</label>
     <input class="form-control @error('plafond_beneficiaire') is-invalid @enderror" id="plafond_beneficiaire" name="plafond_beneficiaire" type="text" inputmode="numeric"
-           value="{{ $montant(old('plafond_beneficiaire', $session->plafond_beneficiaire)) }}" placeholder="Ex : 75 000" required @disabled($figee)>
+           value="{{ $montant(old('plafond_beneficiaire', $session->plafond_beneficiaire)) }}" placeholder="Facultatif" @disabled($figee)>
     @error('plafond_beneficiaire')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
 

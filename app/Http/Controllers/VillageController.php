@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Commune;
 use App\Models\Region;
 use App\Models\Village;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,12 @@ class VillageController extends Controller
     /**
      * Display a listing of the resource.
      */
+    /** Villages / secteurs d'une commune (JSON), pour la liste déroulante chargée à la demande des formulaires. */
+    public function parCommune(Commune $commune): JsonResponse
+    {
+        return response()->json($commune->villages()->orderBy('nom')->get(['id', 'nom']));
+    }
+
     public function index(Request $request): View
     {
         $search = trim((string) $request->query('q'));

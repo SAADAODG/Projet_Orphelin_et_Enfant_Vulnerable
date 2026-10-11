@@ -53,25 +53,38 @@ class AppServiceProvider extends ServiceProvider
             'layouts.*', 'public.*', 'admin.*', 'oevs.*', 'localites.*', 'parametres.*', 'parrainage.*',
             'index', 'login', 'profile', 'settings', 'users', 'roles-permissions', 'errors.*',
         ], function ($view) {
-            // Repli défensif : une page d'erreur (dont 500) doit pouvoir s'afficher même si la
-            // base de données est indisponible ou pas encore migrée.
-            try {
-                $siteSetting = SiteSetting::current();
-                $quickLinks = QuickLink::orderBy('ordre')->get();
-                $services = Service::orderBy('ordre')->get();
-            } catch (\Throwable $e) {
-                $siteSetting = new SiteSetting([
+            // Lu une seule fois par requête : le composer s'applique aussi à chaque vue partielle
+            // incluse (champs du formulaire OEV…), qui relançait sinon les trois requêtes à chaque fois.
+            $attributs = request()->attributes;
+            if (! $attributs->has('identiteSite')) {
+                $attributs->set('identiteSite', self::identiteSite());
+            }
+
+            $view->with($attributs->get('identiteSite'));
+        });
+    }
+
+    /** @return array{siteSetting: SiteSetting, quickLinks: \Illuminate\Support\Collection, services: \Illuminate\Support\Collection} */
+    private static function identiteSite(): array
+    {
+        // Repli défensif : une page d'erreur (dont 500) doit pouvoir s'afficher même si la
+        // base de données est indisponible ou pas encore migrée.
+        try {
+            return [
+                'siteSetting' => SiteSetting::current(),
+                'quickLinks' => QuickLink::orderBy('ordre')->get(),
+                'services' => Service::orderBy('ordre')->get(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'siteSetting' => new SiteSetting([
                     'nom_site' => 'Programme OEV',
                     'structure_nom' => 'DGFE',
                     'ministere_tutelle' => 'Ministère de la Famille et de la Solidarité',
-                ]);
-                $quickLinks = collect();
-                $services = collect();
-            }
-
-            $view->with('siteSetting', $siteSetting);
-            $view->with('quickLinks', $quickLinks);
-            $view->with('services', $services);
-        });
+                ]),
+                'quickLinks' => collect(),
+                'services' => collect(),
+            ];
+        }
     }
 }

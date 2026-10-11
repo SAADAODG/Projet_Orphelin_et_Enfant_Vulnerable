@@ -54,7 +54,7 @@
         <h1 class="h3 mb-1">{{ $session->description }}</h1>
         <p class="text-muted mb-0">
           <span class="badge rounded-pill text-bg-{{ $session->couleurEtat() }}">{{ $session->libelleEtat() }}</span>
-          · {{ $session->libelleTypeAppui() }} · plafond {{ Montant::fcfa($session->plafond_beneficiaire) }} par bénéficiaire
+          · {{ $session->libelleTypeAppui() }} · {{ $session->plafond_beneficiaire === null ? 'sans plafond' : 'plafond ' . Montant::fcfa($session->plafond_beneficiaire) . ' par bénéficiaire' }}
         </p>
       </div>
     </div>
@@ -145,7 +145,7 @@
       <div class="panel-header">
         <div>
           <h2 class="h5 mb-1">OEV retenus <span class="badge rounded-pill text-bg-light border ms-1">{{ $retenus->count() }}</span></h2>
-          <p class="text-muted mb-0 small">Montant retenu : le plus petit des frais réels et du plafond ({{ Montant::fcfa($session->plafond_beneficiaire) }}) ; le plafond quand les frais ne sont pas renseignés.</p>
+          <p class="text-muted mb-0 small">@if ($session->plafond_beneficiaire === null)Montant retenu : les frais réels (session sans plafond).@else Montant retenu : le plus petit des frais réels et du plafond ({{ Montant::fcfa($session->plafond_beneficiaire) }}) ; le plafond quand les frais ne sont pas renseignés.@endif</p>
         </div>
       </div>
       @if ($retenus->isEmpty())
@@ -229,7 +229,7 @@
               <h2 class="h6 mb-1"><i class="bi bi-calculator me-1" aria-hidden="true"></i>Estimation du coût des {{ Montant::nombre($estimation['nombre']) }} OEV éligibles {{ $nbFiltres ? 'filtrés' : '' }}</h2>
               <p class="text-muted small mb-0">
                 Scolarisés : frais de scolarité de la fiche. Non scolarisés d’âge scolaire ({{ SelectionParrainage::AGE_SCOLAIRE_MIN }} à {{ SelectionParrainage::AGE_SCOLAIRE_MAX }} ans) et OEV en formation : montant estimatif saisi ci-dessous.
-                Montant pris en charge : frais plafonnés à {{ Montant::fcfa($session->plafond_beneficiaire) }}, le plafond quand les frais manquent.
+                @if ($session->plafond_beneficiaire === null)Montant pris en charge : les frais réels (session sans plafond).@else Montant pris en charge : frais plafonnés à {{ Montant::fcfa($session->plafond_beneficiaire) }}, le plafond quand les frais manquent.@endif
               </p>
             </div>
           </div>
@@ -390,7 +390,7 @@
                           <span class="d-block text-muted">{{ $estime ? 'montant estimatif non saisi' : 'frais non renseignés' }} : plafond</span>
                         @elseif ($estime)
                           <span class="d-block text-muted">montant estimatif</span>
-                        @elseif ($frais > $session->plafond_beneficiaire)
+                        @elseif ($session->plafond_beneficiaire !== null && $frais > $session->plafond_beneficiaire)
                           <span class="d-block text-muted">frais {{ Montant::fcfa($frais) }}, plafonnés</span>
                         @else
                           <span class="d-block text-muted">{{ $type === SessionParrainage::TYPE_FORMATION ? 'frais de formation' : 'frais de scolarité' }}</span>

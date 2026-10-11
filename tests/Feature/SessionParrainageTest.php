@@ -128,7 +128,10 @@ class SessionParrainageTest extends TestCase
         $session->parrains()->attach($parrain, ['montant' => 300_000]);
 
         $this->actingAs($this->central)->get(route('parrainage.sessions.index'))->assertOk()->assertSee('Nouvelle session');
-        $this->actingAs($this->central)->get(route('parrainage.sessions.create'))->assertOk()->assertSee('Société Solidaire');
+        // La création se fait dans une fenêtre de la liste
+        $this->actingAs($this->central)->get(route('parrainage.sessions.create'))->assertRedirect(route('parrainage.sessions.index', ['nouveau' => 1]));
+        $this->actingAs($this->central)->get(route('parrainage.sessions.index', ['nouveau' => 1]))
+            ->assertOk()->assertSee('nouvelleSessionModal')->assertSee('Société Solidaire');
         $this->actingAs($this->central)->get(route('parrainage.sessions.edit', $session))->assertOk();
         $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))
             ->assertOk()
@@ -140,18 +143,35 @@ class SessionParrainageTest extends TestCase
             ->assertOk()->assertSee('Reste à répartir');
     }
 
-    public function test_le_couple_annee_numero_est_unique(): void
+    public function test_le_numero_est_attribue_automatiquement_pour_chaque_annee(): void
     {
         $this->nouvelleSession();
 
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees())
-            ->assertSessionHasErrors('numero');
+        // Numéro saisi ignoré : la session prend le numéro suivant de son année
+        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['numero' => 1]))->assertSessionHasNoErrors();
+        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['annee' => '2027-2028']))->assertSessionHasNoErrors();
 
-        // Même numéro une autre année, ou autre numéro la même année : accepté
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['annee' => '2027-2028']))
-            ->assertSessionHasNoErrors();
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['numero' => 2]))
-            ->assertSessionHasNoErrors();
+        $this->assertSame([1, 2], SessionParrainage::where('annee', '2026-2027')->orderBy('numero')->pluck('numero')->all());
+        $autreAnnee = SessionParrainage::where('annee', '2027-2028')->sole();
+        $this->assertSame(1, $autreAnnee->numero);
+
+        // Changement d'année d'une session en cours : numéro suivant de la nouvelle année
+        $this->actingAs($this->central)->put(route('parrainage.sessions.update', $autreAnnee), $this->donnees(['quotas_actifs' => '0']))->assertSessionHasNoErrors();
+        $this->assertSame(['2026-2027', 3], [$autreAnnee->refresh()->annee, $autreAnnee->numero]);
+    }
+
+    public function test_le_plafond_est_facultatif(): void
+    {
+        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['plafond_beneficiaire' => '']))->assertSessionHasNoErrors();
+
+        $session = SessionParrainage::sole();
+        $this->assertNull($session->plafond_beneficiaire);
+        $this->assertSame('Sans plafond', $session->libellePlafond());
+        $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))->assertOk()->assertSee('Sans plafond');
+
+        // Sans plafond, le montant retenu est égal aux frais réels
+        $this->assertSame(120_000, \App\Models\BeneficiaireSession::montantPour(120_000, null));
+        $this->assertSame(50_000, \App\Models\BeneficiaireSession::montantPour(120_000, 50_000));
     }
 
     public function test_le_plafond_ne_depasse_pas_l_enveloppe_et_l_enveloppe_est_positive(): void

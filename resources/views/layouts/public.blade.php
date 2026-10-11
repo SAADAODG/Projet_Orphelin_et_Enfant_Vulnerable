@@ -31,7 +31,7 @@
     <div class="container px-3 px-lg-4">
       <a class="navbar-brand" href="{{ route('public.home') }}">
         <div class="brand-logo-icon bg-white p-1">
-          <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries Officielles" style="height: 36px; width: auto; object-fit: contain;">
+          <img src="{{ asset('assets/images/armoiries-240.png') }}" alt="Armoiries Officielles" style="height: 36px; width: auto; object-fit: contain;">
         </div>
         <div class="brand-text">
           <span class="brand-title">{{ Str::upper($siteSetting->ministere_tutelle ?? $siteSetting->nom_site) }}</span>
@@ -89,7 +89,7 @@
       <div class="row g-4">
         <div class="col-12 col-lg-4">
           <div class="footer-brand d-flex align-items-center gap-2">
-            <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso" style="height: 38px; width: auto; object-fit: contain;">
+            <img src="{{ asset('assets/images/armoiries-240.png') }}" alt="Armoiries du Burkina Faso" style="height: 38px; width: auto; object-fit: contain;">
             <span>{{ $siteSetting->ministere_tutelle ?? $siteSetting->nom_site }}</span>
           </div>
           @if ($siteSetting->structure_description)

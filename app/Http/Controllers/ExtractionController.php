@@ -77,7 +77,7 @@ class ExtractionController extends Controller
              sum(case when sexe = 'M' then 1 else 0 end) as garcons,
              sum(case when statut in ('orphelin_pere', 'orphelin_mere', 'orphelin_double') then 1 else 0 end) as orphelins,
              sum(case when situation_scolaire = 'scolarise' then 1 else 0 end) as scolarises,
-             sum(case when handicap = 1 then 1 else 0 end) as handicap"
+             sum(case when handicap then 1 else 0 end) as handicap"
         )->first();
 
         return view('extraction.index', [

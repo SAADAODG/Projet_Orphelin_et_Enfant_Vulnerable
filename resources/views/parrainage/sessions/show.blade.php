@@ -135,7 +135,7 @@
           <h2 class="oev-carte-titre"><i class="bi bi-wallet2" aria-hidden="true"></i> Budget</h2>
           <div class="oev-infos">
             {!! $info('Enveloppe budgétaire', Montant::fcfa($session->enveloppe)) !!}
-            {!! $info('Plafond par bénéficiaire', Montant::fcfa($session->plafond_beneficiaire)) !!}
+            {!! $info('Plafond par bénéficiaire', $session->libellePlafond()) !!}
             {!! $info('Source de financement', $session->libelleSource()) !!}
             @if ($session->avecParrains())
               {!! $info('Total des contributions', Montant::fcfa($session->totalContributions())) !!}

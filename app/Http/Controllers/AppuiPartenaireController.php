@@ -77,17 +77,25 @@ class AppuiPartenaireController extends Controller
             'annees' => AppuiPartenaire::distinct()->orderByDesc('annee')->pluck('annee'),
             'natures' => NatureAppui::actives()->get(),
             'parrains' => Parrain::orderBy('nom')->pluck('nom', 'id'),
+            // Fenêtre « Nouvel appui » (?oev=… : OEV déjà choisi, ex. depuis sa fiche)
+            'formulaire' => $request->user()->can('enregistrer appuis') ? $this->donneesFormulaire($this->nouvelAppui($request)) : null,
         ]);
     }
 
-    public function create(Request $request): View
+    /** La création se fait dans une fenêtre de la liste des appuis. */
+    public function create(Request $request): RedirectResponse
+    {
+        return redirect()->route('parrainage.appuis.index', array_filter(['nouveau' => 1, 'oev' => $request->integer('oev') ?: null]));
+    }
+
+    private function nouvelAppui(Request $request): AppuiPartenaire
     {
         $oev = $request->integer('oev') ? $this->oevsSaisissables($request->user())->find($request->integer('oev')) : null;
 
-        return view('parrainage.appuis.create', $this->donneesFormulaire(new AppuiPartenaire([
+        return (new AppuiPartenaire([
             'annee' => SessionParrainageController::anneeScolaireCourante(),
             'oev_id' => $oev?->id,
-        ])->setRelation('oev', $oev)));
+        ]))->setRelation('oev', $oev);
     }
 
     public function store(Request $request): RedirectResponse
