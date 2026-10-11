@@ -508,6 +508,30 @@
           </section>
         @endif
 
+        {{-- Parrainages de l'État et leur suivi de fin d'année --}}
+        @if ($parrainages->isNotEmpty())
+          <section class="oev-carte">
+            <h2 class="oev-carte-titre"><i class="bi bi-journal-check" aria-hidden="true"></i> Parrainages et suivi</h2>
+            <ul class="list-unstyled mb-0">
+              @foreach ($parrainages as $parrainage)
+                <li class="py-2 @unless ($loop->last) border-bottom @endunless">
+                  <span class="fw-semibold">{{ $parrainage->session->annee }}</span>
+                  <span class="text-muted small">· session n°{{ $parrainage->session->numero }} · {{ App\Models\SessionParrainage::TYPES_APPUI[$parrainage->type_appui] ?? $parrainage->type_appui }} · {{ App\Support\Montant::fcfa($parrainage->montant_retenu) }}</span>
+                  @if ($suivi = $parrainage->suivi)
+                    <span class="d-block small">
+                      <span class="badge rounded-pill text-bg-{{ $suivi->couleur() }}">{{ $suivi->libelleResultat() }}</span>
+                      <span class="{{ $suivi->a_reconduire ? 'text-success' : 'text-muted' }}">{{ $suivi->a_reconduire ? 'recommandé pour un nouveau parrainage' : 'non recommandé' }}</span>
+                    </span>
+                    @if ($suivi->observation)<span class="d-block small text-muted fst-italic">{{ $suivi->observation }}</span>@endif
+                  @else
+                    <span class="d-block small text-muted">Suivi de fin d’année à renseigner</span>
+                  @endif
+                </li>
+              @endforeach
+            </ul>
+          </section>
+        @endif
+
         {{-- Parcours du dossier --}}
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-signpost-split" aria-hidden="true"></i> Parcours du dossier</h2>
@@ -526,6 +550,53 @@
         </section>
       </div>
     </div>
+
+    {{-- Parcours scolaire et professionnel, année par année (rien n'est écrasé : l'historique vient des suivis) --}}
+    @if (count($cursus) > 1 || $oev->estIntegre())
+      <div class="col-12">
+        <section class="oev-carte" id="cursus">
+          <h2 class="oev-carte-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Parcours scolaire et professionnel</h2>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr><th scope="col">Année</th><th scope="col">Scolarité / formation</th><th scope="col">Frais</th><th scope="col">Résultat</th><th scope="col">Parrainage et suite</th></tr>
+              </thead>
+              <tbody>
+                @foreach ($cursus as $etape)
+                  <tr @class(['table-light' => $etape['periode'] === 'actuelle'])>
+                    <td class="text-nowrap fw-semibold">
+                      {{ $etape['annee'] }}
+                      @if ($etape['periode'] === 'actuelle')<span class="badge rounded-pill text-bg-primary ms-1">Actuelle</span>@endif
+                    </td>
+                    <td>
+                      <span class="fw-semibold">{{ $etape['situation'] }}</span>
+                      @if ($etape['detail'])<span class="d-block small text-muted">{{ $etape['detail'] }}</span>@endif
+                    </td>
+                    <td class="small text-nowrap">{{ $etape['frais'] ?? '—' }}</td>
+                    <td class="small">
+                      @if ($etape['resultat'])
+                        <span class="badge rounded-pill text-bg-{{ $etape['couleur'] ?? 'secondary' }}">{{ $etape['resultat'] }}</span>
+                      @elseif ($etape['periode'] === 'actuelle')
+                        <span class="text-muted">En cours</span>
+                      @else
+                        —
+                      @endif
+                      @if ($etape['moyenne'])<span class="d-block">Moyenne {{ $etape['moyenne'] }}</span>@endif
+                    </td>
+                    <td class="small">
+                      @if ($etape['parrainage'])<span class="d-block text-success">{{ $etape['parrainage'] }}</span>@endif
+                      @if ($etape['suite'])<span class="d-block">{{ $etape['suite'] }}</span>@endif
+                      @if ($etape['observation'])<span class="d-block text-muted fst-italic">{{ $etape['observation'] }}</span>@endif
+                      @if (! $etape['parrainage'] && ! $etape['suite'])<span class="text-muted">—</span>@endif
+                    </td>
+                  </tr>
+                @endforeach
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    @endif
 
     {{-- Dossier --}}
     <div class="col-12">

@@ -41,6 +41,8 @@ class RolePermissionSeeder extends Seeder
             'gérer sessions parrainage',
             'gérer parrains',
             'enregistrer appuis',
+            // Suivi de fin d'année des parrainés : le DP (sa province) et le niveau central
+            'suivre parrainages',
         ];
 
         foreach ($permissions as $permission) {
@@ -64,6 +66,7 @@ class RolePermissionSeeder extends Seeder
                 'gérer sessions parrainage',
                 'gérer parrains',
                 'enregistrer appuis',
+                'suivre parrainages',
             ],
             'agent DGFE' => [
                 'voir rapports',
@@ -75,6 +78,7 @@ class RolePermissionSeeder extends Seeder
                 'gérer sessions parrainage',
                 'gérer parrains',
                 'enregistrer appuis',
+                'suivre parrainages',
             ],
             'DR' => [
                 'voir rapports',
@@ -91,6 +95,7 @@ class RolePermissionSeeder extends Seeder
                 'constituer dossiers',
                 'voir parrainage',
                 'enregistrer appuis',
+                'suivre parrainages',
             ],
         ];
 

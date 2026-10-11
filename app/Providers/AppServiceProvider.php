@@ -7,8 +7,8 @@ use App\Models\QuickLink;
 use App\Models\Service;
 use App\Models\Signalement;
 use App\Models\SiteSetting;
+use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
-use App\Services\Parrainage\SourceSelectionNonDisponible;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
@@ -22,8 +22,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Données des modules Sélection / Paiement / Suivi scolaire : provisoirement indisponibles
-        $this->app->bind(SourceSelection::class, SourceSelectionNonDisponible::class);
+        // Données du module Sélection (listes des sessions) ; établissements, paiement et suivi scolaire pas encore gérés
+        $this->app->bind(SourceSelection::class, SelectionParrainage::class);
     }
 
     /**

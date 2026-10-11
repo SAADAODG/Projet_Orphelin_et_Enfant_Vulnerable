@@ -113,6 +113,10 @@ class ParrainageService
                     SessionParrainage::ETATS[$nouvelEtat],
                 ));
             }
+            // La validation arrête la liste définitive : elle doit compter au moins un bénéficiaire retenu
+            if ($nouvelEtat === SessionParrainage::ETAT_VALIDEE && ! $session->beneficiaires()->retenus()->exists()) {
+                throw new TransitionSessionInvalide('La session ne peut pas être validée : aucun OEV n’est retenu sur sa liste (onglet « Sélection »).');
+            }
         }
 
         DB::transaction(function () use ($session, $nouvelEtat, $ancienEtat, $utilisateur, $motif) {

@@ -61,7 +61,7 @@ class SessionParrainage extends Model
     protected $table = 'sessions_parrainage';
 
     protected $fillable = [
-        'description', 'annee', 'numero', 'type_appui', 'enveloppe', 'plafond_beneficiaire', 'source_financement',
+        'description', 'annee', 'numero', 'type_appui', 'enveloppe', 'plafond_beneficiaire', 'estimation_scolarisation', 'estimation_formation', 'source_financement',
         'date_ouverture', 'date_cloture', 'bloquer_depassement_enveloppe', 'quotas_actifs', 'exclure_deja_appuyes',
         'etat', 'session_origine_id', 'created_by', 'updated_by',
     ];
@@ -72,6 +72,8 @@ class SessionParrainage extends Model
             'numero' => 'integer',
             'enveloppe' => 'integer',
             'plafond_beneficiaire' => 'integer',
+            'estimation_scolarisation' => 'integer',
+            'estimation_formation' => 'integer',
             'date_ouverture' => 'date',
             'date_cloture' => 'date',
             'bloquer_depassement_enveloppe' => 'boolean',
@@ -88,6 +90,18 @@ class SessionParrainage extends Model
     public function parrains(): BelongsToMany
     {
         return $this->belongsToMany(Parrain::class, 'contributions_session')->withPivot('montant')->withTimestamps();
+    }
+
+    /** OEV choisis pour la session (module « Sélection ») : retenus et liste d'attente. */
+    public function beneficiaires(): HasMany
+    {
+        return $this->hasMany(BeneficiaireSession::class, 'session_parrainage_id');
+    }
+
+    /** Natures d'appui (codes de natures_appui) couvertes par la session. */
+    public function naturesCouvertes(): array
+    {
+        return $this->type_appui === self::TYPE_LES_DEUX ? [self::TYPE_SCOLAIRE, self::TYPE_FORMATION] : [$this->type_appui];
     }
 
     public function sessionOrigine(): BelongsTo
@@ -157,6 +171,15 @@ class SessionParrainage extends Model
     public function parametresModifiables(): bool
     {
         return $this->etat === self::ETAT_EN_COURS;
+    }
+
+    /**
+     * Suppression : par un gestionnaire tant qu'aucun paiement n'est lancé ; ensuite par un administrateur seulement.
+     */
+    public function peutEtreSupprimeePar(User $utilisateur): bool
+    {
+        return $utilisateur->can('gérer sessions parrainage')
+            && (in_array($this->etat, [self::ETAT_EN_COURS, self::ETAT_VALIDEE], true) || $utilisateur->supervise());
     }
 
     public function avecParrains(): bool

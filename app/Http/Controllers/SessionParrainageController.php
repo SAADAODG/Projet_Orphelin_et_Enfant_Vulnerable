@@ -10,6 +10,7 @@ use App\Services\Parrainage\ParrainageService;
 use App\Services\Parrainage\SourceSelection;
 use App\Services\Parrainage\TransitionSessionInvalide;
 use App\Support\Montant;
+use App\Support\Perimetre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,7 @@ class SessionParrainageController extends Controller
         ];
 
         $sessions = SessionParrainage::query()
+            ->withCount(['beneficiaires', 'beneficiaires as nb_retenus' => fn ($q) => $q->retenus()])
             ->when($filtres['annee'] !== '', fn ($q) => $q->where('annee', $filtres['annee']))
             ->when(array_key_exists($filtres['type_appui'], SessionParrainage::TYPES_APPUI), fn ($q) => $q->where('type_appui', $filtres['type_appui']))
             ->when(array_key_exists($filtres['etat'], SessionParrainage::ETATS), fn ($q) => $q->where('etat', $filtres['etat']))
@@ -86,8 +88,29 @@ class SessionParrainageController extends Controller
             return $session;
         });
 
-        return redirect()->route('parrainage.sessions.show', $session)
-            ->with('success', "Session {$session->reference()} ouverte.");
+        // Session ouverte : on enchaîne sur son peuplement (recherche et ajout des OEV)
+        return redirect()->route('parrainage.sessions.selection', $session)
+            ->with('success', "Session {$session->reference()} ouverte : ajoutez maintenant les OEV à la session.");
+    }
+
+    /** Suppression d'une session avec sa sélection, ses quotas et ses contributions (journal conservé). */
+    public function destroy(Request $request, SessionParrainage $session): RedirectResponse
+    {
+        if (! $session->peutEtreSupprimeePar($request->user())) {
+            return back()->with('error', "La session est « {$session->libelleEtat()} » : seul un administrateur peut la supprimer.");
+        }
+
+        $reference = $session->reference();
+        DB::transaction(function () use ($session, $reference, $request) {
+            JournalActivite::consigner('session_parrainage.suppression', $session, "Suppression de la session {$reference}", [
+                'etat' => $session->etat,
+                'enveloppe' => $session->enveloppe,
+                'beneficiaires' => $session->beneficiaires()->count(),
+            ], $request->user());
+            $session->delete();
+        });
+
+        return redirect()->route('parrainage.sessions.index')->with('success', "Session {$reference} supprimée.");
     }
 
     public function show(Request $request, SessionParrainage $session): View
@@ -113,6 +136,15 @@ class SessionParrainageController extends Controller
             'prorata' => $prorata,
             'eligibles' => $vue === 'quotas' ? $this->sourceSelection->eligiblesParRegion($session) : [],
             'resteOrigine' => $engageOrigine === null ? null : $origine->enveloppe - $engageOrigine,
+            // OEV retenus sur la liste de la session (dans la zone de l'utilisateur), et taille de la liste d'attente
+            'retenus' => $vue === 'informations'
+                ? $session->beneficiaires()->retenus()
+                    ->whereHas('oev', fn ($q) => Perimetre::pour($request->user())->appliquer($q))
+                    ->with(['oev.province', 'oev.commune', 'region', 'suivi'])
+                    ->orderBy('id')
+                    ->get()
+                : collect(),
+            'nbAttente' => $session->beneficiaires()->enAttente()->count(),
             'journal' => JournalActivite::de($session)->with('utilisateur')->limit(20)->get(),
         ]);
     }

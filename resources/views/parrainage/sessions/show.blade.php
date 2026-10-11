@@ -21,6 +21,8 @@
   $info = fn (string $label, $valeur) => '<div class="oev-info"><span class="oev-info-label">' . e($label) . '</span><span class="oev-info-valeur">' . e($valeur) . '</span></div>';
   $ouiNon = fn (bool $valeur) => $valeur ? 'Oui' : 'Non';
   $totalQuotas = array_sum(array_map('intval', $quotas));
+  // Liste définitive arrêtée : chaque retenu doit avoir un suivi de fin d'année
+  $avecSuivi = ! $session->parametresModifiables();
 @endphp
 
 @section('content')
@@ -39,8 +41,14 @@
     </div>
     <div class="heading-actions">
       <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.sessions.index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Sessions</a>
+      @if ($gere && $session->parametresModifiables())
+        <a class="btn btn-primary btn-sm" href="{{ route('parrainage.sessions.selection', $session) }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Ajouter des OEV</a>
+      @endif
       @if ($gere && $session->estModifiable())
         <a class="btn btn-outline-primary btn-sm" href="{{ route('parrainage.sessions.edit', $session) }}"><i class="bi bi-pencil" aria-hidden="true"></i> Modifier</a>
+      @endif
+      @if ($session->peutEtreSupprimeePar($utilisateur))
+        @include('parrainage.sessions._supprimer', ['session' => $session])
       @endif
     </div>
   </div>
@@ -57,7 +65,10 @@
           <i class="bi bi-signpost-2" aria-hidden="true"></i>
           Cycle : {{ implode(' → ', SessionParrainage::ETATS) }}
         </span>
-        @if ($gere && $suivant)
+        @if ($gere && $suivant === SessionParrainage::ETAT_VALIDEE)
+          {{-- La validation arrête la liste définitive : elle se fait depuis l'onglet « Sélection » --}}
+          <a class="btn btn-primary btn-sm" href="{{ route('parrainage.sessions.selection', $session) }}"><i class="bi bi-funnel" aria-hidden="true"></i> Sélectionner les OEV et valider la liste</a>
+        @elseif ($gere && $suivant)
           <form method="POST" action="{{ route('parrainage.sessions.etat', $session) }}" data-confirm="{{ $actionsSuivant[$suivant][2] }}">
             @csrf
             <input type="hidden" name="etat" value="{{ $suivant }}">
@@ -94,16 +105,7 @@
     </div>
   @endif
 
-  <nav class="oev-onglets mt-3" aria-label="Vues de la session">
-    <a class="oev-onglet {{ $vue === 'informations' ? 'is-active' : '' }}" href="{{ route('parrainage.sessions.show', $session) }}" @if ($vue === 'informations') aria-current="page" @endif>
-      <i class="bi bi-info-circle" aria-hidden="true"></i> Informations
-    </a>
-    @if ($session->quotas_actifs)
-      <a class="oev-onglet {{ $vue === 'quotas' ? 'is-active' : '' }}" href="{{ route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']) }}" @if ($vue === 'quotas') aria-current="page" @endif>
-        <i class="bi bi-pie-chart" aria-hidden="true"></i> Quotas
-      </a>
-    @endif
-  </nav>
+  @include('parrainage.sessions._onglets', ['actif' => $vue])
 
   @if ($vue === 'informations')
     <div class="row g-3 mt-1">
@@ -184,6 +186,83 @@
           </section>
         </div>
       @endif
+
+      {{-- OEV retenus sur la liste de la session --}}
+      <div class="col-12">
+        <section class="oev-carte">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <h2 class="oev-carte-titre mb-0">
+              <i class="bi bi-person-check" aria-hidden="true"></i> OEV retenus
+              <span class="badge rounded-pill text-bg-light border ms-1">{{ $retenus->count() }}</span>
+            </h2>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}"><i class="bi bi-list-check" aria-hidden="true"></i> Gérer la liste</a>
+              @if ($avecSuivi)
+                <a class="btn btn-outline-primary btn-sm" href="{{ route('parrainage.suivis.index', ['annee' => $session->annee, 'session' => $session->id]) }}"><i class="bi bi-journal-check" aria-hidden="true"></i> Suivi des parrainés</a>
+              @endif
+              @if ($gere && $session->parametresModifiables())
+                <a class="btn btn-primary btn-sm" href="{{ route('parrainage.sessions.selection', $session) }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Ajouter des OEV</a>
+              @endif
+            </div>
+          </div>
+          <p class="text-muted small mt-1 mb-2">
+            Montant engagé : <strong>{{ Montant::fcfa($retenus->sum('montant_retenu')) }}</strong> sur {{ Montant::fcfa($session->enveloppe) }}
+            · reste {{ Montant::fcfa($session->enveloppe - $retenus->sum('montant_retenu')) }}
+            @if ($nbAttente) · {{ $nbAttente }} OEV en liste d’attente @endif
+            @unless ($session->parametresModifiables()) · liste définitive @endunless
+          </p>
+          @if ($retenus->isEmpty())
+            <p class="text-muted mb-0">
+              Aucun OEV retenu pour le moment.
+              @if ($gere && $session->parametresModifiables()) Cliquez sur « Ajouter des OEV » pour peupler la session. @endif
+            </p>
+          @else
+            <div class="table-responsive">
+              <table class="table align-middle mb-0 oev-liste">
+                <thead>
+                  <tr>
+                    <th scope="col">N°</th><th scope="col">OEV</th><th scope="col">Statut</th>
+                    <th scope="col">Localité</th><th scope="col">Appui</th><th scope="col" class="text-end">Frais</th><th scope="col" class="text-end">Montant retenu</th>
+                    @if ($avecSuivi)<th scope="col">Suivi</th>@endif
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach ($retenus as $ligne)
+                    <tr>
+                      <td class="text-muted">{{ $loop->iteration }}</td>
+                      <td>@include('parrainage._oev', ['oev' => $ligne->oev, 'detail' => '· ' . $ligne->oev->age() . ' ans'])</td>
+                      <td><span class="oev-statut oev-statut--{{ $ligne->oev->statut }}">{{ $ligne->oev->libelle('statut', App\Models\Oev::STATUTS) }}</span></td>
+                      <td class="small">{{ $ligne->oev->commune?->nom }} <span class="text-muted">· {{ $ligne->region?->nom }}</span></td>
+                      <td class="small">{{ SessionParrainage::TYPES_APPUI[$ligne->type_appui] ?? $ligne->type_appui }}</td>
+                      <td class="text-end small text-nowrap">
+                        {{ $ligne->frais_reels === null ? 'Non renseignés' : Montant::fcfa($ligne->frais_reels) }}
+                        @if ($ligne->frais_estimes)<span class="d-block text-muted">estimés</span>@endif
+                      </td>
+                      <td class="text-end fw-semibold text-nowrap">{{ Montant::fcfa($ligne->montant_retenu) }}</td>
+                      @if ($avecSuivi)
+                        <td class="small">
+                          @if ($ligne->suivi)
+                            <span class="badge rounded-pill text-bg-{{ $ligne->suivi->couleur() }}">{{ $ligne->suivi->libelleResultat() }}</span>
+                          @else
+                            <span class="text-muted">À renseigner</span>
+                          @endif
+                        </td>
+                      @endif
+                    </tr>
+                  @endforeach
+                </tbody>
+                <tfoot>
+                  <tr class="fw-semibold">
+                    <td colspan="6" class="text-end">Total</td>
+                    <td class="text-end text-nowrap">{{ Montant::fcfa($retenus->sum('montant_retenu')) }}</td>
+                    @if ($avecSuivi)<td></td>@endif
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          @endif
+        </section>
+      </div>
 
       <div class="col-12">
         <section class="oev-carte">
