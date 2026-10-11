@@ -21,8 +21,14 @@ return new class extends Migration
             $table->string('resultat', 20)->comment('Scolaire : admis, redouble, abandon. Formation : poursuit, achevee, abandon');
             $table->decimal('moyenne', 5, 2)->nullable()->comment('Moyenne annuelle (scolaire), sur 10 ou 20 selon la classe');
             $table->string('insertion', 20)->nullable()->comment('Formation achevée : emploi, auto_emploi, recherche');
+            $table->string('orientation', 20)->nullable()->comment('ecole, formation ou arret');
+            $table->string('prochaine_annee', 150)->nullable()
+                ->comment('Scolaire : classe prévue (code, ex. 4e). Formation : formation prévue (texte libre)');
+            $table->json('details_prochaine_annee')->nullable()
+                ->comment('frais, etablissement, type_etablissement (école) ; frais, type_centre, duree_mois (formation)');
             $table->boolean('a_reconduire')->comment('Recommandé pour un nouveau parrainage');
             $table->text('observation')->nullable();
+            $table->json('fiche_avant')->nullable()->comment('Scolarité / formation de la fiche avant le suivi');
             $table->foreignId('renseigne_par')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });

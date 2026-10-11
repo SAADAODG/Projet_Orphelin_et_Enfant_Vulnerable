@@ -24,6 +24,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('score')->default(0)->comment('Score d’urgence du besoin (0 à 100)');
             $table->foreignId('region_id')->nullable()->constrained('regions')->nullOnDelete();
             $table->unsignedBigInteger('frais_reels')->nullable()->comment('FCFA ; vide si non renseignés');
+            $table->boolean('frais_estimes')->default(false)->comment('Frais tirés des montants estimatifs de la session');
             $table->unsignedBigInteger('montant_retenu')->comment('min(frais réels, plafond) ; le plafond si les frais manquent');
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();

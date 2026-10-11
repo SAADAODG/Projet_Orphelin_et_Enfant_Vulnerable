@@ -4,12 +4,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/** Paramètres généraux du site : identité, liens rapides du pied de page, services présentés. */
 return new class extends Migration
 {
-    /**
-     * Table à ligne unique (singleton) : identité et coordonnées de la
-     * plateforme, affichées sur le site public (en-tête, pied de page).
-     */
     public function up(): void
     {
         Schema::create('site_settings', function (Blueprint $table) {
@@ -31,10 +28,28 @@ return new class extends Migration
             $table->string('contact_email')->nullable();
             $table->timestamps();
         });
+
+        Schema::create('quick_links', function (Blueprint $table) {
+            $table->id();
+            $table->string('libelle');
+            $table->string('url');
+            $table->unsignedInteger('ordre')->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('services', function (Blueprint $table) {
+            $table->id();
+            $table->string('libelle');
+            $table->string('url')->default('#');
+            $table->unsignedInteger('ordre')->default(0);
+            $table->timestamps();
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('services');
+        Schema::dropIfExists('quick_links');
         Schema::dropIfExists('site_settings');
     }
 };
