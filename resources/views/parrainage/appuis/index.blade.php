@@ -30,37 +30,43 @@
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
-        <h2 class="h5 mb-1 section-title"><i class="bi bi-gift" aria-hidden="true"></i><span>Appuis enregistrés</span></h2>
-        <p class="text-muted mb-0">{{ $appuis->total() }} appui(s) dans votre zone.</p>
+        <h2 class="h5 mb-1">Appuis enregistrés <span class="badge rounded-pill text-bg-light border ms-1">{{ $appuis->total() }}</span></h2>
+        <p class="text-muted mb-0">
+          @if (array_filter($filtres))
+            Résultats filtrés — <a href="{{ route('parrainage.appuis.index') }}" class="text-decoration-none">retirer les filtres</a>
+          @else
+            Appuis des parrains aux OEV de votre zone.
+          @endif
+        </p>
       </div>
-      <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('parrainage.appuis.index') }}">
-        <input class="form-control form-control-sm w-auto" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Code, nom ou prénom de l’OEV" aria-label="Rechercher un OEV">
-        <select class="form-select form-select-sm w-auto" name="annee" aria-label="Filtrer par année" onchange="this.form.submit()">
+    </div>
+      <form class="oev-toolbar" method="GET" action="{{ route('parrainage.appuis.index') }}" role="search">
+        <div class="oev-recherche">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input class="form-control" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Code, nom ou prénom de l’OEV" aria-label="Rechercher un OEV">
+        </div>
+        <select class="form-select" name="annee" aria-label="Filtrer par année" onchange="this.form.submit()">
           <option value="">Toutes les années</option>
           @foreach ($annees as $annee)
             <option value="{{ $annee }}" @selected($filtres['annee'] === $annee)>{{ $annee }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="nature" aria-label="Filtrer par nature" onchange="this.form.submit()">
+        <select class="form-select" name="nature" aria-label="Filtrer par nature" onchange="this.form.submit()">
           <option value="">Toutes les natures</option>
           @foreach ($natures as $nature)
             <option value="{{ $nature->id }}" @selected($filtres['nature'] === $nature->id)>{{ $nature->libelle }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="parrain" aria-label="Filtrer par parrain" onchange="this.form.submit()">
+        <select class="form-select" name="parrain" aria-label="Filtrer par parrain" onchange="this.form.submit()">
           <option value="">Tous les parrains</option>
           @foreach ($parrains as $id => $nom)
             <option value="{{ $id }}" @selected($filtres['parrain'] === $id)>{{ $nom }}</option>
           @endforeach
         </select>
-        <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Rechercher"><i class="bi bi-search" aria-hidden="true"></i></button>
-        @if (array_filter($filtres))
-          <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.appuis.index') }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Effacer</a>
-        @endif
+        <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Rechercher</button>
       </form>
-    </div>
     <div class="table-responsive">
-      <table class="table align-middle mb-0">
+      <table class="table align-middle mb-0 oev-liste">
         <thead>
           <tr>
             <th scope="col">OEV</th>
@@ -75,10 +81,7 @@
         <tbody>
           @forelse ($appuis as $appui)
             <tr>
-              <td>
-                <span class="fw-semibold">{{ $appui->oev->nomComplet() }}</span>
-                <span class="d-block small text-muted">{{ $appui->oev->reference() }}@if ($appui->oev->commune) · {{ $appui->oev->commune->nom }}@endif</span>
-              </td>
+              <td>@include('parrainage._oev', ['oev' => $appui->oev, 'detail' => $appui->oev->commune ? '· ' . $appui->oev->commune->nom : ''])</td>
               <td>{{ $appui->parrain->nom }}</td>
               <td>{{ $appui->annee }}</td>
               <td>
@@ -109,8 +112,9 @@
         </tbody>
       </table>
     </div>
-    @if ($appuis->hasPages())
-      <div class="d-flex justify-content-center mt-3">
+    @if ($appuis->total())
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <small class="text-muted">Affichage de {{ $appuis->firstItem() }} à {{ $appuis->lastItem() }} sur {{ $appuis->total() }} appui(s)</small>
         {{ $appuis->links('pagination::bootstrap-5') }}
       </div>
     @endif

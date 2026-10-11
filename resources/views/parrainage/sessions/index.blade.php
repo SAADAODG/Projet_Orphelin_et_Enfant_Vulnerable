@@ -4,6 +4,10 @@
 
 @section('title', 'Sessions de parrainage | ' . $siteSetting->structure_nom)
 
+@push('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
+@endpush
+
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
   <div class="page-heading">
@@ -24,8 +28,8 @@
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
-        <h2 class="h5 mb-1 section-title"><i class="bi bi-list-ul" aria-hidden="true"></i><span>Liste des sessions</span></h2>
-        <p class="text-muted mb-0">{{ $sessions->total() }} session(s).</p>
+        <h2 class="h5 mb-1">Liste des sessions <span class="badge rounded-pill text-bg-light border ms-1">{{ $sessions->total() }}</span></h2>
+        <p class="text-muted mb-0">Cliquez sur une session pour ouvrir sa fiche et la liste de ses OEV.</p>
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('parrainage.sessions.index') }}">
         <select class="form-select form-select-sm w-auto" name="annee" aria-label="Filtrer par année" onchange="this.form.submit()">
@@ -52,7 +56,7 @@
       </form>
     </div>
     <div class="table-responsive">
-      <table class="table align-middle mb-0">
+      <table class="table align-middle mb-0 oev-liste">
         <thead>
           <tr>
             <th scope="col">Année</th>
@@ -60,26 +64,40 @@
             <th scope="col">Description</th>
             <th scope="col">Type d’appui</th>
             <th scope="col" class="text-end">Enveloppe</th>
+            <th scope="col" class="text-end">OEV retenus</th>
             <th scope="col">État</th>
             <th scope="col" class="text-end">Action</th>
           </tr>
         </thead>
         <tbody>
           @forelse ($sessions as $session)
-            <tr>
-              <td class="fw-semibold">{{ $session->annee }}</td>
-              <td>{{ $session->numero }}</td>
-              <td>{{ $session->description }}</td>
+            <tr data-href="{{ route('parrainage.sessions.show', $session) }}">
+              <td><span class="oev-code">{{ $session->annee }}</span></td>
+              <td class="fw-semibold">n°{{ $session->numero }}</td>
+              <td class="oev-nom">{{ $session->description }}</td>
               <td>{{ $session->libelleTypeAppui() }}</td>
               <td class="text-end text-nowrap">{{ Montant::fcfa($session->enveloppe) }}</td>
+              <td class="text-end">
+                <a class="text-decoration-none" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}">{{ Montant::nombre($session->nb_retenus) }}</a>
+              </td>
               <td><span class="badge rounded-pill text-bg-{{ $session->couleurEtat() }}">{{ $session->libelleEtat() }}</span></td>
               <td class="text-end">
-                <a class="btn btn-light btn-sm" href="{{ route('parrainage.sessions.show', $session) }}" aria-label="Ouvrir la session {{ $session->reference() }}"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                <div class="d-inline-flex gap-1">
+                  <a class="btn btn-light btn-sm" href="{{ route('parrainage.sessions.show', $session) }}" aria-label="Ouvrir la session {{ $session->reference() }}" title="Ouvrir"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                  @if ($session->parametresModifiables())
+                    @can('gérer sessions parrainage')
+                      <a class="btn btn-light btn-sm" href="{{ route('parrainage.sessions.selection', $session) }}" aria-label="Ajouter des OEV à la session {{ $session->reference() }}" title="Ajouter des OEV"><i class="bi bi-person-plus" aria-hidden="true"></i></a>
+                    @endcan
+                  @endif
+                  @if ($session->peutEtreSupprimeePar(auth()->user()))
+                    @include('parrainage.sessions._supprimer', ['session' => $session, 'compact' => true])
+                  @endif
+                </div>
               </td>
             </tr>
           @empty
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">Aucune session de parrainage.</td>
+              <td colspan="8" class="text-center text-muted py-4">Aucune session de parrainage.</td>
             </tr>
           @endforelse
         </tbody>
@@ -93,3 +111,15 @@
   </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  // Toute la ligne ouvre la session (les boutons gardent leur action)
+  document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
+    ligne.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, form')) { return; }
+      if (e.ctrlKey || e.metaKey) { window.open(ligne.dataset.href, '_blank'); } else { window.location = ligne.dataset.href; }
+    });
+  });
+</script>
+@endpush

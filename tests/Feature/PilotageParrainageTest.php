@@ -138,7 +138,7 @@ class PilotageParrainageTest extends TestCase
         return collect($classeur->getSheetByName($feuille)->toArray())->flatten()->filter()->implode(' | ');
     }
 
-    public function test_le_tableau_de_bord_sans_module_selection_compte_les_appuis_des_partenaires(): void
+    public function test_le_tableau_de_bord_sans_beneficiaire_de_l_etat_compte_les_appuis_des_partenaires(): void
     {
         $appuye = $this->oev($this->ouagadougou, ['sexe' => 'M', 'vulnerabilites' => ['orphelin', 'precarite']]);
         $this->oev($this->ouagadougou);
@@ -146,16 +146,16 @@ class PilotageParrainageTest extends TestCase
         AppuiPartenaire::create(['oev_id' => $appuye->id, 'parrain_id' => $this->parrain->id, 'annee' => '2026-2027',
             'nature_appui_id' => NatureAppui::where('code', 'sante')->value('id'), 'montant' => 20_000]);
 
+        // Module Sélection branché, mais aucun OEV retenu sur la liste de la session : 0 bénéficiaire, 0 FCFA engagé
         $this->actingAs($this->central)->get(route('parrainage.pilotage.index', ['annee' => '2026-2027']))
             ->assertOk()
-            ->assertSee('Données non disponibles')
             ->assertSee('ONG Espoir')
             ->assertSee('Précarité du ménage')
             ->assertViewHas('indicateurs', fn ($i) => $i['couverture']['eligibles'] === 3
                 && $i['couverture']['partenaires'] === 1
-                && $i['couverture']['etat'] === null
+                && $i['couverture']['etat'] === 0
                 && $i['budget']['enveloppe'] === 1_000_000
-                && $i['budget']['engage'] === null
+                && $i['budget']['engage'] === 0
                 && $i['profil']['total'] === 1);
 
         // Le DP ne compte que sa province

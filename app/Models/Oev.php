@@ -29,7 +29,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'lieu_de_vie', 'lieu_de_vie_precision', 'tuteur_sexe', 'tuteur_lien', 'tuteur_lien_precision', 'tuteur_a_cnib', 'tuteur_cnib', 'tuteur_pret_continuer', 'tuteur_raison_arret',
     'vulnerabilites', 'vulnerabilite_precision',
     'situation_scolaire', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision',
-    'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
+    'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
     'types_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
     'source_revenu', 'niveau_revenu', 'logement',
     'date_identification', 'identifie_par', 'niveau_priorite',
@@ -322,6 +322,7 @@ class Oev extends Model
             'suivi_clinique' => 'boolean',
             'formation_duree_mois' => 'integer',
             'formation_duree_recue_mois' => 'integer',
+            'frais_formation' => 'integer',
             'date_identification' => 'date',
         ];
     }

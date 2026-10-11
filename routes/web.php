@@ -20,7 +20,9 @@ use App\Http\Controllers\QuickLinkController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SelectionParrainageController;
 use App\Http\Controllers\SessionParrainageController;
+use App\Http\Controllers\SuiviParrainageController;
 use App\Http\Controllers\SignalementController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VillageController;
@@ -153,7 +155,17 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/sessions/{session}/edit', [SessionParrainageController::class, 'edit'])->name('sessions.edit');
             Route::put('/sessions/{session}', [SessionParrainageController::class, 'update'])->name('sessions.update');
             Route::put('/sessions/{session}/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('sessions.quotas');
+            // Sélection des OEV de la session : ajout, liste d'attente, frais, validation de la liste définitive
+            Route::delete('/sessions/{session}', [SessionParrainageController::class, 'destroy'])->name('sessions.destroy');
+            Route::post('/sessions/{session}/selection', [SelectionParrainageController::class, 'ajouter'])->name('sessions.selection.ajouter');
+            Route::put('/sessions/{session}/selection/estimations', [SelectionParrainageController::class, 'estimations'])->name('sessions.selection.estimations');
+            Route::patch('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'modifier'])->name('sessions.selection.modifier');
+            Route::delete('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'retirer'])->name('sessions.selection.retirer');
+            Route::post('/sessions/{session}/selection/valider', [SelectionParrainageController::class, 'valider'])->name('sessions.selection.valider');
         });
+        // Suivi de fin d'année des parrainés : le DP pour sa province, le niveau central pour tout le pays
+        Route::put('/suivis/{ligne}', [SuiviParrainageController::class, 'enregistrer'])
+            ->middleware('can:suivre parrainages')->name('suivis.enregistrer');
         // Répertoire des parrains : géré par le niveau central
         Route::middleware('can:gérer parrains')->group(function () {
             Route::get('/parrains/create', [ParrainController::class, 'create'])->name('parrains.create');
@@ -185,8 +197,10 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/pilotage/extractions', [PilotageParrainageController::class, 'extractions'])->name('pilotage.extractions');
             Route::get('/pilotage/extractions/paiement', [PilotageParrainageController::class, 'paiement'])->name('pilotage.paiement');
             Route::get('/pilotage/extractions/parrain', [PilotageParrainageController::class, 'listeParrain'])->name('pilotage.liste-parrain');
+            Route::get('/suivis', [SuiviParrainageController::class, 'index'])->name('suivis.index');
             Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
             Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
+            Route::get('/sessions/{session}/selection', [SelectionParrainageController::class, 'index'])->name('sessions.selection');
             // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
             Route::post('/sessions/{session}/etat', [SessionParrainageController::class, 'changerEtat'])->name('sessions.etat');
         });

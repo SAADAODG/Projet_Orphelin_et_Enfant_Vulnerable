@@ -29,36 +29,42 @@
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
-        <h2 class="h5 mb-1 section-title"><i class="bi bi-person-vcard" aria-hidden="true"></i><span>Répertoire des parrains</span></h2>
-        <p class="text-muted mb-0">{{ $parrains->total() }} parrain(s).</p>
+        <h2 class="h5 mb-1">Répertoire des parrains <span class="badge rounded-pill text-bg-light border ms-1">{{ $parrains->total() }}</span></h2>
+        <p class="text-muted mb-0">
+          @if (array_filter($filtres, fn ($v) => $v !== null && $v !== ''))
+            Résultats filtrés — <a href="{{ route('parrainage.parrains.index') }}" class="text-decoration-none">retirer les filtres</a>
+          @else
+            Cliquez sur un parrain pour ouvrir sa fiche (engagements, appuis).
+          @endif
+        </p>
       </div>
-      <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('parrainage.parrains.index') }}">
-        <input class="form-control form-control-sm w-auto" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Nom ou contact" aria-label="Rechercher un parrain">
-        <select class="form-select form-select-sm w-auto" name="type" aria-label="Filtrer par type" onchange="this.form.submit()">
+    </div>
+      <form class="oev-toolbar" method="GET" action="{{ route('parrainage.parrains.index') }}" role="search">
+        <div class="oev-recherche">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input class="form-control" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Nom ou contact" aria-label="Rechercher un parrain">
+        </div>
+        <select class="form-select" name="type" aria-label="Filtrer par type" onchange="this.form.submit()">
           <option value="">Tous les types</option>
           @foreach (Parrain::TYPES as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['type'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="region_id" aria-label="Filtrer par zone d’intervention" onchange="this.form.submit()">
+        <select class="form-select" name="region_id" aria-label="Filtrer par zone d’intervention" onchange="this.form.submit()">
           <option value="">Toutes les zones</option>
           @foreach ($regions as $id => $nom)
             <option value="{{ $id }}" @selected($filtres['region_id'] === $id)>{{ $nom }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="actif" aria-label="Filtrer par statut" onchange="this.form.submit()">
+        <select class="form-select" name="actif" aria-label="Filtrer par statut" onchange="this.form.submit()">
           <option value="">Actifs et inactifs</option>
           <option value="1" @selected($filtres['actif'] === '1')>Actifs</option>
           <option value="0" @selected($filtres['actif'] === '0')>Inactifs</option>
         </select>
-        <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Rechercher"><i class="bi bi-search" aria-hidden="true"></i></button>
-        @if (array_filter($filtres, fn ($v) => $v !== null && $v !== ''))
-          <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.parrains.index') }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Effacer</a>
-        @endif
+        <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Rechercher</button>
       </form>
-    </div>
     <div class="table-responsive">
-      <table class="table align-middle mb-0">
+      <table class="table align-middle mb-0 oev-liste">
         <thead>
           <tr>
             <th scope="col">Parrain</th>
@@ -72,8 +78,13 @@
         </thead>
         <tbody>
           @forelse ($parrains as $parrain)
-            <tr @class(['text-muted' => ! $parrain->actif])>
-              <td class="fw-semibold">{{ $parrain->nom }}</td>
+            <tr @class(['text-muted' => ! $parrain->actif]) data-href="{{ route('parrainage.parrains.show', $parrain) }}">
+              <td>
+                <div class="d-flex align-items-center gap-3">
+                  <span class="oev-avatar" aria-hidden="true">{{ mb_strtoupper(collect(preg_split('/\s+/u', trim($parrain->nom)))->take(2)->map(fn ($m) => mb_substr($m, 0, 1))->implode('')) }}</span>
+                  <span class="oev-nom">{{ $parrain->nom }}</span>
+                </div>
+              </td>
               <td>{{ $parrain->libelleType() }}</td>
               <td>
                 {{ $parrain->contact_nom ?? '—' }}
@@ -101,11 +112,24 @@
         </tbody>
       </table>
     </div>
-    @if ($parrains->hasPages())
-      <div class="d-flex justify-content-center mt-3">
+    @if ($parrains->total())
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <small class="text-muted">Affichage de {{ $parrains->firstItem() }} à {{ $parrains->lastItem() }} sur {{ $parrains->total() }} parrain(s)</small>
         {{ $parrains->links('pagination::bootstrap-5') }}
       </div>
     @endif
   </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  // Toute la ligne ouvre la fiche du parrain (les boutons gardent leur action)
+  document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
+    ligne.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, form')) { return; }
+      if (e.ctrlKey || e.metaKey) { window.open(ligne.dataset.href, '_blank'); } else { window.location = ligne.dataset.href; }
+    });
+  });
+</script>
+@endpush

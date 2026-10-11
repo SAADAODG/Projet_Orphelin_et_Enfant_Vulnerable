@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\BeneficiaireSession;
 use App\Models\JournalActivite;
 use App\Models\Oev;
 use App\Models\Parrain;
@@ -70,13 +71,42 @@ class SessionParrainageTest extends TestCase
         ]);
     }
 
+    /** OEV intégré et scolarisé de la première région (éligible à une session scolaire). */
+    private function oevScolarise(?Region $region = null, int $i = 0): Oev
+    {
+        $region ??= Region::has('provinces')->firstOrFail();
+
+        return Oev::create([
+            'nom' => 'ENFANT', 'prenom' => "Test {$i}", 'sexe' => 'F', 'date_naissance' => '2015-03-01',
+            'statut' => 'vulnerable', 'handicap' => false, 'systeme_educatif' => 'classique', 'situation_scolaire' => 'scolarise',
+            'nom_tuteur' => 'TUTEUR', 'prenom_tuteur' => 'Issa', 'contact_tuteur' => '+226 70 00 00 00',
+            'etablissement_actuel' => 'École A', 'type_etablissement' => 'public', 'classe' => 'CM1', 'frais_scolarite' => 0,
+            'region_id' => $region->id, 'province_id' => $region->provinces()->value('id'),
+            'numero_dossier' => Oev::genererNumeroDossier(), 'code' => Oev::genererCode(),
+            'statut_dossier' => Oev::ETAT_INTEGRE, 'integre_at' => now(),
+        ]);
+    }
+
+    /** Un OEV retenu sur la liste de la session : condition pour la valider. */
+    private function avecUnRetenu(SessionParrainage $session): SessionParrainage
+    {
+        $oev = $this->oevScolarise();
+        $session->beneficiaires()->create([
+            'oev_id' => $oev->id, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE, 'statut' => BeneficiaireSession::RETENU,
+            'region_id' => $oev->region_id, 'montant_retenu' => 0,
+        ]);
+
+        return $session;
+    }
+
     public function test_le_niveau_central_ouvre_une_session_tracee_dans_le_journal(): void
     {
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees())
-            ->assertRedirect()
+        $reponse = $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees())
             ->assertSessionHasNoErrors();
 
         $session = SessionParrainage::sole();
+        // Une fois créée, on enchaîne sur le peuplement de la session
+        $reponse->assertRedirect(route('parrainage.sessions.selection', $session));
         $this->assertSame(10_000_000, $session->enveloppe);
         $this->assertSame(75_000, $session->plafond_beneficiaire);
         $this->assertSame(SessionParrainage::ETAT_EN_COURS, $session->etat);
@@ -102,7 +132,8 @@ class SessionParrainageTest extends TestCase
         $this->actingAs($this->central)->get(route('parrainage.sessions.edit', $session))->assertOk();
         $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))
             ->assertOk()
-            ->assertSee('Valider la session')
+            // La validation passe par la liste de l'onglet « Sélection »
+            ->assertSee('Sélectionner les OEV et valider la liste')
             ->assertSee("1\u{00A0}000\u{00A0}000\u{00A0}FCFA", false)
             ->assertSee('Société Solidaire');
         $this->actingAs($this->central)->get(route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']))
@@ -156,7 +187,7 @@ class SessionParrainageTest extends TestCase
 
         foreach ([$this->dr, $this->dp] as $lecteur) {
             $this->actingAs($lecteur)->get(route('parrainage.sessions.index'))->assertOk()->assertSee('Session principale');
-            $this->actingAs($lecteur)->get(route('parrainage.sessions.show', $session))->assertOk()->assertDontSee('Valider la session');
+            $this->actingAs($lecteur)->get(route('parrainage.sessions.show', $session))->assertOk()->assertDontSee('valider la liste');
             // Accès refusé : redirection avec message d'erreur (convention du projet), rien n'est enregistré
             $this->actingAs($lecteur)->get(route('parrainage.sessions.create'))->assertRedirect();
             $this->actingAs($lecteur)->post(route('parrainage.sessions.store'), $this->donnees(['numero' => 5]))->assertRedirect();
@@ -165,6 +196,39 @@ class SessionParrainageTest extends TestCase
 
         $this->assertDatabaseCount('sessions_parrainage', 1);
         $this->assertSame('Session principale', $session->refresh()->description);
+    }
+
+    public function test_la_fiche_de_la_session_liste_les_oev_retenus(): void
+    {
+        $session = $this->avecUnRetenu($this->nouvelleSession());
+
+        $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))
+            ->assertOk()->assertSee('OEV retenus')->assertSee('ENFANT Test 0')->assertSee('Ajouter des OEV');
+        $this->actingAs($this->dp)->get(route('parrainage.sessions.show', $session))
+            ->assertOk()->assertSee('ENFANT Test 0')->assertDontSee('Ajouter des OEV');
+    }
+
+    public function test_une_session_peut_etre_supprimee_avec_sa_selection(): void
+    {
+        $session = $this->avecUnRetenu($this->nouvelleSession());
+        $session->quotas()->create(['region_id' => Region::value('id'), 'montant' => 100_000]);
+
+        $this->actingAs($this->dp)->delete(route('parrainage.sessions.destroy', $session))->assertRedirect();
+        $this->assertModelExists($session);
+
+        $this->actingAs($this->central)->delete(route('parrainage.sessions.destroy', $session))
+            ->assertRedirect(route('parrainage.sessions.index'))->assertSessionHas('success');
+        $this->assertModelMissing($session);
+        $this->assertDatabaseCount('beneficiaires_session', 0);
+        $this->assertDatabaseCount('quotas_regionaux', 0);
+        $this->assertDatabaseHas('journal_activites', ['action' => 'session_parrainage.suppression', 'sujet_id' => $session->id]);
+
+        // Paiement lancé : seul un administrateur peut supprimer
+        $enPaiement = $this->nouvelleSession(['numero' => 2, 'etat' => SessionParrainage::ETAT_PAIEMENT]);
+        $this->actingAs($this->central)->delete(route('parrainage.sessions.destroy', $enPaiement))->assertSessionHas('error');
+        $this->assertModelExists($enPaiement);
+        $this->actingAs($this->admin)->delete(route('parrainage.sessions.destroy', $enPaiement))->assertSessionHas('success');
+        $this->assertModelMissing($enPaiement);
     }
 
     public function test_la_somme_des_quotas_ne_depasse_pas_l_enveloppe(): void
@@ -197,17 +261,11 @@ class SessionParrainageTest extends TestCase
         [$r1, $r2] = Region::orderBy('nom')->take(2)->get()->all();
         foreach ([[$r1, 2], [$r2, 1]] as [$region, $nombre]) {
             for ($i = 0; $i < $nombre; $i++) {
-                Oev::create([
-                    'nom' => 'ENFANT', 'prenom' => "Test {$i}", 'sexe' => 'F', 'date_naissance' => '2015-03-01',
-                    'statut' => 'vulnerable', 'handicap' => false, 'systeme_educatif' => 'classique',
-                    'nom_tuteur' => 'TUTEUR', 'prenom_tuteur' => 'Issa', 'contact_tuteur' => '+226 70 00 00 00',
-                    'etablissement_actuel' => 'École A', 'type_etablissement' => 'public', 'classe' => 'CM1', 'frais_scolarite' => 0,
-                    'region_id' => $region->id, 'province_id' => $region->provinces()->value('id'),
-                    'numero_dossier' => Oev::genererNumeroDossier(), 'code' => Oev::genererCode(),
-                    'statut_dossier' => Oev::ETAT_INTEGRE, 'integre_at' => now(),
-                ]);
+                $this->oevScolarise($region, $i);
             }
         }
+        // Session scolaire : un OEV en formation (non scolarisé) n'est pas éligible et ne pèse pas dans le prorata
+        $this->oevScolarise($r2, 9)->update(['situation_scolaire' => 'non_scolarise', 'formation_professionnelle' => true, 'formation_etat' => 'en_cours']);
 
         $quotas = $this->app->make(ParrainageService::class)->proposerQuotasAuProrata($session);
 
@@ -228,6 +286,10 @@ class SessionParrainageTest extends TestCase
         // Pas de saut d'étape
         $this->actingAs($this->central)->post(route('parrainage.sessions.etat', $session), ['etat' => SessionParrainage::ETAT_PAIEMENT])
             ->assertSessionHasErrors('etat');
+        // Pas de validation sans OEV retenu sur la liste
+        $this->actingAs($this->central)->post(route('parrainage.sessions.etat', $session), ['etat' => SessionParrainage::ETAT_VALIDEE])
+            ->assertSessionHasErrors(['etat' => 'La session ne peut pas être validée : aucun OEV n’est retenu sur sa liste (onglet « Sélection »).']);
+        $this->avecUnRetenu($session);
 
         foreach ([SessionParrainage::ETAT_VALIDEE, SessionParrainage::ETAT_PAIEMENT, SessionParrainage::ETAT_CLOTUREE] as $etat) {
             $this->actingAs($this->central)->post(route('parrainage.sessions.etat', $session), ['etat' => $etat])
@@ -297,6 +359,7 @@ class SessionParrainageTest extends TestCase
         $this->assertTrue($parametres['exclure_deja_appuyes']);
         $this->assertSame([], $parametres['quotas']);
 
+        $this->avecUnRetenu($session);
         $this->assertSame(SessionParrainage::ETAT_VALIDEE, $service->changerEtatSession($session->id, SessionParrainage::ETAT_VALIDEE, $this->central)->etat);
 
         $this->expectException(TransitionSessionInvalide::class);

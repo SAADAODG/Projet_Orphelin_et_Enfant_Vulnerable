@@ -9,9 +9,9 @@ use Illuminate\Support\Collection;
  * Données fournies par les modules de Nakoulma (Sélection, Paiement, Suivi scolaire) et lues par
  * les modules Sessions, Parrains et Pilotage.
  *
- * Tant que ces modules n'existent pas, SourceSelectionNonDisponible est utilisée (listes vides,
- * « données non disponibles » à l'écran). Pour brancher le vrai module : écrire une classe qui
- * implémente cette interface et remplacer la liaison dans AppServiceProvider::register().
+ * Implémentée par SelectionParrainage (module Sélection, liée dans AppServiceProvider::register()).
+ * Les établissements (RIB) n'y sont pas encore gérés : liste vide. Les résultats scolaires viennent du
+ * module « Suivi des parrainés ».
  */
 interface SourceSelection
 {

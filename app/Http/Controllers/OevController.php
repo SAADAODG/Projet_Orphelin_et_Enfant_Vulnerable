@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BeneficiaireSession;
+use App\Services\Parrainage\ParcoursScolaire;
 use App\Models\Commune;
 use App\Models\Oev;
 use App\Models\OevDocument;
@@ -232,7 +234,14 @@ class OevController extends Controller implements HasMiddleware
 
         $oev->load(['documents.auteur', 'createur', 'soumetteur', 'verificateur', 'integrateur', 'demandeurComplement', 'auteurRejet', 'region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune']);
 
-        return view('oevs.show', ['oev' => $oev, 'documents' => $oev->documents->keyBy('type')]);
+        return view('oevs.show', [
+            'oev' => $oev,
+            'documents' => $oev->documents->keyBy('type'),
+            // Parrainages de l'État (listes définitives) et leur suivi de fin d'année
+            'parrainages' => BeneficiaireSession::parraines()->where('oev_id', $oev->id)->with(['session', 'suivi'])->latest('id')->get(),
+            // Parcours scolaire et professionnel année par année (reconstitué à partir des suivis)
+            'cursus' => app(ParcoursScolaire::class)->pour($oev),
+        ]);
     }
 
     public function edit(Request $request, Oev $oev)
