@@ -152,9 +152,9 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-sliders" aria-hidden="true"></i> Options de sélection</h2>
           <div class="oev-infos">
-            {!! $info('Bloquer le dépassement de l’enveloppe (RG-04)', $ouiNon($session->bloquer_depassement_enveloppe)) !!}
-            {!! $info('Quotas par région (RG-04)', $ouiNon($session->quotas_actifs)) !!}
-            {!! $info('Exclure les OEV déjà appuyés par un partenaire (RG-07)', $ouiNon($session->exclure_deja_appuyes)) !!}
+            {!! $info('Bloquer le dépassement de l’enveloppe', $ouiNon($session->bloquer_depassement_enveloppe)) !!}
+            {!! $info('Quotas par région', $ouiNon($session->quotas_actifs)) !!}
+            {!! $info('Exclure les OEV déjà appuyés par un partenaire', $ouiNon($session->exclure_deja_appuyes)) !!}
           </div>
         </section>
       </div>

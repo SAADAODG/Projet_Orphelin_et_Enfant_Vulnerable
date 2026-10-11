@@ -30,7 +30,7 @@ class SessionParrainage extends Model
 
     public const COULEURS_ETATS = [
         self::ETAT_EN_COURS => 'info',
-        self::ETAT_VALIDEE => 'primary',
+        self::ETAT_VALIDEE => 'success',
         self::ETAT_PAIEMENT => 'warning',
         self::ETAT_CLOTUREE => 'secondary',
     ];

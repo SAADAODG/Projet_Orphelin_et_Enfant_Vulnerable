@@ -48,7 +48,6 @@
   <div class="col-12">
     <fieldset class="border rounded p-3">
       <legend class="float-none w-auto px-2 fs-6 fw-semibold mb-0">Zone d’intervention</legend>
-      <p class="form-text mt-1">Choisissez la région, puis une province ; laissez « Toute la région » si le parrain intervient dans toute la région.</p>
       <div data-zones data-provinces='@json($provincesParRegion)'>
         @foreach ($zones as $i => $zone)
           @php($provincesRegion = $provincesParRegion[(int) ($zone['region_id'] ?? 0)] ?? collect())
@@ -89,7 +88,6 @@
       <input class="form-check-input" type="checkbox" role="switch" id="actif" name="actif" value="1" @checked(old('actif', $parrain->actif))>
       <label class="form-check-label" for="actif">Parrain actif</label>
     </div>
-    <div class="form-text">Un parrain inactif reste dans le répertoire et garde ses appuis, mais ne peut plus en recevoir de nouveaux.</div>
   </div>
 </div>
 

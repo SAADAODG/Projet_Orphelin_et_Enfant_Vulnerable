@@ -10,7 +10,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage · Appuis</p>
         <h1 class="h3 mb-1">Nouvel appui</h1>
-        <p class="text-muted mb-0">Enregistrez l’appui d’un parrain à un OEV pour une année scolaire.</p>
       </div>
     </div>
     <div class="heading-actions">

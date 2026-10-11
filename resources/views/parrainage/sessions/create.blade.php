@@ -10,7 +10,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage · Sessions</p>
         <h1 class="h3 mb-1">Nouvelle session</h1>
-        <p class="text-muted mb-0">Ouvrez une session : enveloppe, plafond par bénéficiaire, financement et règles de sélection.</p>
       </div>
     </div>
     <div class="heading-actions">

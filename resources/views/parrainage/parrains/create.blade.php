@@ -10,7 +10,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage · Parrains</p>
         <h1 class="h3 mb-1">Nouveau parrain</h1>
-        <p class="text-muted mb-0">Les engagements (durée, natures d’appui, convention) s’ajoutent ensuite sur la fiche du parrain.</p>
       </div>
     </div>
     <div class="heading-actions">

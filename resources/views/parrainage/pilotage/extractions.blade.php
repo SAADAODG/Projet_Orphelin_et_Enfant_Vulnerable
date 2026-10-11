@@ -16,7 +16,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Pilotage</h1>
-        <p class="text-muted mb-0">Extractions en Excel ou en PDF, limitées à votre zone. Chaque extraction est enregistrée dans le journal.</p>
       </div>
     </div>
   </div>
@@ -40,7 +39,6 @@
       <div class="panel-header">
         <div>
           <h2 class="h5 mb-1 section-title"><i class="bi bi-bank" aria-hidden="true"></i><span>Liste pour paiement</span></h2>
-          <p class="text-muted mb-0">Pour les services financiers : le paiement se fait hors de la plateforme. Feuille « Par établissement » (avec RIB) et feuille « Nominatif ».</p>
         </div>
       </div>
       @unless ($disponible)
@@ -97,7 +95,6 @@
       <div class="panel-header">
         <div>
           <h2 class="h5 mb-1 section-title"><i class="bi bi-person-heart" aria-hidden="true"></i><span>Liste pour un parrain</span></h2>
-          <p class="text-muted mb-0">Proposez des OEV à un partenaire. La liste est préfiltrée selon sa zone et ses natures d’appui ; ajustez les filtres si besoin.</p>
         </div>
       </div>
       @if ($errors->any())

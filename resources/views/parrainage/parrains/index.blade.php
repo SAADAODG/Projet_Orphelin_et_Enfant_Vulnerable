@@ -15,7 +15,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Parrains</h1>
-        <p class="text-muted mb-0">ONG, associations, entreprises, institutions et particuliers qui appuient les OEV.</p>
       </div>
     </div>
     @can('gérer parrains')

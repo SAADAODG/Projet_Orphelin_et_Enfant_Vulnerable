@@ -25,7 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Module « Pilotage » du parrainage : tableau de bord et extractions, chacun dans sa zone
- * (DP : sa province, DR : sa région, niveau central : tout le pays). Chaque extraction est tracée (RG-09).
+ * (DP : sa province, DR : sa région, niveau central : tout le pays). Chaque extraction est tracée dans le journal.
  */
 class PilotageParrainageController extends Controller
 {

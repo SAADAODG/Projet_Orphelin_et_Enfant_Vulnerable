@@ -12,7 +12,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Sessions de parrainage</h1>
-        <p class="text-muted mb-0">Chaque session fixe l’enveloppe, le plafond par bénéficiaire et les règles de sélection d’une année scolaire.</p>
       </div>
     </div>
     @can('gérer sessions parrainage')

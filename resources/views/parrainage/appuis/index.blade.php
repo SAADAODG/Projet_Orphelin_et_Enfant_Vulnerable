@@ -15,7 +15,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Parrains</h1>
-        <p class="text-muted mb-0">Appuis apportés par les parrains aux OEV, année par année. Un OEV ne reçoit qu’un appui de même nature par an (RG-01).</p>
       </div>
     </div>
     @can('enregistrer appuis')

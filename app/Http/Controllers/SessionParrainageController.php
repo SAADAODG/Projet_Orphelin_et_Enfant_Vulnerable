@@ -18,7 +18,7 @@ use Illuminate\View\View;
 
 /**
  * Module « Sessions » du parrainage : le niveau central ouvre une session (enveloppe, plafond,
- * financement, options RG-04 / RG-07), répartit les quotas régionaux et la fait avancer jusqu'à
+ * financement, options de sélection), répartit les quotas régionaux et la fait avancer jusqu'à
  * la clôture. Les DR et DP consultent.
  */
 class SessionParrainageController extends Controller
@@ -159,7 +159,7 @@ class SessionParrainageController extends Controller
         return redirect()->route('parrainage.sessions.show', $session)->with('success', 'Session mise à jour.');
     }
 
-    /** Vue « Quotas » : un montant par région, total ≤ enveloppe (RG-04). Les régions à 0 n'ont pas de quota. */
+    /** Vue « Quotas » : un montant par région, total ≤ enveloppe. Les régions à 0 n'ont pas de quota. */
     public function updateQuotas(Request $request, SessionParrainage $session): RedirectResponse
     {
         $retour = redirect()->route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']);

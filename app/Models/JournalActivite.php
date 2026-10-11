@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
- * Journal d'activités commun à tous les modules (traçabilité, RG-09).
+ * Journal d'activités commun à tous les modules (traçabilité).
  *
  * Usage depuis n'importe quel module :
  *   JournalActivite::consigner('session_parrainage.creation', $session, 'Création de la session 2026-2027 n°1');

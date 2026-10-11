@@ -36,7 +36,7 @@ class ExtractionsParrainage
      *
      * @param  array{region_id?: int|null, province_id?: int|null, commune_id?: int|null, etablissement_id?: int|null, type_appui?: string}  $filtres
      * @return array{etablissements: Collection, nominatif: Collection, total_oev: int, total_montant: int, disponible: bool}
-     *   etablissements : une ligne par établissement (avec rib_manquant, RG-06), triées par région, province, nom ;
+     *   etablissements : une ligne par établissement (avec rib_manquant), triées par région, province, nom ;
      *   nominatif : une ligne par bénéficiaire, triées par établissement puis nom.
      */
     public function paiement(SessionParrainage $session, User $utilisateur, array $filtres): array

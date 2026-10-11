@@ -10,7 +10,6 @@
       <div>
         <p class="eyebrow mb-1">Parrainage · Appuis</p>
         <h1 class="h3 mb-1">Importer des appuis</h1>
-        <p class="text-muted mb-0">Enregistrez plusieurs appuis à partir du modèle Excel. Chaque ligne est contrôlée comme une saisie unitaire.</p>
       </div>
     </div>
     <div class="heading-actions">
@@ -25,7 +24,7 @@
         <p class="text-muted">Le modèle contient la feuille « Appuis » à remplir (à partir de la ligne 3) et les listes des parrains actifs et des natures d’appui avec leurs codes.</p>
         <ul class="small text-muted">
           <li>L’OEV est désigné par son code (ex : OEV-2026-0001) ; il doit être intégré et dans votre zone.</li>
-          <li>Si l’OEV a déjà un appui de même nature la même année, la ligne est rejetée sauf si la colonne « motif_doublon » est renseignée (RG-01).</li>
+          <li>Si l’OEV a déjà un appui de même nature la même année, la ligne est rejetée sauf si la colonne « motif_doublon » est renseignée.</li>
         </ul>
         <a class="btn btn-outline-primary" href="{{ route('parrainage.appuis.modele') }}"><i class="bi bi-download" aria-hidden="true"></i> Modèle Excel</a>
       </div>
