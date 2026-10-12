@@ -296,6 +296,14 @@ class OevDemoSeeder extends Seeder
             ]);
         }
 
+        // Ni à l'école ni en formation : son souhait (école surtout pour les plus jeunes, formation pour les plus grands)
+        if (Oev::sansScolariteNiFormation($situation, $donnees['formation_professionnelle'], $donnees['formation_etat'])) {
+            $donnees['souhait_avenir'] = $age <= 13
+                ? $this->pondere(['ecole' => 70, 'formation' => 5, 'ne_sait_pas' => 20, 'aucun' => 5])
+                : $this->pondere(['ecole' => 25, 'formation' => 55, 'ne_sait_pas' => 15, 'aucun' => 5]);
+            $donnees['souhait_avenir_precision'] = $donnees['souhait_avenir'] === 'formation' && mt_rand(0, 1) ? $this->hasard(self::FILIERES) : null;
+        }
+
         return $donnees;
     }
 

@@ -202,6 +202,7 @@ class OevTest extends TestCase
             'situation_scolaire' => 'non_scolarise',
             'raison_non_scolarisation' => 'financieres',
             'niveau_etude' => 'primaire',
+            'souhait_avenir' => 'ecole',
         ]);
         unset($donnees['etablissement_actuel'], $donnees['type_etablissement'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['systeme_educatif']);
 
@@ -295,7 +296,7 @@ class OevTest extends TestCase
 
     public function test_enfant_non_scolarise_et_tuteur_sans_cnib_moins_de_pieces(): void
     {
-        $donnees = $this->donneesOev(['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'tuteur_a_cnib' => '0', 'nom_structure_rib' => 'ONG']);
+        $donnees = $this->donneesOev(['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'souhait_avenir' => 'formation', 'tuteur_a_cnib' => '0', 'nom_structure_rib' => 'ONG']);
         unset($donnees['etablissement_actuel'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['type_etablissement'], $donnees['systeme_educatif']);
         $pieces = array_intersect_key($this->pieces(), array_flip(['acte_naissance', 'photo', 'rib']));
 
@@ -509,9 +510,36 @@ class OevTest extends TestCase
         $this->get(route('oevs.show', Oev::firstOrFail()))->assertSee('Difficultés scolaires')->assertSee('Lit difficilement');
 
         // Non scolarisé : pas de performances demandées ni conservées
-        $donnees = $this->donneesOev(['nom' => 'KABORE', 'situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite']);
+        $donnees = $this->donneesOev(['nom' => 'KABORE', 'situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'souhait_avenir' => 'ne_sait_pas']);
         $this->post(route('oevs.store'), $donnees)->assertSessionHasNoErrors();
         $this->assertNull(Oev::where('nom', 'KABORE')->value('performance_scolaire'));
+    }
+
+    public function test_un_enfant_ni_scolarise_ni_en_formation_indique_son_souhait(): void
+    {
+        $this->actingAs($this->dp);
+        $sansEcole = ['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'financieres'];
+
+        // Obligatoire quand il n'est ni à l'école ni en formation
+        $this->post(route('oevs.store'), $this->donneesOev($sansEcole))
+            ->assertSessionHasErrors(['souhait_avenir' => 'L’enfant n’est ni à l’école ni en formation : indiquez ce qu’il souhaite (école, formation…).']);
+        $this->post(route('oevs.store'), $this->donneesOev($sansEcole + ['souhait_avenir' => 'autre_chose']))->assertSessionHasErrors('souhait_avenir');
+
+        $this->post(route('oevs.store'), $this->donneesOev($sansEcole + ['nom' => 'SOUHAIT', 'souhait_avenir' => 'formation', 'souhait_avenir_precision' => 'Couture']))->assertSessionHasNoErrors();
+        $oev = Oev::where('nom', 'SOUHAIT')->firstOrFail();
+        $this->assertSame(['formation', 'Couture'], [$oev->souhait_avenir, $oev->souhait_avenir_precision]);
+        $this->get(route('oevs.show', $oev))->assertSee('Souhait de l’enfant')->assertSee('Suivre une formation professionnelle — Couture');
+
+        // Souhait « école » : la formation souhaitée n'est pas conservée
+        $this->post(route('oevs.store'), $this->donneesOev($sansEcole + ['nom' => 'ECOLE', 'souhait_avenir' => 'ecole', 'souhait_avenir_precision' => 'Couture']))->assertSessionHasNoErrors();
+        $this->assertNull(Oev::where('nom', 'ECOLE')->value('souhait_avenir_precision'));
+
+        // Scolarisé, ou en formation : rien n'est demandé ni conservé
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'SCOLARISE', 'souhait_avenir' => 'formation']))->assertSessionHasNoErrors();
+        $this->assertNull(Oev::where('nom', 'SCOLARISE')->value('souhait_avenir'));
+        $this->post(route('oevs.store'), $this->donneesOev($sansEcole + ['nom' => 'APPRENTI', 'formation_professionnelle' => '1', 'formation_etat' => 'en_cours', 'formation_filiere' => 'Couture',
+            'formation_type_centre' => 'prive', 'formation_duree_mois' => '12', 'formation_duree_recue_mois' => '3']))->assertSessionHasNoErrors();
+        $this->assertNull(Oev::where('nom', 'APPRENTI')->value('souhait_avenir'));
     }
 
     public function test_formation_professionnelle_et_durees(): void

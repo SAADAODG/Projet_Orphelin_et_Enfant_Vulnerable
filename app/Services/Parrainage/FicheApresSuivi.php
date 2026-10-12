@@ -25,6 +25,7 @@ class FicheApresSuivi
         'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation',
         'raison_non_scolarisation', 'raison_non_scolarisation_precision',
         'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
+        'souhait_avenir', 'souhait_avenir_precision',
     ];
 
     /** Champs de l'école en cours, vidés quand l'enfant ne la fréquente plus. */
@@ -60,6 +61,11 @@ class FicheApresSuivi
             : $this->apresAnneeScolaire($suivi, $avant);
 
         // On repart de la fiche d'avant le suivi, puis on applique la nouvelle situation
+        // Le souhait (école, formation…) ne vaut que pour un enfant ni scolarisé ni en formation
+        $apres = array_merge($avant, $nouveau);
+        if (! Oev::sansScolariteNiFormation($apres['situation_scolaire'] ?? null, $apres['formation_professionnelle'] ?? null, $apres['formation_etat'] ?? null)) {
+            $nouveau += ['souhait_avenir' => null, 'souhait_avenir_precision' => null];
+        }
         $oev->forceFill($avant)->forceFill($nouveau)->save();
 
         return $suivi->libelleProchaineAnnee() ?? $suivi->libelleResultat();

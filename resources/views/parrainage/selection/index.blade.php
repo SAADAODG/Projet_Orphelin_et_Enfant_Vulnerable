@@ -380,6 +380,11 @@
                       @else
                         <span class="text-muted">{{ Oev::SITUATIONS_SCOLAIRES[$oev->situation_scolaire] ?? 'Non scolarisé' }}</span>
                         @if (SelectionParrainage::situationDe($oev) === SelectionParrainage::A_SCOLARISER)<span class="d-block text-muted">à inscrire</span>@endif
+                        @if ($oev->souhait_avenir)
+                          <span class="d-block {{ in_array($oev->souhait_avenir, ['ecole', 'formation'], true) ? 'text-primary' : 'text-muted' }}">
+                            <i class="bi bi-signpost" aria-hidden="true"></i> Souhaite : {{ mb_strtolower(Oev::SOUHAITS_AVENIR[$oev->souhait_avenir]) }}{{ $oev->souhait_avenir_precision ? ' (' . $oev->souhait_avenir_precision . ')' : '' }}
+                          </span>
+                        @endif
                       @endif
                     </td>
                     <td class="text-end small">
