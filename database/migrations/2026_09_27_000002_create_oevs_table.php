@@ -105,6 +105,9 @@ return new class extends Migration
             $table->unsignedSmallInteger('formation_duree_mois')->nullable();
             $table->unsignedSmallInteger('formation_duree_recue_mois')->nullable();
             $table->unsignedInteger('frais_formation')->nullable()->comment('Frais de la formation professionnelle (FCFA)');
+            // Enfant ni scolarisé ni en formation : son souhait, qui oriente un futur parrainage
+            $table->string('souhait_avenir', 20)->nullable()->comment('ecole, formation, aucun ou ne_sait_pas');
+            $table->string('souhait_avenir_precision', 150)->nullable()->comment('Formation souhaitée');
 
             // Ménage
             $table->string('source_revenu', 30)->nullable();
