@@ -34,7 +34,7 @@
 @section('content')
 <section class="auth-card">
   <a class="auth-entete" href="{{ route('public.home') }}">
-    <img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso">
+    <img src="{{ asset('assets/images/armoiries-240.png') }}" alt="Armoiries du Burkina Faso">
     <span class="auth-pays">Burkina Faso</span>
     <span class="auth-devise">La Patrie ou la Mort, nous Vaincrons</span>
     <span class="auth-drapeau" aria-hidden="true"></span>

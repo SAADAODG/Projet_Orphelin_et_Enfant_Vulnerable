@@ -27,7 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Module « Parrains », vue « Appuis enregistrés » : un parrain appuie un OEV pendant une année.
  * Le DP enregistre les appuis des OEV de sa province, le niveau central ceux de tout le pays ;
- * chacun ne voit que les appuis de sa zone. Contrôle RG-01 à la saisie et à l'import.
+ * chacun ne voit que les appuis de sa zone. Un seul appui de même nature par an, sauf confirmation avec motif.
  */
 class AppuiPartenaireController extends Controller
 {
@@ -77,17 +77,25 @@ class AppuiPartenaireController extends Controller
             'annees' => AppuiPartenaire::distinct()->orderByDesc('annee')->pluck('annee'),
             'natures' => NatureAppui::actives()->get(),
             'parrains' => Parrain::orderBy('nom')->pluck('nom', 'id'),
+            // Fenêtre « Nouvel appui » (?oev=… : OEV déjà choisi, ex. depuis sa fiche)
+            'formulaire' => $request->user()->can('enregistrer appuis') ? $this->donneesFormulaire($this->nouvelAppui($request)) : null,
         ]);
     }
 
-    public function create(Request $request): View
+    /** La création se fait dans une fenêtre de la liste des appuis. */
+    public function create(Request $request): RedirectResponse
+    {
+        return redirect()->route('parrainage.appuis.index', array_filter(['nouveau' => 1, 'oev' => $request->integer('oev') ?: null]));
+    }
+
+    private function nouvelAppui(Request $request): AppuiPartenaire
     {
         $oev = $request->integer('oev') ? $this->oevsSaisissables($request->user())->find($request->integer('oev')) : null;
 
-        return view('parrainage.appuis.create', $this->donneesFormulaire(new AppuiPartenaire([
+        return (new AppuiPartenaire([
             'annee' => SessionParrainageController::anneeScolaireCourante(),
             'oev_id' => $oev?->id,
-        ])->setRelation('oev', $oev)));
+        ]))->setRelation('oev', $oev);
     }
 
     public function store(Request $request): RedirectResponse
@@ -200,7 +208,7 @@ class AppuiPartenaireController extends Controller
     }
 
     /**
-     * Import Excel : chaque ligne est contrôlée comme une saisie unitaire (OEV de la zone, RG-01…).
+     * Import Excel : chaque ligne est contrôlée comme une saisie unitaire (OEV de la zone, appui de même nature déjà reçu…).
      * Les lignes valides sont enregistrées, les autres listées dans le rapport avec leur motif de rejet.
      */
     public function import(Request $request): RedirectResponse
@@ -293,7 +301,7 @@ class AppuiPartenaireController extends Controller
     }
 
     /**
-     * Validation d'une saisie unitaire. Si l'OEV a déjà un appui de même nature cette année (RG-01),
+     * Validation d'une saisie unitaire. Si l'OEV a déjà un appui de même nature cette année,
      * le formulaire revient avec un avertissement : l'agent confirme en indiquant un motif.
      *
      * @return array|RedirectResponse données à enregistrer, ou retour au formulaire pour confirmation

@@ -26,7 +26,7 @@
   }
 @endphp
 
-<div class="row g-3" data-localites="{{ json_encode($localites) }}">
+<div class="row g-3" data-localites="{{ json_encode($localites) }}" @if ($avecVillage) data-villages-url="{{ route('localites.villages-commune', '__COMMUNE__') }}" @endif>
   @foreach ($champs as $champ => $config)
     <div class="{{ $colonnes[$champ] }}">
       <label class="form-label" for="{{ $champ }}">{{ $config['label'] }} @if ($config['requis'])<span class="text-danger">*</span>@endif</label>
@@ -75,15 +75,33 @@
       var p = communeChoisie().province;
       remplir(commune, p ? p.communes : [], valeur);
     }
+    // Villages : chargés à la demande pour la commune choisie (gardés en mémoire pendant la saisie)
+    var villagesParCommune = {};
     function majVillages(valeur) {
       if (!village) return;
-      var c = communeChoisie().commune;
-      if (!commune.value) {
+      var id = commune.value;
+      if (!id) {
         village.dataset.vide = "Choisir d'abord la commune";
-      } else {
-        village.dataset.vide = 'Aucun village enregistré pour cette commune';
+        remplir(village, [], valeur);
+        return;
       }
-      remplir(village, c && c.villages ? c.villages : [], valeur);
+      if (villagesParCommune[id]) {
+        village.dataset.vide = 'Aucun village enregistré pour cette commune';
+        remplir(village, villagesParCommune[id], valeur);
+        return;
+      }
+      village.dataset.vide = 'Chargement des villages…';
+      remplir(village, [], valeur);
+      fetch(bloc.dataset.villagesUrl.replace('__COMMUNE__', encodeURIComponent(id)), { headers: { 'Accept': 'application/json' } })
+        .then(function (reponse) { return reponse.ok ? reponse.json() : []; })
+        .catch(function () { return []; })
+        .then(function (villages) {
+          villagesParCommune[id] = villages;
+          if (commune.value === id) {
+            village.dataset.vide = 'Aucun village enregistré pour cette commune';
+            remplir(village, villages, valeur);
+          }
+        });
     }
 
     remplir(region, regions, region.dataset.valeur);

@@ -5,6 +5,7 @@ namespace App\Services\Parrainage;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -88,19 +89,24 @@ class FichiersExtraction
     }
 
     /** @param  array<string, callable>  $colonnes  libellé => valeur (voir ExtractionsParrainage::colonnesListeParrain) */
-    public function listeExcel(Collection $oevs, array $colonnes, array $entete, string $nomFichier): StreamedResponse
+    public function listeExcel(Collection $oevs, array $colonnes, array $entete, string $nomFichier, string $feuilleTitre = 'OEV proposés'): StreamedResponse
     {
         $classeur = new Spreadsheet();
-        $feuille = $classeur->getActiveSheet()->setTitle('OEV proposés');
+        $feuille = $classeur->getActiveSheet()->setTitle($feuilleTitre);
         $ligne = $this->ecrireEntete($feuille, $entete);
         $debut = $ligne;
         $feuille->fromArray(array_keys($colonnes), null, "A{$ligne}");
         foreach ($oevs as $oev) {
             $feuille->fromArray(array_map(fn (callable $valeur) => $valeur($oev), array_values($colonnes)), null, 'A' . ++$ligne, true);
         }
-        $derniere = chr(ord('A') + count($colonnes) - 1);
-        $colonneBesoin = chr(ord('A') + array_search('Besoin financier estimé (FCFA)', array_keys($colonnes), true));
-        $this->finaliserTableau($feuille, $debut, $ligne, $derniere, [$colonneBesoin]);
+        $derniere = Coordinate::stringFromColumnIndex(count($colonnes));
+        // Colonnes de montants (libellé « … (FCFA) ») : séparateur de milliers
+        $montants = collect(array_keys($colonnes))
+            ->filter(fn (string $libelle) => str_contains($libelle, 'FCFA'))
+            ->keys()
+            ->map(fn (int $index) => Coordinate::stringFromColumnIndex($index + 1))
+            ->all();
+        $this->finaliserTableau($feuille, $debut, $ligne, $derniere, $montants);
 
         return $this->telecharger($classeur, $nomFichier);
     }
@@ -132,8 +138,8 @@ class FichiersExtraction
         foreach ($colonnesMontant as $colonne) {
             $feuille->getStyle("{$colonne}" . ($debut + 1) . ":{$colonne}{$fin}")->getNumberFormat()->setFormatCode(self::FORMAT_MONTANT);
         }
-        foreach (range('A', $derniereColonne) as $colonne) {
-            $feuille->getColumnDimension($colonne)->setAutoSize(true);
+        for ($i = 1; $i <= Coordinate::columnIndexFromString($derniereColonne); $i++) {
+            $feuille->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
         }
         $feuille->freezePane('A' . ($debut + 1));
     }

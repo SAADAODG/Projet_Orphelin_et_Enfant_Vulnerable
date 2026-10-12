@@ -8,6 +8,7 @@ use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesactivationOevController;
 use App\Http\Controllers\ExtractionController;
+use App\Http\Controllers\JournalController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
@@ -224,6 +225,15 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
         Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
     });
+
+    // Journal d'audit : consultation et export (administrateurs)
+    Route::middleware('can:voir journal')->group(function () {
+        Route::get('/journal', [JournalController::class, 'index'])->name('journal.index');
+        Route::get('/journal/export', [JournalController::class, 'export'])->name('journal.export');
+    });
+
+    // Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)
+    Route::get('/localites/communes/{commune}/villages', [VillageController::class, 'parCommune'])->name('localites.villages-commune');
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');

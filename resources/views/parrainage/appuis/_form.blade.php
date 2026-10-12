@@ -1,6 +1,6 @@
 {{--
   Champs d'un appui. Variables : $appui, $parrains, $natures, $oevChoisi
-  Si l'OEV a déjà un appui de même nature cette année (session « doublons »), l'agent confirme avec un motif (RG-01).
+  Si l'OEV a déjà un appui de même nature cette année (session « doublons »), l'agent confirme avec un motif.
 --}}
 @use('App\Models\NatureAppui')
 @use('App\Support\Montant')
@@ -12,7 +12,7 @@
 
 @if ($doublons)
   <div class="alert alert-warning" role="alert">
-    <p class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Cet OEV a déjà un appui de même nature pour cette année (RG-01) :</p>
+    <p class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Cet OEV a déjà un appui de même nature pour cette année :</p>
     <ul class="mb-2">
       @foreach ($doublons as $doublon)
         <li>{{ $doublon }}</li>
@@ -34,15 +34,8 @@
     <input type="hidden" name="oev_id" value="{{ old('oev_id', $appui->oev_id) }}" data-oev-id>
     <input class="form-control @error('oev_id') is-invalid @enderror" id="recherche_oev" type="search" autocomplete="off"
            placeholder="Tapez le code, le nom ou le prénom de l’enfant" value="{{ $oevChoisi ? $oevChoisi->reference() . ' — ' . $oevChoisi->nomComplet() : '' }}"
-           aria-describedby="aide_oev" data-oev-saisie @disabled($appui->exists)>
+           data-oev-saisie @disabled($appui->exists)>
     @error('oev_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-    <div class="form-text" id="aide_oev">
-      @if ($appui->exists)
-        L’OEV d’un appui enregistré ne change pas : en cas d’erreur, enregistrez un nouvel appui.
-      @else
-        Seuls les OEV intégrés et actifs de votre zone sont proposés.
-      @endif
-    </div>
     <div class="list-group mt-1" data-oev-resultats role="listbox" aria-label="OEV trouvés"></div>
   </div>
 

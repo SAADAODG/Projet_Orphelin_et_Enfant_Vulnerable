@@ -30,7 +30,7 @@ class SessionParrainage extends Model
 
     public const COULEURS_ETATS = [
         self::ETAT_EN_COURS => 'info',
-        self::ETAT_VALIDEE => 'primary',
+        self::ETAT_VALIDEE => 'success',
         self::ETAT_PAIEMENT => 'warning',
         self::ETAT_CLOTUREE => 'secondary',
     ];
@@ -123,6 +123,18 @@ class SessionParrainage extends Model
     public function reference(): string
     {
         return "{$this->annee} · n°{$this->numero}";
+    }
+
+    /** Numéro attribué à une nouvelle session de l'année : le suivant (1 pour la première). */
+    public static function prochainNumero(string $annee): int
+    {
+        return (int) static::where('annee', $annee)->max('numero') + 1;
+    }
+
+    /** Ex : « 75 000 FCFA », ou « Sans plafond ». */
+    public function libellePlafond(): string
+    {
+        return $this->plafond_beneficiaire === null ? 'Sans plafond' : \App\Support\Montant::fcfa($this->plafond_beneficiaire);
     }
 
     public function libelleEtat(): string

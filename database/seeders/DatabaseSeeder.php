@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             SiteSettingSeeder::class,
             QuickLinkSeeder::class,
             ServiceSeeder::class,
+            OevDemoSeeder::class,
         ]);
 
         $admin = User::factory()->create([

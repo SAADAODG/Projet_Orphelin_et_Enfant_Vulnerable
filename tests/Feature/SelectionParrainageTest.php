@@ -95,6 +95,37 @@ class SelectionParrainageTest extends TestCase
         $this->assertCount(3, $this->eligibles($this->nouvelleSession(['numero' => 3, 'type_appui' => SessionParrainage::TYPE_LES_DEUX])));
     }
 
+    public function test_les_filtres_acceptent_plusieurs_regions_provinces_et_valeurs(): void
+    {
+        $session = $this->nouvelleSession();
+        $partielle = Region::has('provinces', '>=', 2)->whereKeyNot($this->region->id)->firstOrFail();
+        $troisieme = Region::has('provinces')->whereNotIn('id', [$this->region->id, $partielle->id])->firstOrFail();
+        [$p1, $p2] = $partielle->provinces()->orderBy('id')->take(2)->get()->all();
+
+        $this->oev('ICI', ['vulnerabilites' => ['orphelin']]);
+        $this->oev('PARTIELLE_P1', ['province_id' => $p1->id, 'vulnerabilites' => ['abandon'], 'sexe' => 'M'], $partielle);
+        $this->oev('PARTIELLE_P2', ['province_id' => $p2->id, 'vulnerabilites' => ['travail']], $partielle);
+        $this->oev('AILLEURS', ['niveau_priorite' => 'eleve'], $troisieme);
+
+        // Une région entière + une seule province d'une autre région
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1'],
+            $this->eligibles($session, ['regions' => [$this->region->id, $partielle->id], 'provinces' => [$p1->id]]));
+        // Deux régions entières
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1', 'PARTIELLE_P2'],
+            $this->eligibles($session, ['regions' => [$this->region->id, $partielle->id]]));
+        // Plusieurs valeurs d'un même filtre : l'une ou l'autre
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1'], $this->eligibles($session, ['vulnerabilite' => ['orphelin', 'abandon']]));
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P2', 'AILLEURS'], $this->eligibles($session, ['sexe' => ['F']]));
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1', 'PARTIELLE_P2', 'AILLEURS'], $this->eligibles($session, ['niveau_priorite' => ['moyen', 'eleve']]));
+
+        // Par l'écran : filtres multiples affichés, puis « tout ajouter » avec les mêmes filtres
+        $filtres = ['onglet' => 'eligibles', 'regions' => [$this->region->id, $partielle->id], 'provinces' => [$p1->id]];
+        $this->actingAs($this->central)->get(route('parrainage.sessions.selection', ['session' => $session] + $filtres))
+            ->assertOk()->assertSee('PARTIELLE_P1')->assertDontSee('PARTIELLE_P2')->assertDontSee('AILLEURS')->assertSee('Tout ajouter (2)');
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['tous' => 1] + $filtres)->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1'], $session->beneficiaires()->with('oev')->get()->pluck('oev.nom')->all());
+    }
+
     public function test_tous_les_oev_integres_sont_listes_et_les_non_eligibles_portent_leur_motif(): void
     {
         $premiere = $this->nouvelleSession();

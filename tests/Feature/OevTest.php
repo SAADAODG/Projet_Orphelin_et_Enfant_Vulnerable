@@ -663,8 +663,10 @@ class OevTest extends TestCase
         $autreCommune = Commune::where('province_id', $this->ouagadougou->province_id)->whereKeyNot($this->ouagadougou->id)->firstOrFail();
         $villageAilleurs = Village::create(['commune_id' => $autreCommune->id, 'nom' => 'Village-ailleurs']);
 
-        // Le formulaire propose le village dans la liste en cascade
-        $this->actingAs($this->dp)->get(route('oevs.create'))->assertOk()->assertSee('Secteur 12')->assertSee('name="village_id"', false);
+        // Le formulaire propose les villages de la commune choisie, chargés à la demande (pas embarqués dans la page)
+        $this->actingAs($this->dp)->get(route('oevs.create'))->assertOk()->assertDontSee('Secteur 12')->assertSee('name="village_id"', false)
+            ->assertSee(route('localites.villages-commune', '__COMMUNE__'), false);
+        $this->getJson(route('localites.villages-commune', $this->ouagadougou))->assertOk()->assertExactJson([['id' => $village->id, 'nom' => 'Secteur 12']]);
 
         // Un village d'une autre commune est refusé
         $this->post(route('oevs.store'), $this->donneesOev(['village_id' => $villageAilleurs->id]))->assertSessionHasErrors('village_id');

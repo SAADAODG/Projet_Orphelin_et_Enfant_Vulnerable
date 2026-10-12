@@ -44,8 +44,11 @@ final class Perimetre
     /** Filtre choisi par le niveau central ; une province hors de la région choisie est ignorée. */
     private static function filtreCentral(?Request $request): self
     {
-        $region = Region::find($request?->integer('region_id') ?: null);
-        $province = $region ? $region->provinces()->find($request->integer('province_id') ?: null) : null;
+        // Pas de requête sans filtre : ce calcul est refait par chaque liste et chaque compteur
+        $regionId = $request?->integer('region_id') ?: null;
+        $provinceId = $request?->integer('province_id') ?: null;
+        $region = $regionId ? Region::find($regionId) : null;
+        $province = $region && $provinceId ? $region->provinces()->find($provinceId) : null;
 
         return new self(User::NIVEAU_CENTRAL, $region, $province);
     }

@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Sessions de parrainage (module « Sessions ») :
- *  - sessions_parrainage : enveloppe, plafond, options RG-04 / RG-07, état ;
- *  - quotas_regionaux : montant réservé à chaque région quand les quotas sont actifs (RG-04) ;
+ *  - sessions_parrainage : enveloppe, plafond, options de sélection, état ;
+ *  - quotas_regionaux : montant réservé à chaque région quand les quotas sont actifs ;
  *  - contributions_session : parrains qui financent une session « Partenaire » ou « Mixte ».
  * Montants en FCFA, entiers.
  */
@@ -22,7 +22,9 @@ return new class extends Migration
             $table->unsignedSmallInteger('numero');
             $table->string('type_appui', 30);
             $table->unsignedBigInteger('enveloppe');
-            $table->unsignedBigInteger('plafond_beneficiaire');
+            $table->unsignedBigInteger('plafond_beneficiaire')->nullable()->comment('Facultatif : sans plafond, le montant retenu est égal aux frais réels');
+            $table->unsignedBigInteger('estimation_scolarisation')->nullable()->comment('FCFA estimés par enfant d’âge scolaire non scolarisé');
+            $table->unsignedBigInteger('estimation_formation')->nullable()->comment('FCFA estimés par OEV en formation professionnelle');
             $table->string('source_financement', 20);
             $table->date('date_ouverture');
             $table->date('date_cloture')->nullable();

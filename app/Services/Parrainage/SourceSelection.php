@@ -49,7 +49,7 @@ interface SourceSelection
 
     /**
      * Établissements et coordonnées bancaires (RIB), indexés par identifiant.
-     * Les champs bancaires sont null quand le RIB n'est pas renseigné (RG-06).
+     * Les champs bancaires sont null quand le RIB n'est pas renseigné (signalé « RIB manquant »).
      *
      * @return Collection<int, array{id: int, nom: string, type: string|null, region_id: int|null, province_id: int|null, commune_id: int|null, banque: string|null, code_banque: string|null, code_guichet: string|null, numero_compte: string|null, cle_rib: string|null, titulaire: string|null}>
      */
@@ -57,7 +57,7 @@ interface SourceSelection
 
     /**
      * Natures d'appui que l'OEV reçoit de l'État l'année donnée (liste définitive d'une session),
-     * pour le contrôle RG-01 à la saisie d'un appui partenaire.
+     * pour le contrôle des doublons à la saisie d'un appui partenaire.
      *
      * @return array<int, string> codes de natures_appui : « scolaire » et / ou « formation_professionnelle »
      */

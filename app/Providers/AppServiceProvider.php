@@ -9,7 +9,17 @@ use App\Models\Signalement;
 use App\Models\SiteSetting;
 use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
+use App\Listeners\JournalAudit;
+use App\Observers\AuditObserver;
 use Carbon\Carbon;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Support\Facades\Event;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\RoleDetachedEvent;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
@@ -36,6 +46,19 @@ class AppServiceProvider extends ServiceProvider
         // Dates relatives en français (« il y a 2 heures »)
         Carbon::setLocale('fr');
 
+        // Journal d'audit : enregistrements sensibles, connexions, rôles et permissions
+        foreach (AuditObserver::MODELES as $modele) {
+            $modele::observe(AuditObserver::class);
+        }
+        config(['permission.events_enabled' => true]);
+        Event::listen(Login::class, [JournalAudit::class, 'connexion']);
+        Event::listen(Logout::class, [JournalAudit::class, 'deconnexion']);
+        Event::listen(Failed::class, [JournalAudit::class, 'echec']);
+        Event::listen(RoleAttachedEvent::class, [JournalAudit::class, 'roleAttribue']);
+        Event::listen(RoleDetachedEvent::class, [JournalAudit::class, 'roleRetire']);
+        Event::listen(PermissionAttachedEvent::class, [JournalAudit::class, 'permissionAttribuee']);
+        Event::listen(PermissionDetachedEvent::class, [JournalAudit::class, 'permissionRetiree']);
+
         // Pastilles rouges des modules « Signalements » (zone de l'utilisateur) et « Gestion de plainte »,
         // calculées seulement pour les modules auxquels l'utilisateur a accès
         View::composer('layouts.app', function ($view) {
@@ -53,25 +76,38 @@ class AppServiceProvider extends ServiceProvider
             'layouts.*', 'public.*', 'admin.*', 'oevs.*', 'localites.*', 'parametres.*', 'parrainage.*',
             'index', 'login', 'profile', 'settings', 'users', 'roles-permissions', 'errors.*',
         ], function ($view) {
-            // Repli défensif : une page d'erreur (dont 500) doit pouvoir s'afficher même si la
-            // base de données est indisponible ou pas encore migrée.
-            try {
-                $siteSetting = SiteSetting::current();
-                $quickLinks = QuickLink::orderBy('ordre')->get();
-                $services = Service::orderBy('ordre')->get();
-            } catch (\Throwable $e) {
-                $siteSetting = new SiteSetting([
+            // Lu une seule fois par requête : le composer s'applique aussi à chaque vue partielle
+            // incluse (champs du formulaire OEV…), qui relançait sinon les trois requêtes à chaque fois.
+            $attributs = request()->attributes;
+            if (! $attributs->has('identiteSite')) {
+                $attributs->set('identiteSite', self::identiteSite());
+            }
+
+            $view->with($attributs->get('identiteSite'));
+        });
+    }
+
+    /** @return array{siteSetting: SiteSetting, quickLinks: \Illuminate\Support\Collection, services: \Illuminate\Support\Collection} */
+    private static function identiteSite(): array
+    {
+        // Repli défensif : une page d'erreur (dont 500) doit pouvoir s'afficher même si la
+        // base de données est indisponible ou pas encore migrée.
+        try {
+            return [
+                'siteSetting' => SiteSetting::current(),
+                'quickLinks' => QuickLink::orderBy('ordre')->get(),
+                'services' => Service::orderBy('ordre')->get(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'siteSetting' => new SiteSetting([
                     'nom_site' => 'Programme OEV',
                     'structure_nom' => 'DGFE',
                     'ministere_tutelle' => 'Ministère de la Famille et de la Solidarité',
-                ]);
-                $quickLinks = collect();
-                $services = collect();
-            }
-
-            $view->with('siteSetting', $siteSetting);
-            $view->with('quickLinks', $quickLinks);
-            $view->with('services', $services);
-        });
+                ]),
+                'quickLinks' => collect(),
+                'services' => collect(),
+            ];
+        }
     }
 }

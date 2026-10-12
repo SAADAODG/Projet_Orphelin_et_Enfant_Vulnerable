@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
- * Journal d'activités commun à tous les modules (traçabilité, RG-09).
+ * Journal d'activités commun à tous les modules (traçabilité).
  *
  * Usage depuis n'importe quel module :
  *   JournalActivite::consigner('session_parrainage.creation', $session, 'Création de la session 2026-2027 n°1');
@@ -19,6 +19,23 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class JournalActivite extends Model
 {
     public const UPDATED_AT = null;
+
+    /** Modules du journal : début du code d'action (« oev.etat » → « oev »). */
+    public const MODULES = [
+        'auth' => 'Connexions',
+        'utilisateur' => 'Utilisateurs',
+        'role' => 'Rôles et permissions',
+        'oev' => 'Dossiers OEV',
+        'signalement' => 'Signalements',
+        'plainte' => 'Plaintes',
+        'session_parrainage' => 'Sessions de parrainage',
+        'parrain' => 'Parrains',
+        'appui_partenaire' => 'Appuis des partenaires',
+        'parrainage' => 'Suivi des parrainés',
+        'extraction' => 'Extractions',
+        'parametres' => 'Paramètres du site',
+        'localite' => 'Localités',
+    ];
 
     protected $table = 'journal_activites';
 
@@ -49,8 +66,20 @@ class JournalActivite extends Model
             'sujet_type' => $sujet?->getMorphClass(),
             'sujet_id' => $sujet?->getKey(),
             'description' => mb_substr($description !== '' ? $description : $action, 0, 500),
-            'details' => $details ?: null,
+            // Adresse IP de l'auteur pour les actions faites depuis le navigateur
+            'details' => ($details + (app()->runningInConsole() ? [] : ['ip' => request()->ip()])) ?: null,
         ]);
+    }
+
+    /** « oev.etat » → « oev ». */
+    public function module(): string
+    {
+        return strtok($this->action, '.');
+    }
+
+    public function libelleModule(): string
+    {
+        return self::MODULES[$this->module()] ?? $this->module();
     }
 
     public function utilisateur(): BelongsTo

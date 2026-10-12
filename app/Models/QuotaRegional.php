@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Montant réservé à une région dans une session dont les quotas sont actifs (RG-04). */
+/** Montant réservé à une région dans une session dont les quotas sont actifs. */
 class QuotaRegional extends Model
 {
     protected $table = 'quotas_regionaux';

@@ -336,7 +336,11 @@ class ParrainTest extends TestCase
         $oev = $this->oev($this->ouagadougou);
         $appui = $this->appui($oev, 'scolaire');
 
-        $this->actingAs($this->dp)->get(route('parrainage.appuis.create'))->assertOk()->assertSee('ONG Espoir');
+        $this->actingAs($this->dp)->get(route('parrainage.appuis.create', ['oev' => $oev->id]))
+            ->assertRedirect(route('parrainage.appuis.index', ['nouveau' => 1, 'oev' => $oev->id]));
+        $this->actingAs($this->dp)->get(route('parrainage.appuis.index', ['nouveau' => 1, 'oev' => $oev->id]))
+            ->assertOk()->assertSee('nouvelAppuiModal')->assertSee('ONG Espoir')->assertSee($oev->code);
+        $this->actingAs($this->central)->get(route('parrainage.parrains.index'))->assertOk()->assertSee('nouveauParrainModal');
         $this->actingAs($this->dp)->get(route('parrainage.appuis.edit', $appui))->assertOk()->assertSee($oev->code);
         $this->actingAs($this->dp)->get(route('parrainage.parrains.show', $this->parrain))->assertOk()->assertSee('2026-2027');
 

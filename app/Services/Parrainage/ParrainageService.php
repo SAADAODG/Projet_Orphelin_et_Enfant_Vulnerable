@@ -33,7 +33,7 @@ class ParrainageService
      *     etat: string,
      *     type_appui: string,
      *     enveloppe: int,
-     *     plafond_beneficiaire: int,
+     *     plafond_beneficiaire: int|null,
      *     bloquer_depassement_enveloppe: bool,
      *     quotas_actifs: bool,
      *     quotas: array<int, int>,
@@ -41,8 +41,8 @@ class ParrainageService
      * }
      *   type_appui : scolaire, formation_professionnelle ou les_deux (SessionParrainage::TYPES_APPUI) ;
      *   etat : en_cours, validee, paiement_en_cours ou cloturee (SessionParrainage::ETATS) ;
-     *   quotas : region_id => montant en FCFA, vide quand quotas_actifs est faux (RG-04) ;
-     *   exclure_deja_appuyes : RG-07, à combiner avec getOevAppuyesParPartenaire().
+     *   quotas : region_id => montant en FCFA, vide quand quotas_actifs est faux ;
+     *   exclure_deja_appuyes : à combiner avec getOevAppuyesParPartenaire().
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException si la session n'existe pas
      */
@@ -139,7 +139,7 @@ class ParrainageService
     }
 
     /**
-     * RG-01 / RG-07 : l'OEV a-t-il déjà un appui PARTENAIRE de cette nature pour cette année ?
+     * L'OEV a-t-il déjà un appui PARTENAIRE de cette nature pour cette année ?
      * Un appui de nature différente ne compte pas (un appui santé n'empêche pas un appui scolaire).
      *
      * @param  int  $oevId  Identifiant de l'OEV
@@ -160,7 +160,7 @@ class ParrainageService
     }
 
     /**
-     * RG-07 : identifiants des OEV déjà appuyés par un partenaire pour cette nature et cette année,
+     * Identifiants des OEV déjà appuyés par un partenaire pour cette nature et cette année,
      * pour les exclure en masse de la sélection de l'État.
      *
      * @param  string  $annee  Année scolaire, ex : 2026-2027
@@ -184,7 +184,7 @@ class ParrainageService
     }
 
     /**
-     * Contrôle RG-01 à la saisie d'un appui : appuis déjà reçus par l'OEV, la même année et pour la
+     * Contrôle à la saisie d'un appui : appuis déjà reçus par l'OEV, la même année et pour la
      * même nature, d'un partenaire ou de l'État (liste définitive, fournie par le module Sélection).
      *
      * @param  int|null  $sansAppuiId  Appui à ignorer (celui que l'on modifie)

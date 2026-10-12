@@ -18,13 +18,13 @@
   <div class="entete">
     <h1>{{ $entete['titre'] }}</h1>
     @foreach ($entete['lignes'] as $ligne)<p>{{ $ligne }}</p>@endforeach
-    <p>{{ $oevs->count() }} OEV, par ordre de priorité.</p>
+    <p>{{ $oevs->count() }} ligne(s).</p>
   </div>
   <table>
     <thead><tr>@foreach (array_keys($colonnes) as $titre)<th>{{ $titre }}</th>@endforeach</tr></thead>
     <tbody>
       @forelse ($oevs as $oev)
-        <tr>@foreach ($colonnes as $titre => $valeur)<td>{{ str_contains($titre, 'FCFA') ? \App\Support\Montant::nombre($valeur($oev)) : $valeur($oev) }}</td>@endforeach</tr>
+        <tr>@foreach ($colonnes as $titre => $valeur)@php($v = $valeur($oev))<td>{{ str_contains($titre, 'FCFA') && is_numeric($v) ? \App\Support\Montant::nombre($v) : $v }}</td>@endforeach</tr>
       @empty
         <tr><td colspan="{{ count($colonnes) }}">Aucun OEV ne correspond aux filtres.</td></tr>
       @endforelse

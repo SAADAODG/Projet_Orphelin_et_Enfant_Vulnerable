@@ -15,12 +15,11 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Parrains</h1>
-        <p class="text-muted mb-0">ONG, associations, entreprises, institutions et particuliers qui appuient les OEV.</p>
       </div>
     </div>
     @can('gérer parrains')
       <div class="heading-actions">
-        <a class="btn btn-primary btn-sm" href="{{ route('parrainage.parrains.create') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouveau parrain</a>
+        <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#nouveauParrainModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouveau parrain</button>
       </div>
     @endcan
   </div>
@@ -121,6 +120,19 @@
     @endif
   </section>
 </div>
+
+@if ($formulaire)
+  @include('parrainage._modale-creation', [
+    'id' => 'nouveauParrainModal',
+    'titre' => 'Nouveau parrain',
+    'icone' => 'bi-person-plus',
+    'action' => route('parrainage.parrains.store'),
+    'vue' => 'parrainage.parrains._form',
+    'donnees' => $formulaire,
+    'bouton' => 'Enregistrer le parrain',
+    'ouvrir' => old('_modale') === 'nouveauParrainModal' || request()->boolean('nouveau'),
+  ])
+@endif
 @endsection
 
 @push('scripts')

@@ -27,7 +27,7 @@
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Main navigation">
       <div class="sidebar-header">
         <a class="brand-mark" href="{{ route('dashboard') }}" aria-label="Tableau de bord du Ministère de la Famille et de la Solidarité">
-          <span class="brand-icon"><img src="{{ asset('assets/images/armoiries-1000x1174.png') }}" alt="Armoiries du Burkina Faso"></span>
+          <span class="brand-icon"><img src="{{ asset('assets/images/armoiries-240.png') }}" alt="Armoiries du Burkina Faso"></span>
           <span class="brand-copy">
             <span class="brand-title">Ministère de la Famille et de la Solidarité</span>
             <span class="brand-subtitle">Programme OEV</span>
@@ -162,6 +162,12 @@
             <span class="nav-text">Gestion role et permission</span>
           </a>
           @endif
+          @can('voir journal')
+          <a class="nav-link {{ request()->routeIs('journal.*') ? 'active' : '' }}" href="{{ route('journal.index') }}" @if (request()->routeIs('journal.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-journal-text" aria-hidden="true"></i></span>
+            <span class="nav-text">Journal d’audit</span>
+          </a>
+          @endcan
           @can('gérer paramètres')
           <a class="nav-link {{ request()->routeIs('localites.*') ? 'active' : '' }}" href="{{ route('localites.regions.index') }}" {{ request()->routeIs('localites.*') ? 'aria-current="page"' : '' }}>
             <span class="nav-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>

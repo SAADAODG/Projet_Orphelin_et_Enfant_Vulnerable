@@ -19,7 +19,7 @@ use Illuminate\View\View;
 
 /**
  * Module « Sessions » du parrainage : le niveau central ouvre une session (enveloppe, plafond,
- * financement, options RG-04 / RG-07), répartit les quotas régionaux et la fait avancer jusqu'à
+ * financement, options de sélection), répartit les quotas régionaux et la fait avancer jusqu'à
  * la clôture. Les DR et DP consultent.
  */
 class SessionParrainageController extends Controller
@@ -52,20 +52,26 @@ class SessionParrainageController extends Controller
             'sessions' => $sessions,
             'filtres' => $filtres,
             'annees' => SessionParrainage::distinct()->orderByDesc('annee')->pluck('annee'),
+            // Fenêtre « Nouvelle session »
+            'formulaire' => $request->user()->can('gérer sessions parrainage') ? $this->donneesFormulaire($this->nouvelleSession()) : null,
         ]);
     }
 
-    public function create(): View
+    /** La création se fait dans une fenêtre de la liste des sessions. */
+    public function create(): RedirectResponse
     {
-        $annee = self::anneeScolaireCourante();
+        return redirect()->route('parrainage.sessions.index', ['nouveau' => 1]);
+    }
 
-        return view('parrainage.sessions.create', $this->donneesFormulaire(new SessionParrainage([
-            'annee' => $annee,
-            'numero' => (int) SessionParrainage::where('annee', $annee)->max('numero') + 1,
+    /** Session proposée par défaut à l'ouverture : année scolaire en cours (le numéro est attribué à l'enregistrement). */
+    private function nouvelleSession(): SessionParrainage
+    {
+        return new SessionParrainage([
+            'annee' => self::anneeScolaireCourante(),
             'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
             'source_financement' => SessionParrainage::SOURCE_ETAT,
             'date_ouverture' => now(),
-        ])));
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -73,7 +79,9 @@ class SessionParrainageController extends Controller
         $donnees = $this->valider($request);
 
         $session = DB::transaction(function () use ($request, $donnees) {
+            // Numéro attribué automatiquement : le suivant pour l'année scolaire
             $session = SessionParrainage::create($donnees['session'] + [
+                'numero' => SessionParrainage::prochainNumero($donnees['session']['annee']),
                 'etat' => SessionParrainage::ETAT_EN_COURS,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
@@ -145,7 +153,6 @@ class SessionParrainageController extends Controller
                     ->get()
                 : collect(),
             'nbAttente' => $session->beneficiaires()->enAttente()->count(),
-            'journal' => JournalActivite::de($session)->with('utilisateur')->limit(20)->get(),
         ]);
     }
 
@@ -180,7 +187,9 @@ class SessionParrainageController extends Controller
         $donnees = $this->valider($request, $session);
 
         DB::transaction(function () use ($request, $session, $donnees) {
-            $session->update($donnees['session'] + ['updated_by' => $request->user()->id]);
+            // Changement d'année scolaire : la session prend le numéro suivant de sa nouvelle année
+            $numero = $donnees['session']['annee'] === $session->annee ? [] : ['numero' => SessionParrainage::prochainNumero($donnees['session']['annee'])];
+            $session->update($donnees['session'] + $numero + ['updated_by' => $request->user()->id]);
             $session->parrains()->sync($donnees['contributions']);
 
             JournalActivite::consigner('session_parrainage.modification', $session, "Modification de la session {$session->reference()}", [
@@ -191,7 +200,7 @@ class SessionParrainageController extends Controller
         return redirect()->route('parrainage.sessions.show', $session)->with('success', 'Session mise à jour.');
     }
 
-    /** Vue « Quotas » : un montant par région, total ≤ enveloppe (RG-04). Les régions à 0 n'ont pas de quota. */
+    /** Vue « Quotas » : un montant par région, total ≤ enveloppe. Les régions à 0 n'ont pas de quota. */
     public function updateQuotas(Request $request, SessionParrainage $session): RedirectResponse
     {
         $retour = redirect()->route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']);
@@ -290,15 +299,13 @@ class SessionParrainageController extends Controller
                     $echec('L’année scolaire doit couvrir deux années consécutives (ex : 2026-2027).');
                 }
             }],
-            'numero' => ['required', 'integer', 'min:1', 'max:99',
-                Rule::unique('sessions_parrainage', 'numero')->where('annee', $annee)->ignore($session?->id)],
             'type_appui' => ['required', Rule::in(array_keys(SessionParrainage::TYPES_APPUI))],
             'enveloppe' => ['required', 'integer', 'min:1', function (string $attribut, $valeur, \Closure $echec) use ($session, $request) {
                 if ($session && $request->boolean('quotas_actifs') && (int) $valeur < $session->quotas()->sum('montant')) {
                     $echec('L’enveloppe ne peut pas être inférieure au total des quotas déjà répartis (' . Montant::fcfa($session->quotas()->sum('montant')) . ').');
                 }
             }],
-            'plafond_beneficiaire' => ['required', 'integer', 'min:1', 'lte:enveloppe'],
+            'plafond_beneficiaire' => ['nullable', 'integer', 'min:1', 'lte:enveloppe'],
             'source_financement' => ['required', Rule::in(array_keys(SessionParrainage::SOURCES_FINANCEMENT))],
             'date_ouverture' => ['required', 'date'],
             'session_origine_id' => ['nullable', 'integer', Rule::exists('sessions_parrainage', 'id')->where('annee', $annee),
@@ -314,7 +321,6 @@ class SessionParrainageController extends Controller
             'contributions.*' => ['nullable', 'integer', 'min:0'],
         ], [
             'annee.regex' => 'L’année scolaire s’écrit sous la forme 2026-2027.',
-            'numero.unique' => 'Une session porte déjà ce numéro pour cette année scolaire.',
             'enveloppe.min' => 'L’enveloppe doit être strictement positive.',
             'plafond_beneficiaire.lte' => 'Le plafond par bénéficiaire ne peut pas dépasser l’enveloppe.',
             'session_origine_id.exists' => 'La session d’origine doit appartenir à la même année scolaire.',

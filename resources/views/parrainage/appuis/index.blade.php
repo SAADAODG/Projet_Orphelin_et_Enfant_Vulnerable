@@ -15,13 +15,12 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Parrains</h1>
-        <p class="text-muted mb-0">Appuis apportés par les parrains aux OEV, année par année. Un OEV ne reçoit qu’un appui de même nature par an (RG-01).</p>
       </div>
     </div>
     @can('enregistrer appuis')
       <div class="heading-actions">
         <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.appuis.import') }}"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> Importer (Excel)</a>
-        <a class="btn btn-primary btn-sm" href="{{ route('parrainage.appuis.create') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouvel appui</a>
+        <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#nouvelAppuiModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouvel appui</button>
       </div>
     @endcan
   </div>
@@ -121,4 +120,18 @@
     @endif
   </section>
 </div>
+
+@if ($formulaire)
+  {{-- Rouverte aussi après l'avertissement « appui de même nature déjà reçu » --}}
+  @include('parrainage._modale-creation', [
+    'id' => 'nouvelAppuiModal',
+    'titre' => 'Nouvel appui',
+    'icone' => 'bi-gift',
+    'action' => route('parrainage.appuis.store'),
+    'vue' => 'parrainage.appuis._form',
+    'donnees' => $formulaire,
+    'bouton' => 'Enregistrer l’appui',
+    'ouvrir' => old('_modale') === 'nouvelAppuiModal' || request()->boolean('nouveau'),
+  ])
+@endif
 @endsection

@@ -7,6 +7,7 @@ use App\Models\BeneficiaireSession;
 use App\Models\JournalActivite;
 use App\Models\NatureAppui;
 use App\Models\Oev;
+use App\Models\Province;
 use App\Models\SessionParrainage;
 use App\Models\SuiviParrainage;
 use App\Models\User;
@@ -123,38 +124,72 @@ class SelectionParrainage implements SourceSelection
         return $motifs;
     }
 
-    /** Bénéficiaires pas encore choisis pour la session, avec leur score, filtrés et triés par urgence. */
+    /**
+     * Bénéficiaires pas encore choisis pour la session, avec leur score, filtrés et triés par urgence.
+     *
+     * Chaque filtre accepte une valeur ou une liste de valeurs (« l'une ou l'autre ») : plusieurs régions,
+     * plusieurs vulnérabilités… Localité : « regions » (régions entières) et « provinces » (seulement ces
+     * provinces dans leur région) ; une région dont des provinces sont cochées est limitée à ces provinces.
+     */
     private function recherche(SessionParrainage $session, array $f): Builder
     {
+        $liste = fn (string ...$cles) => collect($cles)->flatMap(fn ($cle) => (array) ($f[$cle] ?? []))
+            ->filter(fn ($v) => $v !== null && $v !== '')->unique()->values()->all();
+        $handicap = $liste('handicap');
+
         return Oev::beneficiaires()
             ->whereNotIn('oevs.id', BeneficiaireSession::where('session_parrainage_id', $session->id)->select('oev_id'))
             ->select('oevs.*')
             ->selectRaw(ScoreBesoin::sql() . ' as score')
-            ->when($f['type'] ?? null, fn ($q, $type) => $this->concernesPar($q, [$type]))
-            ->when($f['region_id'] ?? null, fn ($q, $id) => $q->where('oevs.region_id', $id))
-            ->when($f['province_id'] ?? null, fn ($q, $id) => $q->where('oevs.province_id', $id))
-            ->when($f['commune_id'] ?? null, fn ($q, $id) => $q->where('oevs.commune_id', $id))
-            ->when($f['sexe'] ?? null, fn ($q, $v) => $q->where('oevs.sexe', $v))
+            ->when($liste('type'), fn ($q, $types) => $this->concernesPar($q, $types))
+            ->tap(fn ($q) => $this->dansLesLocalites($q, $liste('regions', 'region_id'), $liste('provinces', 'province_id'), $liste('commune_id')))
+            ->when($liste('sexe'), fn ($q, $v) => $q->whereIn('oevs.sexe', $v))
             ->when(isset($f['age_min']), fn ($q) => $q->whereDate('oevs.date_naissance', '<=', now()->subYears((int) $f['age_min'])))
             ->when(isset($f['age_max']), fn ($q) => $q->whereDate('oevs.date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)))
-            ->when($f['statut'] ?? null, fn ($q, $v) => $q->where('oevs.statut', $v))
-            ->when($f['vulnerabilite'] ?? null, fn ($q, $v) => $q->where('oevs.vulnerabilites', 'like', '%"' . $v . '"%'))
-            ->when(isset($f['handicap']), fn ($q) => $q->where('oevs.handicap', (bool) $f['handicap']))
-            ->when($f['niveau_priorite'] ?? null, fn ($q, $v) => $q->where('oevs.niveau_priorite', $v))
-            ->when($f['niveau_etude'] ?? null, fn ($q, $v) => $q->where('oevs.niveau_etude', $v))
-            ->when($f['groupe_population'] ?? null, fn ($q, $v) => $q->where('oevs.groupe_population', $v))
-            ->when($f['scolarite'] ?? null, fn ($q, $v) => match ($v) {
-                self::SCOLARISE => $this->scolarises($q),
-                self::A_SCOLARISER => $this->aScolariser($q),
-                self::EN_FORMATION => $this->enFormation($q),
-                default => $q,
-            })
+            ->when($liste('statut'), fn ($q, $v) => $q->whereIn('oevs.statut', $v))
+            // Au moins une des vulnérabilités choisies (liste JSON lue comme texte : PostgreSQL et SQLite)
+            ->when($liste('vulnerabilite'), fn ($q, $codes) => $q->where(function ($q) use ($codes) {
+                foreach ($codes as $code) {
+                    $q->orWhereRaw('CAST(oevs.vulnerabilites AS TEXT) LIKE ?', ['%"' . $code . '"%']);
+                }
+            }))
+            // Oui et non cochés ensemble : aucun filtre
+            ->when(count($handicap) === 1, fn ($q) => $q->where('oevs.handicap', (bool) $handicap[0]))
+            ->when($liste('niveau_priorite'), fn ($q, $v) => $q->whereIn('oevs.niveau_priorite', $v))
+            ->when($liste('niveau_etude'), fn ($q, $v) => $q->whereIn('oevs.niveau_etude', $v))
+            ->when($liste('groupe_population'), fn ($q, $v) => $q->whereIn('oevs.groupe_population', $v))
+            ->when($liste('scolarite'), fn ($q, $situations) => $q->where(function ($q) use ($situations) {
+                foreach ($situations as $situation) {
+                    $q->orWhere(fn ($q) => match ($situation) {
+                        self::SCOLARISE => $this->scolarises($q),
+                        self::A_SCOLARISER => $this->aScolariser($q),
+                        self::EN_FORMATION => $this->enFormation($q),
+                        default => $q,
+                    });
+                }
+            }))
             ->when($f['q'] ?? null, fn ($q, $terme) => $q->where(fn ($q) => $q
                 ->where('oevs.code', 'like', "%{$terme}%")->orWhere('oevs.nom', 'like', "%{$terme}%")
                 ->orWhere('oevs.prenom', 'like', "%{$terme}%")->orWhere('oevs.etablissement_actuel', 'like', "%{$terme}%")))
             ->orderByDesc('score')
             ->orderBy('oevs.date_naissance')
             ->orderBy('oevs.id');
+    }
+
+    /**
+     * Localités choisies : régions entières, ou seulement certaines provinces de ces régions.
+     * Une province cochée limite sa région à cette province ; sans choix, aucune restriction.
+     */
+    private function dansLesLocalites(Builder $requete, array $regions, array $provinces, array $communes = []): Builder
+    {
+        $provinces = Province::whereIn('id', $provinces)->get(['id', 'region_id']);
+        $regionsEntieres = array_diff(array_map('intval', $regions), $provinces->pluck('region_id')->all());
+
+        return $requete
+            ->when($regionsEntieres || $provinces->isNotEmpty(), fn ($q) => $q->where(fn ($q) => $q
+                ->whereIn('oevs.region_id', $regionsEntieres)
+                ->orWhereIn('oevs.province_id', $provinces->pluck('id'))))
+            ->when($communes, fn ($q) => $q->whereIn('oevs.commune_id', $communes));
     }
 
     /** Éligibles sans les filtres de recherche (aussi ceux déjà choisis pour la session). */

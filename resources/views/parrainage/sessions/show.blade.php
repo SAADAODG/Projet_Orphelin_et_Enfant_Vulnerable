@@ -135,7 +135,7 @@
           <h2 class="oev-carte-titre"><i class="bi bi-wallet2" aria-hidden="true"></i> Budget</h2>
           <div class="oev-infos">
             {!! $info('Enveloppe budgétaire', Montant::fcfa($session->enveloppe)) !!}
-            {!! $info('Plafond par bénéficiaire', Montant::fcfa($session->plafond_beneficiaire)) !!}
+            {!! $info('Plafond par bénéficiaire', $session->libellePlafond()) !!}
             {!! $info('Source de financement', $session->libelleSource()) !!}
             @if ($session->avecParrains())
               {!! $info('Total des contributions', Montant::fcfa($session->totalContributions())) !!}
@@ -154,9 +154,9 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-sliders" aria-hidden="true"></i> Options de sélection</h2>
           <div class="oev-infos">
-            {!! $info('Bloquer le dépassement de l’enveloppe (RG-04)', $ouiNon($session->bloquer_depassement_enveloppe)) !!}
-            {!! $info('Quotas par région (RG-04)', $ouiNon($session->quotas_actifs)) !!}
-            {!! $info('Exclure les OEV déjà appuyés par un partenaire (RG-07)', $ouiNon($session->exclure_deja_appuyes)) !!}
+            {!! $info('Bloquer le dépassement de l’enveloppe', $ouiNon($session->bloquer_depassement_enveloppe)) !!}
+            {!! $info('Quotas par région', $ouiNon($session->quotas_actifs)) !!}
+            {!! $info('Exclure les OEV déjà appuyés par un partenaire', $ouiNon($session->exclure_deja_appuyes)) !!}
           </div>
         </section>
       </div>
@@ -264,26 +264,6 @@
         </section>
       </div>
 
-      <div class="col-12">
-        <section class="oev-carte">
-          <h2 class="oev-carte-titre"><i class="bi bi-clock-history" aria-hidden="true"></i> Historique</h2>
-          @if ($journal->isEmpty())
-            <p class="text-muted mb-0">Aucune action enregistrée.</p>
-          @else
-            <ul class="list-unstyled mb-0">
-              @foreach ($journal as $entree)
-                <li class="py-2 @unless ($loop->last) border-bottom @endunless">
-                  <span class="fw-semibold">{{ $entree->description }}</span>
-                  @if ($entree->details['motif'] ?? null)
-                    <span class="d-block small">Motif : {{ $entree->details['motif'] }}</span>
-                  @endif
-                  <span class="d-block text-muted small">{{ $entree->created_at->format('d/m/Y à H:i') }} · {{ $entree->utilisateur?->name ?? 'Système' }}</span>
-                </li>
-              @endforeach
-            </ul>
-          @endif
-        </section>
-      </div>
     </div>
   @else
     {{-- Vue « Quotas » : un montant par région ; total ≤ enveloppe --}}

@@ -16,12 +16,11 @@
       <div>
         <p class="eyebrow mb-1">Parrainage</p>
         <h1 class="h3 mb-1">Sessions de parrainage</h1>
-        <p class="text-muted mb-0">Chaque session fixe l’enveloppe, le plafond par bénéficiaire et les règles de sélection d’une année scolaire.</p>
       </div>
     </div>
     @can('gérer sessions parrainage')
       <div class="heading-actions">
-        <a class="btn btn-primary btn-sm" href="{{ route('parrainage.sessions.create') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouvelle session</a>
+        <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#nouvelleSessionModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nouvelle session</button>
       </div>
     @endcan
   </div>
@@ -111,6 +110,20 @@
     @endif
   </section>
 </div>
+
+@if ($formulaire)
+  @include('parrainage._modale-creation', [
+    'id' => 'nouvelleSessionModal',
+    'titre' => 'Nouvelle session',
+    'icone' => 'bi-calendar2-plus',
+    'action' => route('parrainage.sessions.store'),
+    'vue' => 'parrainage.sessions._form',
+    'donnees' => $formulaire,
+    'bouton' => 'Ouvrir la session',
+    'taille' => 'modal-xl',
+    'ouvrir' => old('_modale') === 'nouvelleSessionModal' || request()->boolean('nouveau'),
+  ])
+@endif
 @endsection
 
 @push('scripts')

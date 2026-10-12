@@ -42,6 +42,7 @@ final class ScoreBesoin
     ];
 
     /** Expression SQL du score, pour la colonne « score » d'une requête sur la table oevs. */
+    /** Écriture portable (PostgreSQL, SQLite) : colonnes booléennes testées directement, JSON lu comme texte. */
     public static function sql(string $table = 'oevs'): string
     {
         $morceaux = [];
@@ -50,12 +51,12 @@ final class ScoreBesoin
             $morceaux[] = "(CASE {$table}.{$champ} {$cas} ELSE 0 END)";
         }
         foreach (self::BAREME_OUI as [, $champ, $points]) {
-            $morceaux[] = "(CASE WHEN {$table}.{$champ} = 1 THEN {$points} ELSE 0 END)";
+            $morceaux[] = "(CASE WHEN {$table}.{$champ} THEN {$points} ELSE 0 END)";
         }
         foreach (self::VULNERABILITES_GRAVES as $code) {
-            $morceaux[] = "(CASE WHEN {$table}.vulnerabilites LIKE '%\"{$code}\"%' THEN " . self::POINTS_VULNERABILITE . ' ELSE 0 END)';
+            $morceaux[] = "(CASE WHEN CAST({$table}.vulnerabilites AS TEXT) LIKE '%\"{$code}\"%' THEN " . self::POINTS_VULNERABILITE . ' ELSE 0 END)';
         }
-        $morceaux[] = "(CASE WHEN {$table}.tuteur_pret_continuer = 0 THEN " . self::POINTS_TUTEUR_ARRET . ' ELSE 0 END)';
+        $morceaux[] = "(CASE WHEN NOT {$table}.tuteur_pret_continuer THEN " . self::POINTS_TUTEUR_ARRET . ' ELSE 0 END)';
 
         return implode(' + ', $morceaux);
     }

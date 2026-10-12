@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  *  - natures_appui : table de référence (scolaire, santé, alimentaire…), complétable ;
  *  - parrain_zones : zone d'intervention d'un parrain (une région OU une province par ligne) ;
  *  - engagements_parrain : engagements pris par un parrain (durée, natures, nombre d'OEV, montant, convention) ;
- *  - appuis_partenaires : un parrain appuie un OEV pendant une année scolaire (RG-01, RG-07).
+ *  - appuis_partenaires : un parrain appuie un OEV pendant une année scolaire.
  */
 return new class extends Migration
 {
@@ -76,7 +76,7 @@ return new class extends Migration
             $table->date('date_debut')->nullable();
             $table->date('date_fin')->nullable();
             $table->text('observations')->nullable();
-            $table->text('motif_doublon')->nullable()->comment('Motif saisi pour confirmer un 2e appui de même nature la même année (RG-01)');
+            $table->text('motif_doublon')->nullable()->comment('Motif saisi pour confirmer un 2e appui de même nature la même année');
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();

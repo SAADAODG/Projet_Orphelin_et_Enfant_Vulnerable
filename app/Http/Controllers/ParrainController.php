@@ -51,12 +51,15 @@ class ParrainController extends Controller
             'parrains' => $parrains,
             'filtres' => $filtres,
             'regions' => Region::orderBy('nom')->pluck('nom', 'id'),
+            // Fenêtre « Nouveau parrain »
+            'formulaire' => $request->user()->can('gérer parrains') ? $this->donneesFormulaire(new Parrain(['actif' => true])) : null,
         ]);
     }
 
-    public function create(): View
+    /** La création se fait dans une fenêtre du répertoire. */
+    public function create(): RedirectResponse
     {
-        return view('parrainage.parrains.create', $this->donneesFormulaire(new Parrain(['actif' => true])));
+        return redirect()->route('parrainage.parrains.index', ['nouveau' => 1]);
     }
 
     public function store(Request $request): RedirectResponse

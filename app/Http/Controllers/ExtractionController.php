@@ -2,22 +2,41 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\JournalActivite;
 use App\Models\Oev;
 use App\Models\Region;
+use App\Services\Parrainage\FichiersExtraction;
 use App\Support\Perimetre;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * « Filtrage et extraction » : recherche multicritère dans les dossiers enfants / OEV et export CSV.
+ * « Filtrage et extraction » : recherche multicritère dans les dossiers enfants / OEV et export Excel ou PDF
+ * des données choisies.
  * Chaque utilisateur ne voit que les dossiers de sa zone, à l'étape où il intervient (Oev::visiblesPar).
  */
 class ExtractionController extends Controller
 {
     private const PAR_PAGE = 25;
+
+    /** Au-delà, le PDF devient illisible et lourd à produire : l'export Excel est proposé. */
+    private const PDF_MAX = 1000;
+
+    /** Données cochées par défaut dans la fenêtre d'extraction. */
+    public const COLONNES_PAR_DEFAUT = [
+        'Code OEV', 'Nom', 'Prénom(s)', 'Sexe', 'Âge', 'Statut OEV', 'Région', 'Province', 'Commune',
+        'Parent / tuteur', 'Téléphone du tuteur', 'Situation scolaire',
+    ];
+
+    public function __construct(private readonly FichiersExtraction $fichiers)
+    {
+    }
 
     /** Filtres à choix unique : champ => liste des valeurs autorisées. */
     private static function listes(): array
@@ -77,7 +96,7 @@ class ExtractionController extends Controller
              sum(case when sexe = 'M' then 1 else 0 end) as garcons,
              sum(case when statut in ('orphelin_pere', 'orphelin_mere', 'orphelin_double') then 1 else 0 end) as orphelins,
              sum(case when situation_scolaire = 'scolarise' then 1 else 0 end) as scolarises,
-             sum(case when handicap = 1 then 1 else 0 end) as handicap"
+             sum(case when handicap then 1 else 0 end) as handicap"
         )->first();
 
         return view('extraction.index', [
@@ -87,25 +106,80 @@ class ExtractionController extends Controller
             'nbFiltres' => count(array_filter($filtres, fn ($v, $cle) => ! in_array($cle, ['tri', 'date_champ'], true) && $v !== null && $v !== '', ARRAY_FILTER_USE_BOTH)),
             'listes' => self::listes(),
             'localites' => Perimetre::pour($request->user())->filtrerArborescence(Region::arborescence()),
+            'groupesColonnes' => $this->groupesColonnes(),
         ]);
     }
 
-    /** Export CSV (séparateur « ; », UTF-8 avec BOM : s'ouvre directement dans Excel) des dossiers filtrés. */
-    public function export(Request $request): StreamedResponse
+    /**
+     * Export Excel ou PDF des dossiers filtrés, avec les colonnes cochées par l'utilisateur.
+     * Le PDF est limité (mise en page) : au-delà, l'export Excel est proposé. Chaque export est tracé.
+     */
+    public function export(Request $request): Response|StreamedResponse|RedirectResponse
     {
-        $requete = $this->requete($request, $this->lireFiltres($request))
-            ->with(['region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune']);
-        $colonnes = $this->colonnesExport();
+        $disponibles = $this->colonnesExport();
+        $donnees = $request->validate(
+            ['format' => ['required', Rule::in(['xlsx', 'pdf'])], 'colonnes' => ['required', 'array']],
+            ['colonnes.required' => 'Cochez au moins une donnée à extraire.'],
+        );
+        // Ordre de la fiche conservé, quel que soit l'ordre des cases cochées
+        $colonnes = array_intersect_key($disponibles, array_flip((array) $donnees['colonnes']));
+        if (! $colonnes) {
+            return back()->with('error', 'Cochez au moins une donnée à extraire.');
+        }
 
-        return response()->streamDownload(function () use ($requete, $colonnes) {
-            $sortie = fopen('php://output', 'w');
-            fwrite($sortie, "\xEF\xBB\xBF");
-            fputcsv($sortie, array_keys($colonnes), ';');
-            foreach ($requete->lazy(500) as $oev) {
-                fputcsv($sortie, array_map(fn (callable $valeur) => $valeur($oev), $colonnes), ';');
-            }
-            fclose($sortie);
-        }, 'extraction-oev-' . now()->format('Y-m-d-His') . '.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        $filtres = $this->lireFiltres($request);
+        $requete = $this->requete($request, $filtres)
+            ->with(['region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune']);
+        $total = (clone $requete)->count();
+        if ($donnees['format'] === 'pdf' && $total > self::PDF_MAX) {
+            return back()->with('error', "{$total} dossiers correspondent aux filtres : le PDF est limité à " . self::PDF_MAX . ' lignes. Exportez en Excel ou affinez les filtres.');
+        }
+
+        $utilisateur = $request->user();
+        JournalActivite::consigner('extraction.oev', null, "Extraction de {$total} dossier(s) OEV ({$donnees['format']})", [
+            'filtres' => array_filter($filtres, fn ($v) => $v !== null && $v !== ''),
+            'colonnes' => array_keys($colonnes),
+            'lignes' => $total,
+            'format' => $donnees['format'],
+        ]);
+
+        $entete = [
+            'titre' => 'Extraction des dossiers OEV',
+            'lignes' => [
+                Perimetre::pour($utilisateur)->libelle() . " · {$total} dossier(s)",
+                'Extraite le ' . now()->format('d/m/Y à H:i') . " par {$utilisateur->name}",
+            ],
+        ];
+        $nom = 'extraction-oev-' . now()->format('Y-m-d-His') . '.' . $donnees['format'];
+        $oevs = $requete->get();
+
+        return $donnees['format'] === 'pdf'
+            ? $this->fichiers->listePdf($oevs, $colonnes, $entete, $nom)
+            : $this->fichiers->listeExcel($oevs, $colonnes, $entete, $nom, 'Dossiers OEV');
+    }
+
+    /**
+     * Données proposées à l'extraction, regroupées comme la fiche de l'enfant.
+     * Les colonnes non classées ici apparaissent dans « Autres ».
+     *
+     * @return array<string, array<int, string>> groupe => libellés de colonnes
+     */
+    public function groupesColonnes(): array
+    {
+        $groupes = [
+            'Dossier' => ['Code OEV', 'N° de dossier', 'État du dossier', 'Constitué le', 'Soumis au DR le', 'Intégré le'],
+            'Identité' => ['Nom', 'Prénom(s)', 'Sexe', 'Date de naissance', 'Âge', 'Lieu de naissance', 'Nationalité', 'Acte de naissance', 'N° acte de naissance', 'Statut OEV', 'Groupe de population'],
+            'Localité' => ['Région', 'Province', 'Commune', 'Village / secteur', 'Quartier', 'Lieu de provenance'],
+            'Parents et tuteur' => ['Mère', 'Mère vivante', 'Décès de la mère', 'Père', 'Père vivant', 'Décès du père', 'Qui s’occupe de l’enfant', 'Parent / tuteur', 'Téléphone du tuteur', 'CNIB du tuteur', 'Prêt à continuer', 'Lieu de vie'],
+            'Situation et santé' => ['Vulnérabilités', 'Handicap', 'Type de handicap', 'Maladie', 'Source de revenu', 'Niveau de revenu', 'Logement'],
+            'Scolarité et formation' => ['Situation scolaire', 'Niveau d’étude', 'Classe précédente', 'Moyenne annuelle', 'Appréciation', 'Établissement actuel', 'Public / privé', 'Classe actuelle', 'Frais de scolarité (FCFA)', 'Performances', 'Formation professionnelle'],
+            'Suivi du cas' => ['Date d’identification', 'Identifié par', 'Priorité', 'Gestionnaire du cas', 'Tél. du gestionnaire'],
+        ];
+        $disponibles = array_keys($this->colonnesExport());
+        $groupes = array_map(fn (array $libelles) => array_values(array_intersect($libelles, $disponibles)), $groupes);
+        $autres = array_values(array_diff($disponibles, array_merge(...array_values($groupes))));
+
+        return array_filter($groupes + ['Autres' => $autres]);
     }
 
     /** Filtres de la requête, limités aux valeurs connues (toute autre valeur est ignorée). */
