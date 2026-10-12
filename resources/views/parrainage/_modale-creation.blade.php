@@ -16,7 +16,7 @@
         <h2 class="modal-title h5" id="{{ $id }}Titre"><i class="bi {{ $icone }} me-1" aria-hidden="true"></i> {{ $titre }}</h2>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
       </div>
-      <form method="POST" action="{{ $action }}">
+      <form class="modal-formulaire" method="POST" action="{{ $action }}">
         @csrf
         {{-- Rouvre cette fenêtre si le serveur renvoie le formulaire (erreur de saisie) --}}
         <input type="hidden" name="_modale" value="{{ $id }}">

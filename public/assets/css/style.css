@@ -2211,3 +2211,13 @@ html[data-theme="dark"] {
     width: 100%;
   }
 }
+
+/* Formulaire qui enveloppe le corps et le pied d'une fenêtre défilante (modal-dialog-scrollable) :
+   le corps défile, la barre de boutons reste toujours visible en bas */
+.modal-formulaire {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}

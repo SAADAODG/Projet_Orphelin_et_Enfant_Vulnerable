@@ -250,7 +250,7 @@
 <div class="modal fade" id="extraireModal" tabindex="-1" aria-labelledby="extraireModalTitre" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <form method="GET" action="{{ route('extraction.export') }}" id="formExtraction">
+      <form class="modal-formulaire" method="GET" action="{{ route('extraction.export') }}" id="formExtraction">
         @foreach ($requeteActuelle as $cle => $valeur)
           @continue(in_array($cle, ['page', 'colonnes', 'format'], true))
           @foreach ((array) $valeur as $element)
