@@ -162,6 +162,12 @@
             <span class="nav-text">Gestion role et permission</span>
           </a>
           @endif
+          @can('voir journal')
+          <a class="nav-link {{ request()->routeIs('journal.*') ? 'active' : '' }}" href="{{ route('journal.index') }}" @if (request()->routeIs('journal.*')) aria-current="page" @endif>
+            <span class="nav-icon"><i class="bi bi-journal-text" aria-hidden="true"></i></span>
+            <span class="nav-text">Journal d’audit</span>
+          </a>
+          @endcan
           @can('gérer paramètres')
           <a class="nav-link {{ request()->routeIs('localites.*') ? 'active' : '' }}" href="{{ route('localites.regions.index') }}" {{ request()->routeIs('localites.*') ? 'aria-current="page"' : '' }}>
             <span class="nav-icon"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>

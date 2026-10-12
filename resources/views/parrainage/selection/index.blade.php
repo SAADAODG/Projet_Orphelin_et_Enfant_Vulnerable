@@ -11,6 +11,9 @@
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
 <style>
   .sel-filtres { border: 1px solid var(--admin-border); border-radius: 14px; padding: 1rem; background: var(--admin-surface-soft); }
+  .sel-multi-menu { min-width: 100%; max-height: 18rem; overflow-y: auto; }
+  .sel-multi-menu--large { min-width: 22rem; max-height: 24rem; }
+  .sel-provinces { margin: .1rem 0 .35rem 1.5rem; }
   .sel-filtres .form-label { font-size: .8rem; font-weight: 600; color: var(--admin-muted); margin-bottom: .2rem; }
   .sel-filtres [data-localite] { padding: .25rem 2rem .25rem .5rem; font-size: .875rem; }
   .sel-filtres [data-localite] + .invalid-feedback { display: none; }
@@ -133,7 +136,7 @@
     @if ($session->parametresModifiables())
       <li class="nav-item">
         <a class="nav-link {{ $onglet === 'eligibles' ? 'active' : '' }}" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'eligibles']) }}">
-          <i class="bi bi-person-plus" aria-hidden="true"></i> Ajouter des OEV
+          <i class="bi bi-search" aria-hidden="true"></i> Rechercher et ajouter des OEV
         </a>
       </li>
     @endif
@@ -185,11 +188,11 @@
             <input class="form-control form-control-sm" id="s-q" name="q" type="search" value="{{ $f['q'] }}" placeholder="Code OEV, nom, prénom, établissement…">
           </div>
           @if ($lesDeux)
-            <div class="col-sm-6 col-lg-2">{!! $select('type', 'Type d’appui', [SessionParrainage::TYPE_SCOLAIRE => 'Scolaire', SessionParrainage::TYPE_FORMATION => 'Formation'], $f['type']) !!}</div>
+            <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'type', 'label' => 'Type d’appui', 'options' => [SessionParrainage::TYPE_SCOLAIRE => 'Scolaire', SessionParrainage::TYPE_FORMATION => 'Formation'], 'valeurs' => $f['type']])</div>
           @endif
-          <div class="col-sm-6 col-lg-2">{!! $select('niveau_priorite', 'Priorité du cas', Oev::NIVEAUX, $f['niveau_priorite'], 'Toutes') !!}</div>
-          <div class="col-sm-6 col-lg-2">{!! $select('scolarite', 'Scolarité', $situations, $f['scolarite'], 'Toutes') !!}</div>
-          <div class="col-6 col-lg-2">{!! $select('sexe', 'Sexe', Oev::SEXES, $f['sexe']) !!}</div>
+          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_priorite', 'label' => 'Priorité du cas', 'options' => Oev::NIVEAUX, 'valeurs' => $f['niveau_priorite'], 'tous' => 'Toutes'])</div>
+          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'scolarite', 'label' => 'Scolarité', 'options' => $situations, 'valeurs' => $f['scolarite'], 'tous' => 'Toutes'])</div>
+          <div class="col-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'sexe', 'label' => 'Sexe', 'options' => Oev::SEXES, 'valeurs' => $f['sexe']])</div>
 
           <div class="col-6 col-lg-1">
             <label class="form-label" for="s-age_min">Âge min.</label>
@@ -199,19 +202,14 @@
             <label class="form-label" for="s-age_max">Âge max.</label>
             <input class="form-control form-control-sm" id="s-age_max" name="age_max" type="number" min="0" max="25" value="{{ $f['age_max'] }}">
           </div>
-          <div class="col-sm-6 col-lg-2">{!! $select('statut', 'Statut OEV', Oev::STATUTS, $f['statut']) !!}</div>
-          <div class="col-sm-6 col-lg-3">{!! $select('vulnerabilite', 'Vulnérabilité', Oev::VULNERABILITES, $f['vulnerabilite'], 'Toutes') !!}</div>
-          <div class="col-6 col-lg-1">{!! $select('handicap', 'Handicap', $ouiNon, $f['handicap']) !!}</div>
-          <div class="col-6 col-lg-2">{!! $select('niveau_etude', 'Niveau d’étude', Oev::NIVEAUX_ETUDE, $f['niveau_etude']) !!}</div>
-          <div class="col-sm-6 col-lg-2">{!! $select('groupe_population', 'Groupe de population', Oev::GROUPES_POPULATION, $f['groupe_population']) !!}</div>
+          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'statut', 'label' => 'Statut OEV', 'options' => Oev::STATUTS, 'valeurs' => $f['statut']])</div>
+          <div class="col-sm-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
+          <div class="col-6 col-lg-1">@include('parrainage.selection._filtre-multiple', ['nom' => 'handicap', 'label' => 'Handicap', 'options' => $ouiNon, 'valeurs' => $f['handicap']])</div>
+          <div class="col-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_etude', 'label' => 'Niveau d’étude', 'options' => Oev::NIVEAUX_ETUDE, 'valeurs' => $f['niveau_etude']])</div>
+          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::GROUPES_POPULATION, 'valeurs' => $f['groupe_population']])</div>
 
-          <div class="col-12">
-            @include('partials.localite-selects', [
-              'localites' => $localites,
-              'requis' => false,
-              'valeurs' => ['region_id' => $f['region_id'], 'province_id' => $f['province_id'], 'commune_id' => $f['commune_id']],
-              'colonnes' => ['region_id' => 'col-sm-4', 'province_id' => 'col-sm-4', 'commune_id' => 'col-sm-4'],
-            ])
+          <div class="col-sm-6 col-lg-4">
+            @include('parrainage.selection._filtre-localites', ['localites' => $localites, 'regions' => $f['regions'], 'provinces' => $f['provinces']])
           </div>
         </div>
         <div class="d-flex flex-wrap justify-content-end align-items-center gap-2 mt-2">
@@ -314,8 +312,11 @@
                 data-confirm="Ajouter les {{ $nbAjoutables }} OEV éligibles correspondant aux filtres (coût estimé : {{ Montant::fcfa($estimation['pris_en_charge']) }}) ? Ils seront retenus du besoin le plus urgent au moins urgent tant que l’enveloppe et les quotas le permettent, les autres iront en liste d’attente.">
             @csrf
             <input type="hidden" name="tous" value="1">
-            @foreach (array_filter($f, fn ($v) => $v !== null && $v !== '') as $cle => $valeur)
-              <input type="hidden" name="{{ $cle }}" value="{{ $valeur }}">
+            {{-- Mêmes filtres que la recherche, y compris les choix multiples --}}
+            @foreach (array_filter($f, fn ($v) => $v !== null && $v !== '' && $v !== []) as $cle => $valeur)
+              @foreach ((array) $valeur as $element)
+                <input type="hidden" name="{{ is_array($valeur) ? $cle . '[]' : $cle }}" value="{{ $element }}">
+              @endforeach
             @endforeach
             <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-plus-square-dotted" aria-hidden="true"></i> Tout ajouter ({{ $nbAjoutables }})</button>
           </form>
@@ -479,6 +480,7 @@
       var minuterie;
       formulaire.addEventListener('change', function (e) {
         if (!e.target.matches('input, select')) { return; }
+        if (e.target.closest('[data-multi]')) { e.target.closest('[data-multi]').dataset.modifie = '1'; return; }
         clearTimeout(minuterie);
         envoyerAuto(formulaire, e.target);
       });
@@ -496,6 +498,20 @@
         filtres.querySelectorAll('input, select').forEach(function (c) { if (!c.value) { c.disabled = true; } });
       });
       brancherAuto(filtres, 700);
+      filtres.querySelectorAll('[data-multi]').forEach(function (liste) {
+        liste.addEventListener('hidden.bs.dropdown', function () {
+          if (liste.dataset.modifie) { envoyerAuto(filtres, liste.querySelector('[data-bs-toggle]')); }
+        });
+      });
+      // Localité : les provinces d'une région ne se choisissent qu'une fois la région cochée
+      filtres.querySelectorAll('[data-region]').forEach(function (bloc) {
+        var region = bloc.querySelector('[data-region-case]');
+        var provinces = bloc.querySelector('[data-provinces]');
+        region.addEventListener('change', function () {
+          provinces.hidden = !region.checked;
+          provinces.querySelectorAll('input').forEach(function (c) { c.disabled = !region.checked; if (!region.checked) { c.checked = false; } });
+        });
+      });
     }
 
     // Montants estimatifs : enregistrés automatiquement

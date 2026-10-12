@@ -85,7 +85,7 @@ class SelectionParrainageController extends Controller
             'nbAjoutables' => $nbAjoutables,
             'estimation' => $estimation,
             'filtres' => $filtres,
-            'nbFiltres' => count(array_filter($filtres, fn ($v) => $v !== null && $v !== '')),
+            'nbFiltres' => count(array_filter($filtres, fn ($v) => $v !== null && $v !== '' && $v !== [])),
             'budget' => $budget,
             'regions' => Region::orderBy('nom')->get(['id', 'nom']),
             'localites' => $perimetre->filtrerArborescence(Region::arborescence()),
@@ -203,28 +203,36 @@ class SelectionParrainageController extends Controller
             ->with('error', "La session est « {$session->libelleEtat()} » : sa liste est figée.");
     }
 
-    /** Filtres de recherche des éligibles, limités aux valeurs connues. */
+    /**
+     * Filtres de recherche des éligibles, limités aux valeurs connues. Sauf la recherche, l'âge et
+     * l'éligibilité, chaque filtre accepte plusieurs valeurs (ex : plusieurs régions ou vulnérabilités).
+     */
     private function lireFiltres(Request $request): array
     {
         $choix = fn (string $cle, array $liste) => array_key_exists((string) $request->input($cle), $liste) ? (string) $request->input($cle) : null;
+        $plusieurs = fn (string $cle, array $liste) => array_values(array_unique(array_filter(
+            array_map('strval', (array) $request->input($cle, [])),
+            fn ($v) => array_key_exists($v, $liste),
+        )));
+        $identifiants = fn (string $cle) => array_values(array_unique(array_filter(array_map('intval', (array) $request->input($cle, [])))));
         $entier = fn (string $cle, int $max) => is_numeric($request->input($cle)) ? min($max, max(0, (int) $request->input($cle))) : null;
 
         return [
             'q' => trim((string) $request->input('q')) ?: null,
-            'type' => $choix('type', [SessionParrainage::TYPE_SCOLAIRE => 1, SessionParrainage::TYPE_FORMATION => 1]),
-            'region_id' => $entier('region_id', PHP_INT_MAX) ?: null,
-            'province_id' => $entier('province_id', PHP_INT_MAX) ?: null,
-            'commune_id' => $entier('commune_id', PHP_INT_MAX) ?: null,
-            'sexe' => $choix('sexe', Oev::SEXES),
+            'type' => $plusieurs('type', [SessionParrainage::TYPE_SCOLAIRE => 1, SessionParrainage::TYPE_FORMATION => 1]),
+            // Régions entières, ou seulement certaines provinces de ces régions
+            'regions' => $identifiants('regions'),
+            'provinces' => $identifiants('provinces'),
+            'sexe' => $plusieurs('sexe', Oev::SEXES),
             'age_min' => $entier('age_min', 25),
             'age_max' => $entier('age_max', 25),
-            'statut' => $choix('statut', Oev::STATUTS),
-            'vulnerabilite' => $choix('vulnerabilite', Oev::VULNERABILITES),
-            'handicap' => $choix('handicap', ['1' => 1, '0' => 1]),
-            'niveau_priorite' => $choix('niveau_priorite', Oev::NIVEAUX),
-            'scolarite' => $choix('scolarite', SelectionParrainage::SITUATIONS),
-            'niveau_etude' => $choix('niveau_etude', Oev::NIVEAUX_ETUDE),
-            'groupe_population' => $choix('groupe_population', Oev::GROUPES_POPULATION),
+            'statut' => $plusieurs('statut', Oev::STATUTS),
+            'vulnerabilite' => $plusieurs('vulnerabilite', Oev::VULNERABILITES),
+            'handicap' => $plusieurs('handicap', ['1' => 1, '0' => 1]),
+            'niveau_priorite' => $plusieurs('niveau_priorite', Oev::NIVEAUX),
+            'scolarite' => $plusieurs('scolarite', SelectionParrainage::SITUATIONS),
+            'niveau_etude' => $plusieurs('niveau_etude', Oev::NIVEAUX_ETUDE),
+            'groupe_population' => $plusieurs('groupe_population', Oev::GROUPES_POPULATION),
             'eligibilite' => $choix('eligibilite', ['oui' => 1, 'non' => 1]),
         ];
     }

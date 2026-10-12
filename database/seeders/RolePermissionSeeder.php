@@ -43,6 +43,8 @@ class RolePermissionSeeder extends Seeder
             'enregistrer appuis',
             // Suivi de fin d'année des parrainés : le DP (sa province) et le niveau central
             'suivre parrainages',
+            // Journal d'audit : administrateurs (superAdmin et administrateur reçoivent toutes les permissions)
+            'voir journal',
         ];
 
         foreach ($permissions as $permission) {

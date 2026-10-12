@@ -9,7 +9,17 @@ use App\Models\Signalement;
 use App\Models\SiteSetting;
 use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
+use App\Listeners\JournalAudit;
+use App\Observers\AuditObserver;
 use Carbon\Carbon;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Support\Facades\Event;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\RoleDetachedEvent;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
@@ -35,6 +45,19 @@ class AppServiceProvider extends ServiceProvider
 
         // Dates relatives en français (« il y a 2 heures »)
         Carbon::setLocale('fr');
+
+        // Journal d'audit : enregistrements sensibles, connexions, rôles et permissions
+        foreach (AuditObserver::MODELES as $modele) {
+            $modele::observe(AuditObserver::class);
+        }
+        config(['permission.events_enabled' => true]);
+        Event::listen(Login::class, [JournalAudit::class, 'connexion']);
+        Event::listen(Logout::class, [JournalAudit::class, 'deconnexion']);
+        Event::listen(Failed::class, [JournalAudit::class, 'echec']);
+        Event::listen(RoleAttachedEvent::class, [JournalAudit::class, 'roleAttribue']);
+        Event::listen(RoleDetachedEvent::class, [JournalAudit::class, 'roleRetire']);
+        Event::listen(PermissionAttachedEvent::class, [JournalAudit::class, 'permissionAttribuee']);
+        Event::listen(PermissionDetachedEvent::class, [JournalAudit::class, 'permissionRetiree']);
 
         // Pastilles rouges des modules « Signalements » (zone de l'utilisateur) et « Gestion de plainte »,
         // calculées seulement pour les modules auxquels l'utilisateur a accès

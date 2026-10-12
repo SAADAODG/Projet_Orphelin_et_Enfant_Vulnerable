@@ -8,6 +8,7 @@ use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesactivationOevController;
 use App\Http\Controllers\ExtractionController;
+use App\Http\Controllers\JournalController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
@@ -223,6 +224,12 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
         Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
         Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+    });
+
+    // Journal d'audit : consultation et export (administrateurs)
+    Route::middleware('can:voir journal')->group(function () {
+        Route::get('/journal', [JournalController::class, 'index'])->name('journal.index');
+        Route::get('/journal/export', [JournalController::class, 'export'])->name('journal.export');
     });
 
     // Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)

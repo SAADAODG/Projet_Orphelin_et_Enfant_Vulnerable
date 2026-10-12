@@ -46,13 +46,12 @@
       <div>
         <p class="eyebrow mb-1">Contrôle</p>
         <h1 class="h3 mb-1">Filtrage et extraction</h1>
-        <p class="text-muted mb-0">Combinez les critères pour retrouver des dossiers d’enfants, puis exportez le résultat (fichier CSV lisible dans Excel).</p>
       </div>
     </div>
     <div class="heading-actions">
-      <a class="btn btn-success {{ ($synthese->total ?? 0) ? '' : 'disabled' }}" href="{{ route('extraction.export', $requeteActuelle) }}" @if (! ($synthese->total ?? 0)) aria-disabled="true" @endif>
-        <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Exporter ({{ $synthese->total ?? 0 }})
-      </a>
+      <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#extraireModal" @disabled(! ($synthese->total ?? 0))>
+        <i class="bi bi-download" aria-hidden="true"></i> Extraire ({{ $synthese->total ?? 0 }})
+      </button>
     </div>
   </div>
 
@@ -246,6 +245,60 @@
     @endif
   </section>
 </div>
+
+{{-- Extraction : choix des données à faire figurer, puis Excel ou PDF (avec les filtres de la recherche) --}}
+<div class="modal fade" id="extraireModal" tabindex="-1" aria-labelledby="extraireModalTitre" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <form method="GET" action="{{ route('extraction.export') }}" id="formExtraction">
+        @foreach ($requeteActuelle as $cle => $valeur)
+          @continue(in_array($cle, ['page', 'colonnes', 'format'], true))
+          @foreach ((array) $valeur as $element)
+            <input type="hidden" name="{{ is_array($valeur) ? $cle . '[]' : $cle }}" value="{{ $element }}">
+          @endforeach
+        @endforeach
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="extraireModalTitre"><i class="bi bi-download me-1" aria-hidden="true"></i> Extraire {{ $synthese->total ?? 0 }} dossier(s)</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <span class="fw-semibold">Cochez les données à afficher</span>
+            <span class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-cocher="tout">Tout cocher</button>
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-cocher="rien">Tout décocher</button>
+            </span>
+          </div>
+          <div class="row g-3">
+            @foreach ($groupesColonnes as $groupe => $libelles)
+              <div class="col-sm-6 col-lg-4">
+                <fieldset class="ext-groupe" data-groupe-colonnes>
+                  <legend class="ext-groupe-titre mb-2 w-100 d-flex justify-content-between">
+                    <span>{{ $groupe }}</span>
+                    <button class="btn btn-link btn-sm p-0" type="button" data-cocher-groupe>Tout</button>
+                  </legend>
+                  @foreach ($libelles as $libelle)
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="colonnes[]" value="{{ $libelle }}" id="col-{{ $loop->parent->index }}-{{ $loop->index }}"
+                             @checked(in_array($libelle, ExtractionController::COLONNES_PAR_DEFAUT, true))>
+                      <label class="form-check-label" for="col-{{ $loop->parent->index }}-{{ $loop->index }}">{{ $libelle }}</label>
+                    </div>
+                  @endforeach
+                </fieldset>
+              </div>
+            @endforeach
+          </div>
+        </div>
+        <div class="modal-footer">
+          <span class="small text-muted me-auto" data-nb-colonnes></span>
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Annuler</button>
+          <button class="btn btn-outline-danger" type="submit" name="format" value="pdf"><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
+          <button class="btn btn-success" type="submit" name="format" value="xlsx"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Excel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -256,6 +309,32 @@
       if (e.ctrlKey || e.metaKey) { window.open(ligne.dataset.href, '_blank'); } else { window.location = ligne.dataset.href; }
     });
   });
+  // Fenêtre d'extraction : cocher / décocher tout ou un groupe, nombre de données choisies
+  (function () {
+    var formulaire = document.getElementById('formExtraction');
+    if (!formulaire) { return; }
+    var cases = formulaire.querySelectorAll('input[name="colonnes[]"]');
+    var compteur = formulaire.querySelector('[data-nb-colonnes]');
+    var boutons = formulaire.querySelectorAll('button[name="format"]');
+    var maj = function () {
+      var n = formulaire.querySelectorAll('input[name="colonnes[]"]:checked').length;
+      compteur.textContent = n + ' donnée(s) choisie(s)';
+      boutons.forEach(function (b) { b.disabled = n === 0; });
+    };
+    formulaire.querySelectorAll('[data-cocher]').forEach(function (b) {
+      b.addEventListener('click', function () { cases.forEach(function (c) { c.checked = b.dataset.cocher === 'tout'; }); maj(); });
+    });
+    formulaire.querySelectorAll('[data-cocher-groupe]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var groupe = b.closest('[data-groupe-colonnes]').querySelectorAll('input[type="checkbox"]');
+        var toutCoche = Array.prototype.every.call(groupe, function (c) { return c.checked; });
+        groupe.forEach(function (c) { c.checked = !toutCoche; });
+        maj();
+      });
+    });
+    formulaire.addEventListener('change', maj);
+    maj();
+  })();
   // URL plus lisible : les filtres laissés vides ne sont pas envoyés
   document.getElementById('formFiltres').addEventListener('submit', function () {
     this.querySelectorAll('input, select').forEach(function (champ) { if (!champ.value) { champ.disabled = true; } });

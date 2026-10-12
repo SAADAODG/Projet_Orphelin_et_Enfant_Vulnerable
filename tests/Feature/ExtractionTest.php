@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Models\Commune;
+use App\Models\JournalActivite;
 use App\Models\Oev;
 use App\Models\User;
 use Database\Seeders\CommuneSeeder;
 use Database\Seeders\LocaliteSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class ExtractionTest extends TestCase
@@ -99,28 +102,55 @@ class ExtractionTest extends TestCase
         $this->enfant(['nom' => 'AILLEURS'], $this->ailleurs);
 
         $this->actingAs($this->dp)->get(route('extraction.index'))->assertOk()->assertSee('CHEZ_MOI')->assertDontSee('AILLEURS');
-        $csv = $this->get(route('extraction.export'))->streamedContent();
-        $this->assertStringContainsString('CHEZ_MOI', $csv);
-        $this->assertStringNotContainsString('AILLEURS', $csv);
+        $contenu = $this->classeur($this->get(route('extraction.export', ['format' => 'xlsx', 'colonnes' => ['Nom']])));
+        $this->assertStringContainsString('CHEZ_MOI', $contenu);
+        $this->assertStringNotContainsString('AILLEURS', $contenu);
     }
 
-    public function test_l_export_csv_reprend_les_filtres(): void
+    /** Contenu de toutes les cellules du classeur Excel téléchargé. */
+    private function classeur(TestResponse $reponse): string
+    {
+        $chemin = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($chemin, $reponse->streamedContent());
+        $feuille = IOFactory::load($chemin)->getActiveSheet();
+        @unlink($chemin);
+
+        return collect($feuille->toArray())->flatten()->filter()->implode(' | ');
+    }
+
+    public function test_l_export_excel_reprend_les_filtres_et_les_colonnes_choisies(): void
     {
         $this->enfant(['nom' => 'GARCON', 'sexe' => 'M', 'gestionnaire_nom' => 'KABORE Issa']);
         $this->enfant(['nom' => 'FILLE']);
 
-        $reponse = $this->actingAs($this->central)->get(route('extraction.export', ['sexe' => 'M']));
-        $reponse->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
-        $csv = $reponse->streamedContent();
+        $reponse = $this->actingAs($this->central)->get(route('extraction.export', [
+            'sexe' => 'M', 'format' => 'xlsx', 'colonnes' => ['Nom', 'Sexe', 'Gestionnaire du cas', 'Colonne inconnue'],
+        ]));
+        $reponse->assertOk()->assertDownload();
+        $contenu = $this->classeur($reponse);
 
-        $this->assertStringStartsWith("\xEF\xBB\xBF", $csv, 'BOM UTF-8 pour Excel');
-        $lignes = array_values(array_filter(explode("\n", trim($csv))));
-        $this->assertCount(2, $lignes, 'En-tête + un seul dossier');
-        $this->assertStringContainsString('"Code OEV";"N° de dossier"', $lignes[0]);
-        $this->assertStringContainsString('GARCON', $lignes[1]);
-        $this->assertStringContainsString('Masculin', $lignes[1]);
-        $this->assertStringContainsString('KABORE Issa', $lignes[1]);
-        $this->assertStringNotContainsString('FILLE', $csv);
+        $this->assertStringContainsString('Nom | Sexe | Gestionnaire du cas', $contenu);
+        $this->assertStringContainsString('GARCON | Masculin | KABORE Issa', $contenu);
+        $this->assertStringNotContainsString('FILLE', $contenu);
+        $this->assertStringNotContainsString('Code OEV', $contenu, 'Seules les colonnes cochées sont extraites');
+        $this->assertStringNotContainsString('Colonne inconnue', $contenu);
+
+        $journal = JournalActivite::where('action', 'extraction.oev')->sole();
+        $this->assertSame(1, $journal->details['lignes']);
+        $this->assertSame(['Nom', 'Sexe', 'Gestionnaire du cas'], $journal->details['colonnes']);
+    }
+
+    public function test_l_export_pdf_et_ses_controles(): void
+    {
+        $this->enfant(['nom' => 'GARCON', 'sexe' => 'M']);
+
+        $this->actingAs($this->central)->get(route('extraction.export', ['format' => 'pdf', 'colonnes' => ['Nom', 'Âge']]))
+            ->assertOk()->assertHeader('content-type', 'application/pdf');
+        // Sans donnée cochée, ou format inconnu (plus de CSV) : refusé
+        $this->get(route('extraction.export', ['format' => 'xlsx']))->assertSessionHasErrors('colonnes');
+        $this->get(route('extraction.export', ['format' => 'csv', 'colonnes' => ['Nom']]))->assertSessionHasErrors('format');
+        // La fenêtre propose les données regroupées comme la fiche
+        $this->get(route('extraction.index'))->assertOk()->assertSee('extraireModal')->assertSee('Parents et tuteur')->assertSee('Téléphone du tuteur');
     }
 
     public function test_un_utilisateur_sans_droit_n_y_a_pas_acces(): void

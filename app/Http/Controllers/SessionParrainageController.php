@@ -153,7 +153,6 @@ class SessionParrainageController extends Controller
                     ->get()
                 : collect(),
             'nbAttente' => $session->beneficiaires()->enAttente()->count(),
-            'journal' => JournalActivite::de($session)->with('utilisateur')->limit(20)->get(),
         ]);
     }
 
