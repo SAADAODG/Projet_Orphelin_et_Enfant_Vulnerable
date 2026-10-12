@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'vulnerabilites', 'vulnerabilite_precision',
     'situation_scolaire', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision',
     'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
+    'souhait_avenir', 'souhait_avenir_precision',
     'types_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
     'source_revenu', 'niveau_revenu', 'logement',
     'date_identification', 'identifie_par', 'niveau_priorite',
@@ -223,6 +224,22 @@ class Oev extends Model
     ];
 
     public const ETATS_FORMATION = ['en_cours' => 'En cours', 'achevee' => 'Achevée'];
+
+    /** Souhait d'un enfant ni scolarisé ni en formation professionnelle (oriente un futur parrainage). */
+    public const SOUHAITS_AVENIR = [
+        'ecole' => 'Aller à l’école',
+        'formation' => 'Suivre une formation professionnelle',
+        'aucun' => 'Ni l’un ni l’autre pour le moment',
+        'ne_sait_pas' => 'Ne sait pas encore',
+    ];
+
+    /** L'enfant n'est ni scolarisé ni en formation professionnelle en cours : son souhait est demandé. */
+    public static function sansScolariteNiFormation(?string $situationScolaire, mixed $formationProfessionnelle, ?string $formationEtat): bool
+    {
+        $enFormation = in_array($formationProfessionnelle, [true, 1, '1'], true) && $formationEtat !== 'achevee';
+
+        return $situationScolaire !== null && $situationScolaire !== 'scolarise' && ! $enFormation;
+    }
 
     public const TYPES_HANDICAP = [
         'auditif' => 'Déficience auditive',

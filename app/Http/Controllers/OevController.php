@@ -564,6 +564,7 @@ class OevController extends Controller implements HasMiddleware
         $aEteScolarise = in_array($situation, ['scolarise', 'descolarise'], true);
         $nonScolarise = in_array($situation, ['non_scolarise', 'descolarise'], true);
         $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
+        $sansActivite = Oev::sansScolariteNiFormation($situation, $entree('formation_professionnelle'), $entree('formation_etat'));
         $scolariseRequis = Rule::requiredIf($estScolarise);
 
         // Parent(s) qui s'occupent de l'enfant : ils doivent être déclarés vivants, et leurs nom et prénoms
@@ -755,6 +756,9 @@ class OevController extends Controller implements HasMiddleware
             'formation_duree_mois' => ['nullable', 'required_if:formation_professionnelle,1', 'integer', 'min:1', 'max:120'],
             // Formation achevée : la durée reçue est la durée totale (non demandée)
             'formation_duree_recue_mois' => ['nullable', Rule::requiredIf($entree('formation_professionnelle') === '1' && $entree('formation_etat') === 'en_cours'), 'integer', 'min:0', $dureeRecueCoherente],
+            // Ni scolarisé ni en formation : son souhait (école, formation…) oriente un futur parrainage
+            'souhait_avenir' => ['nullable', Rule::requiredIf($sansActivite), Rule::in(array_keys(Oev::SOUHAITS_AVENIR))],
+            'souhait_avenir_precision' => ['nullable', 'string', 'max:150'],
 
             'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
@@ -807,6 +811,7 @@ class OevController extends Controller implements HasMiddleware
             'performance_difficultes.required' => 'Expliquez les difficultés scolaires de l’enfant.',
             'formation_duree_mois.required_if' => 'Indiquez la durée de la formation (en mois).',
             'formation_duree_recue_mois.required' => 'Indiquez la durée de formation déjà reçue (en mois).',
+            'souhait_avenir.required' => 'L’enfant n’est ni à l’école ni en formation : indiquez ce qu’il souhaite (école, formation…).',
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
             'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
@@ -847,6 +852,9 @@ class OevController extends Controller implements HasMiddleware
         $effacer(! in_array($validated['situation_scolaire'], ['non_scolarise', 'descolarise'], true), ['raison_non_scolarisation', 'raison_non_scolarisation_precision']);
         $effacer(($validated['raison_non_scolarisation'] ?? null) !== 'autre', ['raison_non_scolarisation_precision']);
         $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois']);
+        // Souhait seulement pour un enfant ni scolarisé ni en formation ; la formation souhaitée seulement s'il choisit la formation
+        $effacer(! $sansActivite, ['souhait_avenir', 'souhait_avenir_precision']);
+        $effacer(($validated['souhait_avenir'] ?? null) !== 'formation', ['souhait_avenir_precision']);
         // Formation achevée : toute la durée a été reçue
         if (($validated['formation_etat'] ?? null) === 'achevee') {
             $validated['formation_duree_recue_mois'] = $validated['formation_duree_mois'];

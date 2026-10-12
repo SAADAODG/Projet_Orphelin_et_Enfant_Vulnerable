@@ -45,7 +45,8 @@
           'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact'],
     4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
           'appreciation', 'performance_scolaire', 'performance_difficultes', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
-          'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois'],
+          'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
+          'souhait_avenir', 'souhait_avenir_precision'],
     5 => array_merge(array_keys(Oev::DOCUMENTS), ['nom_structure_rib']),
   ];
   $etapeInitiale = 1;
@@ -66,6 +67,9 @@
     'certificat_scolarite' => 'situation_scolaire:scolarise',
     'cnib_tuteur' => 'tuteur_a_cnib:1',
   ];
+  // Enfant ni scolarisé ni en formation (en cours) : son souhait est demandé (mêmes règles que Oev::sansScolariteNiFormation)
+  $sansScolarite = 'situation_scolaire:non_scolarise|descolarise|non_formelle|foyer_coranique';
+  $sansActivite = "{$sansScolarite}&&formation_professionnelle!:1||{$sansScolarite}&&formation_etat:achevee";
 
   // Limites de taille réelles (application ∩ configuration PHP du serveur)
   $maxFichiersKo = collect(Oev::DOCUMENTS)->keys()->mapWithKeys(fn ($t) => [$t => Oev::tailleMaxFichierKo($t)])->all();
@@ -621,6 +625,22 @@
               </div>
             </div>
           </div>
+
+          {{-- Ni scolarisé ni en formation : le souhait de l'enfant oriente un futur parrainage (inscription à l'école ou formation) --}}
+          <div class="col-12" data-si="{{ $sansActivite }}">
+            <div class="oev-bloc">
+              <div class="oev-bloc-titre"><i class="bi bi-signpost" aria-hidden="true"></i> Souhait de l’enfant</div>
+              <div class="row g-3">
+                <div class="col-lg-8">
+                  @include('oevs.champs._choix', ['nom' => 'souhait_avenir', 'label' => 'L’enfant n’est ni à l’école ni en formation : que souhaite-t-il ?', 'options' => Oev::SOUHAITS_AVENIR, 'valeur' => $v('souhait_avenir'), 'requis' => true,
+                    'aide' => 'Sa réponse oriente un futur parrainage : inscription à l’école ou formation professionnelle.'])
+                </div>
+                <div class="col-lg-4" data-si="souhait_avenir:formation">
+                  @include('oevs.champs._texte', ['nom' => 'souhait_avenir_precision', 'label' => 'Quelle formation ? (facultatif)', 'valeur' => $v('souhait_avenir_precision'), 'max' => 150, 'placeholder' => 'ex : couture, mécanique…'])
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -723,6 +743,8 @@
               ['Formation professionnelle', 'formation_professionnelle'], ['État', 'formation_etat', null, 'formation_professionnelle:1'],
               ['Filière', 'formation_filiere', null, 'formation_professionnelle:1'], ['Type de centre', 'formation_type_centre', null, 'formation_professionnelle:1'],
               ['Durée', 'formation_duree_mois', 'mois', 'formation_professionnelle:1'], ['Durée déjà reçue', 'formation_duree_recue_mois', 'mois', 'formation_professionnelle:1&&formation_etat:en_cours'],
+              ['Souhait de l’enfant', 'souhait_avenir', null, $sansActivite],
+              ['Formation souhaitée', 'souhait_avenir_precision', null, "{$sansScolarite}&&souhait_avenir:formation"],
             ]],
           ];
         @endphp

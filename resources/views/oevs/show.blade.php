@@ -428,6 +428,13 @@
               {!! $infoSi('Type de centre', $oev->formation_type_centre ? $oev->libelle('formation_type_centre', Oev::TYPES_ETABLISSEMENT) : null) !!}
               {!! $infoSi('Durée de la formation', $oev->formation_duree_mois ? $oev->formation_duree_mois . ' mois' : null) !!}
               {!! $infoSi('Durée déjà reçue', $oev->formation_duree_recue_mois !== null ? $oev->formation_duree_recue_mois . ' mois' : null) !!}
+              {!! $infoSi('Frais de formation', $oev->frais_formation !== null ? number_format($oev->frais_formation, 0, ',', ' ') . ' FCFA' : null) !!}
+            </div>
+          @endif
+          @if ($oev->souhait_avenir)
+            <div class="alert alert-info py-2 small mt-3 mb-0">
+              <i class="bi bi-signpost me-1" aria-hidden="true"></i>
+              <strong>Souhait de l’enfant :</strong> {{ $oev->libelle('souhait_avenir', Oev::SOUHAITS_AVENIR) }}{{ $oev->souhait_avenir_precision ? ' — ' . $oev->souhait_avenir_precision : '' }}
             </div>
           @endif
         </section>
