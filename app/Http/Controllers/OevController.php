@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BeneficiaireSession;
 use App\Services\Parrainage\ParcoursScolaire;
 use App\Models\Commune;
+use App\Models\Ecole;
 use App\Models\Oev;
 use App\Models\OevDocument;
 use App\Models\Region;
@@ -71,6 +72,7 @@ class OevController extends Controller implements HasMiddleware
         'moyenne_annuelle' => 'moyenne annuelle',
         'appreciation' => 'appréciation',
         'etablissement_actuel' => 'établissement de l’année en cours',
+        'ecole_id' => 'établissement de l’année en cours',
         'type_etablissement' => 'public ou privé',
         'classe' => 'classe',
         'frais_scolarite' => 'frais de scolarité',
@@ -567,6 +569,14 @@ class OevController extends Controller implements HasMiddleware
         $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
         $sansActivite = Oev::sansScolariteNiFormation($situation, $entree('formation_professionnelle'), $entree('formation_etat'));
         $scolariseRequis = Rule::requiredIf($estScolarise);
+        // École de l'année en cours : choisie parmi celles de la commune de l'enfant (Paramètres > Écoles),
+        // ou « autre » pour un établissement hors liste, alors saisi
+        $ecoleDeLaListe = filled($entree('ecole_id')) && $entree('ecole_id') !== 'autre';
+        $ecoleDeLaCommune = function (string $attribut, $valeur, \Closure $echec) use ($entree, $estScolarise): void {
+            if ($estScolarise && $valeur !== 'autre' && ! Ecole::whereKey($valeur)->where('commune_id', $entree('commune_id'))->exists()) {
+                $echec('Choisissez l’établissement dans la liste des écoles de la commune de l’enfant.');
+            }
+        };
 
         // Parent(s) qui s'occupent de l'enfant : ils doivent être déclarés vivants, et leurs nom et prénoms
         // (saisis dans la partie « Parents ») sont repris comme ceux du tuteur.
@@ -745,7 +755,8 @@ class OevController extends Controller implements HasMiddleware
             'performance_scolaire' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::PERFORMANCES_SCOLAIRES))],
             'performance_difficultes' => ['nullable', Rule::requiredIf($estScolarise && $entree('performance_scolaire') === 'difficultes'), 'string', 'max:255'],
             'systeme_educatif' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
-            'etablissement_actuel' => ['nullable', $scolariseRequis, 'string', 'max:255'],
+            'ecole_id' => ['nullable', $ecoleDeLaCommune],
+            'etablissement_actuel' => ['nullable', Rule::requiredIf($estScolarise && ! $ecoleDeLaListe), 'string', 'max:255'],
             'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
             // La classe doit appartenir au niveau d'étude choisi (ex. pas de « 6e » en primaire)
             'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($entree('niveau_etude')))), $classeActuelleCoherente],
@@ -859,6 +870,13 @@ class OevController extends Controller implements HasMiddleware
         // Formation achevée : toute la durée a été reçue
         if (($validated['formation_etat'] ?? null) === 'achevee') {
             $validated['formation_duree_recue_mois'] = $validated['formation_duree_mois'];
+        }
+
+        // École de la liste : son nom est repris comme établissement fréquenté ; sinon établissement saisi, sans école rattachée
+        if ($validated['situation_scolaire'] === 'scolarise' && filled($validated['ecole_id'] ?? null) && $validated['ecole_id'] !== 'autre') {
+            $validated['etablissement_actuel'] = Ecole::findOrFail($validated['ecole_id'])->nom;
+        } else {
+            $validated['ecole_id'] = null;
         }
 
         // Lieu de naissance saisi librement : l'ancien rattachement à une commune est abandonné

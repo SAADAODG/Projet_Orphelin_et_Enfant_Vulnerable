@@ -175,7 +175,7 @@
           </a>
           <a class="nav-link {{ request()->routeIs('parametres.*') ? 'active' : '' }}" href="{{ route('parametres.edit') }}" {{ request()->routeIs('parametres.*') ? 'aria-current="page"' : '' }}>
             <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
-            <span class="nav-text">Paramètres généraux</span>
+            <span class="nav-text">Paramètres</span>
           </a>
           @endcan
         </div>

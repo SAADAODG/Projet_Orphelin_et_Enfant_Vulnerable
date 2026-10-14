@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'code', 'nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif',
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
     'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation', 'performance_scolaire', 'performance_difficultes',
-    'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
+    'etablissement_actuel', 'ecole_id', 'type_etablissement', 'classe', 'frais_scolarite',
     'region_id', 'province_id', 'commune_id', 'village_id',
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
@@ -383,6 +383,12 @@ class Oev extends Model
     public function village(): BelongsTo
     {
         return $this->belongsTo(Village::class);
+    }
+
+    /** École fréquentée, choisie dans le référentiel (Paramètres > Écoles) ; son nom est aussi dans etablissement_actuel. */
+    public function ecole(): BelongsTo
+    {
+        return $this->belongsTo(Ecole::class);
     }
 
     /** Code OEV attribué à l'intégration, ex. OEV-2026-0001. */

@@ -105,6 +105,11 @@ class CommuneController extends Controller
                 ->with('error', "Impossible de supprimer « {$commune->nom} » : des villages y sont rattachés.");
         }
 
+        if ($commune->aDesEcoles()) {
+            return redirect()->route('localites.communes.index')
+                ->with('error', "Impossible de supprimer « {$commune->nom} » : des écoles y sont rattachées (Paramètres > Écoles).");
+        }
+
         $commune->delete();
 
         return redirect()->route('localites.communes.index')

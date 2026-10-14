@@ -15,8 +15,9 @@
     </div>
   </div>
 
+  @include('parametres._onglets')
 
-  <section class="row g-3">
+  <section class="row g-3 mt-0">
     <div class="col-12 col-xl-8">
       <form method="POST" action="{{ route('parametres.update') }}">
         @csrf

@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             LocaliteSeeder::class,
             CommuneSeeder::class,
             VillageSeeder::class,
+            EcoleSeeder::class,
             SiteSettingSeeder::class,
             QuickLinkSeeder::class,
             ServiceSeeder::class,

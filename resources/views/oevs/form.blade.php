@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @use('App\Models\Oev')
+@use('App\Models\Ecole')
 
 @php
   $edition = $oev->exists;
@@ -18,6 +19,8 @@
   // Lieu de naissance : id de commune, « autre » si un lieu hors référentiel est saisi
   // Lieu de naissance saisi librement (un ancien dossier rattaché à une commune affiche son nom)
   $lieuNaissance = old('lieu_naissance', $oev->lieuDeNaissance());
+  // École en cours : id d'une école du référentiel, « autre » si l'établissement a été saisi (hors liste ou ancien dossier)
+  $ecoleChoisie = (string) old('ecole_id', $oev->ecole_id ?? ($oev->etablissement_actuel ? 'autre' : ''));
   $lieuProvenanceChoisi = old('lieu_provenance_commune_id', $oev->lieu_provenance_commune_id ?? ($oev->lieu_provenance ? 'autre' : ''));
   // Gestionnaire du cas : l'agent qui saisit le dossier, par défaut
   $gestionnaireNom = old('gestionnaire_nom', $oev->exists ? $oev->gestionnaire_nom : auth()->user()->name);
@@ -44,7 +47,7 @@
           'source_revenu', 'niveau_revenu', 'logement', 'date_identification', 'identifie_par', 'niveau_priorite',
           'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact'],
     4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
-          'appreciation', 'performance_scolaire', 'performance_difficultes', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
+          'appreciation', 'performance_scolaire', 'performance_difficultes', 'ecole_id', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
           'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
           'souhait_avenir', 'souhait_avenir_precision'],
     5 => array_merge(array_keys(Oev::DOCUMENTS), ['nom_structure_rib']),
@@ -544,7 +547,19 @@
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Année en cours</div>
               <div class="row g-3">
-                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'etablissement_actuel', 'label' => 'Établissement fréquenté', 'valeur' => $v('etablissement_actuel'), 'max' => 255, 'requis' => true, 'erreur' => 'L’établissement est obligatoire.'])</div>
+                <div class="col-md-6">
+                  {{-- Écoles de la commune de l'enfant (étape 1), chargées à la demande ; « Autre » pour un établissement hors liste --}}
+                  <label class="form-label" for="ecole_id">Établissement fréquenté <span class="text-danger">*</span></label>
+                  <input class="form-control form-control-sm mb-1" type="search" placeholder="Rechercher une école dans la liste…" aria-label="Rechercher une école" data-filtre-ecoles hidden>
+                  <select class="form-select @error('ecole_id') is-invalid @enderror" id="ecole_id" name="ecole_id" required
+                          data-url="{{ route('localites.ecoles-commune', '__COMMUNE__') }}" data-valeur="{{ $ecoleChoisie }}">
+                    <option value="">Choisissez d’abord la commune de l’enfant (étape 1)</option>
+                    <option value="autre" @selected($ecoleChoisie === 'autre')>Autre établissement (non répertorié)</option>
+                  </select>
+                  <div class="form-text" data-aide-ecoles></div>
+                  <div class="invalid-feedback">{{ $errors->first('ecole_id') ?: 'L’établissement est obligatoire.' }}</div>
+                </div>
+                <div class="col-md-6" data-si="ecole_id:autre">@include('oevs.champs._texte', ['nom' => 'etablissement_actuel', 'label' => 'Nom de l’établissement', 'valeur' => $v('etablissement_actuel'), 'max' => 255, 'requis' => true, 'placeholder' => 'Établissement absent de la liste (lycée, collège, autre commune…)', 'erreur' => 'Saisissez le nom de l’établissement.'])</div>
                 <div class="col-md-6">@include('oevs.champs._choix', ['nom' => 'type_etablissement', 'label' => 'Public ou privé', 'options' => Oev::TYPES_ETABLISSEMENT, 'valeur' => $v('type_etablissement'), 'requis' => true])</div>
                 <div class="col-md-4">
                   <label class="form-label" for="systeme_educatif">Système éducatif <span class="text-danger">*</span></label>
@@ -735,7 +750,8 @@
               ['Classe précédente', 'classe_precedente', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
               ['Moyenne annuelle', 'moyenne_annuelle', 'moyenne', 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
               ['Appréciation', 'appreciation', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Établ. en cours', 'etablissement_actuel', null, 'situation_scolaire:scolarise'], ['Public / privé', 'type_etablissement', null, 'situation_scolaire:scolarise'],
+              ['Établ. en cours', 'ecole_id', null, 'situation_scolaire:scolarise'],
+              ['Nom de l’établissement', 'etablissement_actuel', null, 'situation_scolaire:scolarise&&ecole_id:autre'],['Public / privé', 'type_etablissement', null, 'situation_scolaire:scolarise'],
               ['Système éducatif', 'systeme_educatif', null, 'situation_scolaire:scolarise'], ['Classe', 'classe', null, 'situation_scolaire:scolarise'],
               ['Frais de scolarité', 'frais_scolarite', 'fcfa', 'situation_scolaire:scolarise'],
               ['Performances', 'performance_scolaire', null, 'situation_scolaire:scolarise'],
@@ -931,6 +947,81 @@ document.addEventListener('DOMContentLoaded', function () {
   // Champs dont la saisie modifie d'autres champs (affichage, barème, rappel du tuteur)
   var champsSuivis = ['etablissement_precedent', 'moyenne_annuelle', 'formation_duree_mois', 'mere_nom', 'mere_prenoms', 'pere_nom', 'pere_prenoms'];
   form.addEventListener('input', function (e) { if (champsSuivis.indexOf(e.target.id) !== -1) { majCoherence(); } });
+
+  /* ----- École en cours : écoles de la commune de l'enfant (Paramètres > Écoles), chargées à la demande ----- */
+  var champEcole = document.getElementById('ecole_id');
+  var champCommune = document.getElementById('commune_id');
+  var filtreEcoles = form.querySelector('[data-filtre-ecoles]');
+  var aideEcoles = form.querySelector('[data-aide-ecoles]');
+  var optionAutre = champEcole.querySelector('option[value="autre"]');
+  var ecolesParCommune = {};
+  var ecolesConnues = {};
+  // Choix d'une école : public / privé et système éducatif proposés d'après son statut et son type
+  var typeSelonStatut = @json(Ecole::TYPE_ETABLISSEMENT_OEV);
+  var systemeSelonType = @json(Ecole::SYSTEME_EDUCATIF_OEV);
+  function sansAccents(texte) { return texte.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(); }
+
+  function remplirEcoles(ecoles, valeur) {
+    champEcole.innerHTML = '';
+    champEcole.add(new Option(ecoles.length ? 'Choisir l’établissement…'
+      : champCommune.value ? 'Aucune école enregistrée pour cette commune : choisissez « Autre »' : 'Choisissez d’abord la commune de l’enfant (étape 1)', ''));
+    // Écoles groupées par CEB
+    var groupes = {};
+    ecoles.forEach(function (e) {
+      ecolesConnues[e.id] = e;
+      var ceb = e.ceb || 'Sans CEB';
+      if (!groupes[ceb]) {
+        groupes[ceb] = document.createElement('optgroup');
+        groupes[ceb].label = 'CEB ' + ceb;
+        champEcole.appendChild(groupes[ceb]);
+      }
+      groupes[ceb].appendChild(new Option(e.nom, e.id, false, String(e.id) === String(valeur)));
+    });
+    champEcole.appendChild(optionAutre);
+    optionAutre.selected = valeur === 'autre';
+    filtreEcoles.value = '';
+    filtreEcoles.hidden = ecoles.length < 15;
+    aideEcoles.textContent = ecoles.length ? ecoles.length + ' école(s) dans la commune. Établissement absent de la liste (lycée, autre commune…) : choisissez « Autre ».' : '';
+    majCoherence();
+  }
+  function chargerEcoles(valeur) {
+    var id = champCommune.value;
+    if (!id || ecolesParCommune[id]) { remplirEcoles(id ? ecolesParCommune[id] : [], valeur); return; }
+    champEcole.options[0].textContent = 'Chargement des écoles…';
+    fetch(champEcole.dataset.url.replace('__COMMUNE__', encodeURIComponent(id)), { headers: { 'Accept': 'application/json' } })
+      .then(function (reponse) { return reponse.ok ? reponse.json() : []; })
+      .catch(function () { return []; })
+      .then(function (ecoles) {
+        ecolesParCommune[id] = ecoles;
+        if (champCommune.value === id) { remplirEcoles(ecoles, valeur); }
+      });
+  }
+  chargerEcoles(champEcole.dataset.valeur);
+  // Changer de région, de province ou de commune change la liste (« Autre » reste choisi)
+  form.addEventListener('change', function (e) {
+    if (['region_id', 'province_id', 'commune_id'].indexOf(e.target.id) !== -1) { chargerEcoles(champEcole.value === 'autre' ? 'autre' : ''); }
+  });
+  champEcole.addEventListener('change', function () {
+    var ecole = ecolesConnues[champEcole.value];
+    if (!ecole) { return; }
+    var radioType = typeSelonStatut[ecole.statut] && document.getElementById('type_etablissement-' + typeSelonStatut[ecole.statut]);
+    if (radioType) { radioType.checked = true; }
+    if (systemeSelonType[ecole.type]) { document.getElementById('systeme_educatif').value = systemeSelonType[ecole.type]; }
+  });
+  // Recherche dans une longue liste (ex. Ouagadougou) : les écoles et CEB qui ne correspondent pas sont masquées
+  filtreEcoles.addEventListener('input', function () {
+    var terme = sansAccents(filtreEcoles.value.trim());
+    champEcole.querySelectorAll('optgroup').forEach(function (groupe) {
+      var cebCorrespond = sansAccents(groupe.label).indexOf(terme) !== -1;
+      var visibles = 0;
+      groupe.querySelectorAll('option').forEach(function (o) {
+        o.hidden = !(cebCorrespond || sansAccents(o.text).indexOf(terme) !== -1);
+        if (!o.hidden) { visibles++; }
+      });
+      groupe.hidden = visibles === 0;
+    });
+  });
+  filtreEcoles.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); champEcole.focus(); } });
 
   /* ----- Statut OEV déduit des parents (même règle que le serveur) ----- */
   var badgeStatut = form.querySelector('[data-statut-calcule]');

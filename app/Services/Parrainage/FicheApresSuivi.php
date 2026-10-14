@@ -20,7 +20,7 @@ class FicheApresSuivi
 {
     /** Champs de scolarité et de formation de la fiche que le suivi peut modifier. */
     public const CHAMPS = [
-        'situation_scolaire', 'niveau_etude', 'classe', 'systeme_educatif', 'etablissement_actuel', 'type_etablissement',
+        'situation_scolaire', 'niveau_etude', 'classe', 'systeme_educatif', 'etablissement_actuel', 'ecole_id', 'type_etablissement',
         'frais_scolarite', 'performance_scolaire', 'performance_difficultes',
         'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation',
         'raison_non_scolarisation', 'raison_non_scolarisation_precision',
@@ -29,7 +29,7 @@ class FicheApresSuivi
     ];
 
     /** Champs de l'école en cours, vidés quand l'enfant ne la fréquente plus. */
-    private const ECOLE_EN_COURS = ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes'];
+    private const ECOLE_EN_COURS = ['systeme_educatif', 'etablissement_actuel', 'ecole_id', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes'];
 
     /** Scolarité de la fiche à conserver avant le premier enregistrement d'un suivi. */
     public static function photographier(Oev $oev): array
@@ -100,6 +100,8 @@ class FicheApresSuivi
                 'raison_non_scolarisation_precision' => null,
                 // Établissement et frais de l'année prochaine, saisis au suivi
                 'etablissement_actuel' => $details['etablissement'] ?? ($avant['etablissement_actuel'] ?? null),
+                // Nouvel établissement saisi au suivi : il n'est plus rattaché à une école du référentiel
+                'ecole_id' => filled($details['etablissement'] ?? null) && $details['etablissement'] !== ($avant['etablissement_actuel'] ?? null) ? null : ($avant['ecole_id'] ?? null),
                 'type_etablissement' => $details['type_etablissement'] ?? ($avant['type_etablissement'] ?? null),
                 'frais_scolarite' => $details['frais'] ?? null,
             ];

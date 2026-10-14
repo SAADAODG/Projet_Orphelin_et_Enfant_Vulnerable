@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesactivationOevController;
+use App\Http\Controllers\EcoleController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\OevController;
@@ -218,6 +219,11 @@ Route::middleware('auth')->prefix('admin')->group(function () {
 
         Route::get('/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
         Route::put('/parametres', [ParametreController::class, 'update'])->name('parametres.update');
+        // Paramètres > Écoles : référentiel proposé dans le formulaire OEV (établissement fréquenté)
+        Route::prefix('parametres')->name('parametres.')->group(function () {
+            Route::post('/ecoles/import', [EcoleController::class, 'import'])->name('ecoles.import');
+            Route::resource('ecoles', EcoleController::class)->except('show');
+        });
         Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
         Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');
         Route::delete('/quick-links/{quickLink}', [QuickLinkController::class, 'destroy'])->name('quick-links.destroy');
@@ -234,6 +240,8 @@ Route::middleware('auth')->prefix('admin')->group(function () {
 
     // Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)
     Route::get('/localites/communes/{commune}/villages', [VillageController::class, 'parCommune'])->name('localites.villages-commune');
+    // Écoles d'une commune, chargées à la demande par le formulaire OEV (tout agent connecté)
+    Route::get('/localites/communes/{commune}/ecoles', [EcoleController::class, 'parCommune'])->name('localites.ecoles-commune');
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
