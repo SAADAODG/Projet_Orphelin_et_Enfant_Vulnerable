@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\JournalActivite;
 use App\Models\Parrain;
 use App\Models\Region;
@@ -10,7 +11,6 @@ use App\Services\Parrainage\ParrainageService;
 use App\Services\Parrainage\SourceSelection;
 use App\Services\Parrainage\TransitionSessionInvalide;
 use App\Support\Montant;
-use App\Support\Perimetre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +24,8 @@ use Illuminate\View\View;
  */
 class SessionParrainageController extends Controller
 {
+    use CloisonneParZone;
+
     public function __construct(
         private readonly ParrainageService $parrainage,
         private readonly SourceSelection $sourceSelection,
@@ -147,7 +149,7 @@ class SessionParrainageController extends Controller
             // OEV retenus sur la liste de la session (dans la zone de l'utilisateur), et taille de la liste d'attente
             'retenus' => $vue === 'informations'
                 ? $session->beneficiaires()->retenus()
-                    ->whereHas('oev', fn ($q) => Perimetre::pour($request->user())->appliquer($q))
+                    ->tap(fn ($q) => $this->cloisonner($q, 'oev'))
                     ->with(['oev.province', 'oev.commune', 'region', 'suivi'])
                     ->orderBy('id')
                     ->get()

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\AppuiPartenaire;
 use App\Models\JournalActivite;
 use App\Models\NatureAppui;
@@ -31,6 +32,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class AppuiPartenaireController extends Controller
 {
+    use CloisonneParZone;
+
     /** Colonnes du modèle d'import, dans l'ordre. */
     private const COLONNES_IMPORT = [
         'code_oev' => 'Code OEV (ex : OEV-2026-0001)',
@@ -59,11 +62,11 @@ class AppuiPartenaireController extends Controller
         ];
 
         $appuis = AppuiPartenaire::with(['oev.commune', 'parrain', 'nature'])
-            ->dansLePerimetreDe($request->user())
+            ->tap(fn ($q) => $this->cloisonner($q, 'oev'))
             ->when($filtres['q'] !== '', fn ($q) => $q->whereHas('oev', fn ($q) => $q->where(fn ($q) => $q
-                ->where('code', 'like', "%{$filtres['q']}%")
-                ->orWhere('nom', 'like', "%{$filtres['q']}%")
-                ->orWhere('prenom', 'like', "%{$filtres['q']}%"))))
+                ->whereLike('code', "%{$filtres['q']}%")
+                ->orWhereLike('nom', "%{$filtres['q']}%")
+                ->orWhereLike('prenom', "%{$filtres['q']}%"))))
             ->when($filtres['annee'] !== '', fn ($q) => $q->where('annee', $filtres['annee']))
             ->when($filtres['nature'], fn ($q) => $q->where('nature_appui_id', $filtres['nature']))
             ->when($filtres['parrain'], fn ($q) => $q->where('parrain_id', $filtres['parrain']))
@@ -153,9 +156,9 @@ class AppuiPartenaireController extends Controller
         $requete = $this->oevsSaisissables($request->user())->with('commune');
         foreach (preg_split('/\s+/', $terme) as $mot) {
             $requete->where(fn ($q) => $q
-                ->where('code', 'like', "%{$mot}%")
-                ->orWhere('nom', 'like', "%{$mot}%")
-                ->orWhere('prenom', 'like', "%{$mot}%"));
+                ->whereLike('code', "%{$mot}%")
+                ->orWhereLike('nom', "%{$mot}%")
+                ->orWhereLike('prenom', "%{$mot}%"));
         }
 
         $oevs = $requete
@@ -374,12 +377,12 @@ class AppuiPartenaireController extends Controller
     /** OEV pour lesquels l'utilisateur peut enregistrer un appui : intégrés, non désactivés, dans sa zone. */
     private function oevsSaisissables(User $utilisateur)
     {
-        return Oev::beneficiaires()->dansLePerimetreDe($utilisateur);
+        return $this->cloisonner(Oev::beneficiaires());
     }
 
     private function verifierAcces(User $utilisateur, AppuiPartenaire $appui): void
     {
-        abort_unless(AppuiPartenaire::whereKey($appui->id)->dansLePerimetreDe($utilisateur)->exists(), 403);
+        $this->verifierZone($appui, 'oev', 'Cet appui concerne un OEV hors de votre zone.');
     }
 
     private function donneesFormulaire(AppuiPartenaire $appui): array

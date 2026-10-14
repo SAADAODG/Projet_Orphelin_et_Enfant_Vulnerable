@@ -1,12 +1,33 @@
 @extends('layouts.app')
 @use('App\Models\Oev')
 @use('App\Models\SessionParrainage')
+@use('App\Services\Parrainage\ExtractionsParrainage')
 
 @section('title', 'Extractions du parrainage | ' . $siteSetting->structure_nom)
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
+<style>
+  .ext-donnees { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; }
+  .ext-donnees fieldset { border: 1px solid var(--admin-border); border-radius: 12px; padding: .75rem .9rem; background: var(--admin-surface-soft); }
+  .ext-donnees legend { float: none; width: auto; font-size: .85rem; font-weight: 700; margin: 0 0 .35rem; padding: 0; }
+  .sel-multi-menu { min-width: 100%; max-height: 18rem; overflow-y: auto; }
+  .sel-multi-menu--large { min-width: 22rem; max-height: 24rem; }
+  .sel-provinces { margin: .1rem 0 .35rem 1.5rem; }
+</style>
 @endpush
+
+@php
+  // Données de la liste pour un parrain, regroupées ; les données d'identité sont réservées au niveau central
+  $groupesParrain = [
+      'Identité (niveau central)' => ['code', 'nom', 'prenom', 'date_naissance'],
+      'Profil' => ['initiales', 'age', 'sexe', 'statut', 'vulnerabilites', 'handicap'],
+      'Localité' => ['region', 'province', 'commune'],
+      'Scolarité et besoin' => ['cycle', 'classe', 'besoin', 'priorite'],
+      'Tuteur (niveau central)' => ['tuteur', 'telephone_tuteur'],
+  ];
+  $choisies = array_map('strval', (array) old('donnees', $donneesParrainChoisies ?? []));
+@endphp
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
@@ -35,11 +56,10 @@
   </div>
 
   @if ($vue === 'paiement')
+    {{-- ================= Liste pour paiement ================= --}}
     <form class="panel mt-3" method="GET" action="{{ route('parrainage.pilotage.paiement') }}">
       <div class="panel-header">
-        <div>
-          <h2 class="h5 mb-1 section-title"><i class="bi bi-bank" aria-hidden="true"></i><span>Liste pour paiement</span></h2>
-        </div>
+        <div><h2 class="h5 mb-1 section-title"><i class="bi bi-bank" aria-hidden="true"></i><span>Liste pour paiement</span></h2></div>
       </div>
       @unless ($disponible)
         <div class="alert alert-info small"><i class="bi bi-info-circle me-1" aria-hidden="true"></i> Données non disponibles : la liste définitive et les établissements viendront du module Sélection. L’extraction produit pour l’instant un fichier sans ligne.</div>
@@ -83,6 +103,34 @@
             'colonnes' => ['region_id' => 'col-md-4', 'province_id' => 'col-md-4', 'commune_id' => 'col-md-4'],
           ])
         </div>
+
+        {{-- Données à afficher dans chaque feuille --}}
+        <div class="col-12">
+          <h3 class="h6 mb-2">Données à afficher</h3>
+          <div class="ext-donnees">
+            <fieldset>
+              <legend>Feuille « Par établissement »</legend>
+              @foreach ($colonnesEtablissement as $cle => $libelle)
+                @php($obligatoire = in_array($cle, ExtractionsParrainage::COLONNES_ETABLISSEMENT_OBLIGATOIRES, true))
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="ce-{{ $cle }}" name="colonnes_etablissement[]" value="{{ $cle }}" checked @disabled($obligatoire)>
+                  <label class="form-check-label" for="ce-{{ $cle }}">{{ $libelle }}@if ($obligatoire) <span class="text-muted small">(toujours)</span>@endif</label>
+                </div>
+              @endforeach
+            </fieldset>
+            <fieldset>
+              <legend>Feuille « Nominatif »</legend>
+              @foreach ($colonnesNominatif as $cle => $libelle)
+                @php($obligatoire = in_array($cle, ExtractionsParrainage::COLONNES_NOMINATIF_OBLIGATOIRES, true))
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="cn-{{ $cle }}" name="colonnes_nominatif[]" value="{{ $cle }}"
+                         @checked(in_array($cle, ExtractionsParrainage::NOMINATIF_PAR_DEFAUT, true)) @disabled($obligatoire)>
+                  <label class="form-check-label" for="cn-{{ $cle }}">{{ $libelle }}@if ($obligatoire) <span class="text-muted small">(toujours)</span>@endif</label>
+                </div>
+              @endforeach
+            </fieldset>
+          </div>
+        </div>
       </div>
       <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
         <button class="btn btn-outline-primary" type="submit" name="format" value="pdf"><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
@@ -90,12 +138,11 @@
       </div>
     </form>
   @else
-    <form class="panel mt-3" method="GET" action="{{ route('parrainage.pilotage.extractions') }}">
+    {{-- ================= Liste pour un parrain ================= --}}
+    <form class="panel mt-3" method="GET" action="{{ route('parrainage.pilotage.extractions') }}" id="formParrain">
       <input type="hidden" name="filtre" value="1">
       <div class="panel-header">
-        <div>
-          <h2 class="h5 mb-1 section-title"><i class="bi bi-person-heart" aria-hidden="true"></i><span>Liste pour un parrain</span></h2>
-        </div>
+        <div><h2 class="h5 mb-1 section-title"><i class="bi bi-person-heart" aria-hidden="true"></i><span>Liste pour un parrain</span></h2></div>
       </div>
       @if ($errors->any())
         <div class="alert alert-danger small">{{ $errors->first() }}</div>
@@ -111,7 +158,7 @@
             @endforeach
           </select>
           @if ($parrain)
-            <div class="form-text">Zone : {{ $parrain->libelleZones() }}</div>
+            <div class="form-text">Zone d’intervention : {{ $parrain->libelleZones() }}</div>
           @endif
         </div>
 
@@ -127,7 +174,7 @@
               <label class="form-check-label" for="source-attente">Liste d’attente d’une session</label>
             </div>
           </div>
-          <div class="col-sm-4 col-lg-3">
+          <div class="col-sm-4 col-lg-2">
             <label class="form-label" for="annee">Année scolaire</label>
             <input class="form-control" id="annee" name="annee" value="{{ $f['annee'] }}" pattern="\d{4}-\d{4}">
           </div>
@@ -149,40 +196,65 @@
               @endforeach
             </select>
           </div>
-          <div class="col-sm-6 col-lg-2">
-            <label class="form-label" for="sexe">Sexe</label>
-            <select class="form-select" id="sexe" name="sexe">
-              <option value="">Les deux</option>
-              @foreach (Oev::SEXES as $cle => $libelle)
-                <option value="{{ $cle }}" @selected($f['sexe'] === $cle)>{{ $libelle }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-12">
-            <div class="form-check">
+
+          {{-- Localité : zone du parrain, complétée par d'autres régions / provinces --}}
+          <div class="col-md-6 col-lg-3 d-flex align-items-end">
+            <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="zone_parrain" name="zone_parrain" value="1" @checked($f['zone_parrain'])>
-              <label class="form-check-label" for="zone_parrain">Limiter à la zone d’intervention du parrain</label>
+              <label class="form-check-label" for="zone_parrain">Zone d’intervention du parrain</label>
             </div>
           </div>
+          <div class="col-md-6 col-lg-4">
+            @include('parrainage.selection._filtre-localites', ['localites' => $localites, 'regions' => $f['regions'], 'provinces' => $f['provinces']])
+            <div class="form-text">Ajoutez des régions ou provinces si la zone du parrain ne suffit pas.</div>
+          </div>
+
+          {{-- Autres critères à choix multiple --}}
+          <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'sexe', 'label' => 'Sexe', 'options' => Oev::SEXES, 'valeurs' => $f['sexe']])</div>
+          <div class="col-6 col-md-3 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'statut', 'label' => 'Statut OEV', 'options' => Oev::STATUTS, 'valeurs' => $f['statut']])</div>
+          <div class="col-md-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
+          <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_priorite', 'label' => 'Priorité', 'options' => Oev::NIVEAUX, 'valeurs' => $f['niveau_priorite'], 'tous' => 'Toutes'])</div>
+          <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_etude', 'label' => 'Niveau d’étude', 'options' => Oev::NIVEAUX_ETUDE, 'valeurs' => $f['niveau_etude']])</div>
+          <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'handicap', 'label' => 'Handicap', 'options' => ['1' => 'Oui', '0' => 'Non'], 'valeurs' => $f['handicap']])</div>
+          <div class="col-3 col-lg-1">
+            <label class="form-label" for="age_min">Âge min.</label>
+            <input class="form-control form-control-sm" id="age_min" name="age_min" type="number" min="0" max="25" value="{{ $f['age_min'] }}">
+          </div>
+          <div class="col-3 col-lg-1">
+            <label class="form-label" for="age_max">Âge max.</label>
+            <input class="form-control form-control-sm" id="age_max" name="age_max" type="number" min="0" max="25" value="{{ $f['age_max'] }}">
+          </div>
+
+          {{-- Données à extraire --}}
           <div class="col-12">
-            @include('partials.localite-selects', [
-              'localites' => $localites,
-              'requis' => false,
-              'valeurs' => ['region_id' => $f['region_id'], 'province_id' => $f['province_id'], 'commune_id' => $f['commune_id']],
-              'colonnes' => ['region_id' => 'col-md-4', 'province_id' => 'col-md-4', 'commune_id' => 'col-md-4'],
-            ])
+            <h3 class="h6 mb-1">Données à extraire</h3>
+            <p class="small text-muted mb-2">Les initiales sont la première lettre du nom et du prénom (ex : « OA » pour OUEDRAOGO Awa).
+              @unless ($central) Les données d’identité et du tuteur sont réservées au niveau central. @endunless</p>
+            <div class="ext-donnees">
+              @foreach ($groupesParrain as $groupe => $cles)
+                <fieldset>
+                  <legend>{{ $groupe }}</legend>
+                  @foreach ($cles as $cle)
+                    @php($identifiante = $donneesParrain[$cle][2])
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="d-{{ $cle }}" name="donnees[]" value="{{ $cle }}"
+                             @checked(in_array($cle, $choisies, true) && ($central || ! $identifiante)) @disabled($identifiante && ! $central) @if ($identifiante) data-identite @endif>
+                      <label class="form-check-label" for="d-{{ $cle }}">{{ $donneesParrain[$cle][0] }}</label>
+                    </div>
+                  @endforeach
+                </fieldset>
+              @endforeach
+            </div>
           </div>
 
           @if ($central)
-            <div class="col-12">
-              <div class="border rounded p-3">
+            <div class="col-12" data-confirmation-identite hidden>
+              <div class="alert alert-warning small mb-0">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="identite_complete" name="identite_complete" value="1" @checked(old('identite_complete'))>
-                  <label class="form-check-label fw-semibold" for="identite_complete">Version avec identité complète (code, nom, prénom, date de naissance)</label>
-                </div>
-                <div class="form-check mt-1">
                   <input class="form-check-input" type="checkbox" id="confirmation_identite" name="confirmation_identite" value="1">
-                  <label class="form-check-label small" for="confirmation_identite">Je confirme que ces données personnelles d’enfants sont transmises dans le cadre d’une convention avec ce parrain. L’extraction sera tracée.</label>
+                  <label class="form-check-label" for="confirmation_identite">
+                    Des données d’identité des enfants sont cochées. Je confirme qu’elles sont transmises dans le cadre d’une convention avec ce parrain. L’extraction sera tracée.
+                  </label>
                 </div>
               </div>
             </div>
@@ -203,9 +275,10 @@
       <section class="panel mt-3">
         <div class="panel-header">
           <div>
-            <h2 class="h5 mb-1 section-title"><i class="bi bi-eye" aria-hidden="true"></i><span>Aperçu anonymisé</span></h2>
+            <h2 class="h5 mb-1 section-title"><i class="bi bi-eye" aria-hidden="true"></i><span>Aperçu</span></h2>
             <p class="text-muted mb-0">
               {{ $liste->count() }} OEV correspondent aux filtres{{ $liste->count() > 10 ? ' (10 premiers affichés)' : '' }}, par ordre de priorité.
+              L’aperçu, réservé aux agents, nomme les enfants ; le fichier ne contient que les données cochées.
               @if ($f['source'] === 'attente' && ! $disponible) Liste d’attente : données non disponibles (module Sélection). @endif
             </p>
           </div>
@@ -227,3 +300,31 @@
   @endif
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var formulaire = document.getElementById('formParrain');
+    if (!formulaire) return;
+
+    // Localité : les provinces d'une région ne se choisissent qu'une fois la région cochée
+    formulaire.querySelectorAll('[data-region]').forEach(function (bloc) {
+      var region = bloc.querySelector('[data-region-case]');
+      var provinces = bloc.querySelector('[data-provinces]');
+      region.addEventListener('change', function () {
+        provinces.hidden = !region.checked;
+        provinces.querySelectorAll('input').forEach(function (c) { c.disabled = !region.checked; if (!region.checked) { c.checked = false; } });
+      });
+    });
+
+    // Confirmation demandée dès qu'une donnée d'identité est cochée
+    var confirmation = formulaire.querySelector('[data-confirmation-identite]');
+    var maj = function () {
+      if (!confirmation) return;
+      confirmation.hidden = !formulaire.querySelector('input[data-identite]:checked');
+    };
+    formulaire.addEventListener('change', maj);
+    maj();
+  });
+</script>
+@endpush

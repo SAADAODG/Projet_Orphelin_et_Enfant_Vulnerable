@@ -13,6 +13,22 @@
   .pil-filtres { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
   .pil-filtres .form-select { width: auto; min-width: 9rem; }
   .pil-nd { color: var(--admin-muted); font-size: .95rem; font-weight: 600; }
+  .pil-chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; }
+  .pil-chiffre { display: grid; grid-template-columns: auto 1fr; column-gap: .75rem; align-items: center; padding: .85rem 1rem;
+    border: 1px solid var(--admin-border); border-radius: 12px; background: var(--admin-surface-soft); }
+  .pil-chiffre i { grid-row: span 2; font-size: 1.5rem; color: var(--admin-primary); }
+  .pil-chiffre strong { font-size: 1.35rem; line-height: 1.1; }
+  .pil-chiffre span { font-size: .8rem; color: var(--admin-muted); }
+  .pil-chiffre--filles i { color: #db2777; }
+  .pil-chiffre--garcons i { color: #2563eb; }
+  .pil-sexes { display: flex; height: 1.6rem; border-radius: 999px; overflow: hidden; background: var(--admin-surface-soft); font-size: .78rem; font-weight: 700; color: #fff; }
+  .pil-sexes span { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+  .pil-sexes-filles { background: #db2777; }
+  .pil-sexes-garcons { background: #2563eb; }
+  .pil-blocs { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+  .pil-bloc { padding: 1rem 1.1rem; border: 1px solid var(--admin-border); border-radius: 12px; }
+  .pil-bloc-titre { display: flex; align-items: center; gap: .5rem; font-size: .95rem; font-weight: 700; margin-bottom: .9rem; }
+  .pil-bloc-titre i { color: var(--admin-primary); }
   @media (max-width: 575.98px) { .pil-filtres .form-select { width: 100%; } }
 </style>
 @endpush
@@ -166,28 +182,51 @@
       </section>
     </div>
 
-    {{-- Profil --}}
+    {{-- Profil des OEV appuyés : chiffres clés, puis un bloc par thème (nombre et part du total) --}}
+    @php
+      $totalProfil = $p['total'];
+      $part = fn (int $n) => $totalProfil ? round($n / $totalProfil * 100) : 0;
+      $garcons = (int) ($p['sexe']->firstWhere('libelle', Oev::SEXES['M'])['total'] ?? 0);
+      $filles = (int) ($p['sexe']->firstWhere('libelle', Oev::SEXES['F'])['total'] ?? 0);
+      $avecHandicap = (int) ($p['handicap']->first()['total'] ?? 0);
+    @endphp
     <div class="col-12">
       <section class="oev-carte">
-        <h2 class="oev-carte-titre"><i class="bi bi-person-badge" aria-hidden="true"></i> Profil des OEV appuyés <span class="text-muted small fw-normal">({{ $p['total'] }})</span></h2>
-        <div class="row g-4">
-          <div class="col-12 col-md-6 col-xl-4">
-            <h3 class="h6">Sexe</h3>
-            @include('parrainage.pilotage._barres', ['couleur' => 'info', 'lignes' => $p['sexe'], 'vide' => 'Aucun OEV appuyé.'])
-            <h3 class="h6 mt-4">Handicap</h3>
-            @include('parrainage.pilotage._barres', ['couleur' => 'secondary', 'lignes' => $p['handicap'], 'vide' => 'Aucun OEV appuyé.'])
+        <h2 class="oev-carte-titre"><i class="bi bi-person-badge" aria-hidden="true"></i> Profil des OEV appuyés</h2>
+        @if ($totalProfil === 0)
+          <p class="text-muted mb-0">Aucun OEV appuyé pour ces filtres.</p>
+        @else
+          <div class="pil-chiffres">
+            <div class="pil-chiffre"><i class="bi bi-people" aria-hidden="true"></i><strong>{{ Montant::nombre($totalProfil) }}</strong><span>OEV appuyés</span></div>
+            <div class="pil-chiffre pil-chiffre--filles"><i class="bi bi-gender-female" aria-hidden="true"></i><strong>{{ $part($filles) }} %</strong><span>{{ $filles }} fille(s)</span></div>
+            <div class="pil-chiffre pil-chiffre--garcons"><i class="bi bi-gender-male" aria-hidden="true"></i><strong>{{ $part($garcons) }} %</strong><span>{{ $garcons }} garçon(s)</span></div>
+            <div class="pil-chiffre"><i class="bi bi-universal-access" aria-hidden="true"></i><strong>{{ $part($avecHandicap) }} %</strong><span>{{ $avecHandicap }} en situation de handicap</span></div>
           </div>
-          <div class="col-12 col-md-6 col-xl-4">
-            <h3 class="h6">Âge</h3>
-            @include('parrainage.pilotage._barres', ['couleur' => 'primary', 'lignes' => $p['age'], 'vide' => 'Aucun OEV appuyé.'])
-            <h3 class="h6 mt-4">Cycle ou filière</h3>
-            @include('parrainage.pilotage._barres', ['couleur' => 'success', 'lignes' => $p['cycle'], 'vide' => 'Aucun OEV appuyé.'])
+
+          {{-- Répartition filles / garçons sur une barre unique --}}
+          <div class="pil-sexes mt-3" role="img" aria-label="{{ $filles }} filles et {{ $garcons }} garçons">
+            @if ($filles)<span class="pil-sexes-filles" style="width: {{ $part($filles) }}%">{{ $part($filles) >= 12 ? 'Filles ' . $part($filles) . ' %' : '' }}</span>@endif
+            @if ($garcons)<span class="pil-sexes-garcons" style="width: {{ 100 - $part($filles) }}%">{{ (100 - $part($filles)) >= 12 ? 'Garçons ' . (100 - $part($filles)) . ' %' : '' }}</span>@endif
           </div>
-          <div class="col-12 col-xl-4">
-            <h3 class="h6">Types de vulnérabilité</h3>
-            @include('parrainage.pilotage._barres', ['couleur' => 'warning', 'lignes' => $p['vulnerabilites'], 'vide' => 'Aucune vulnérabilité renseignée.'])
+
+          <div class="pil-blocs mt-4">
+            <div class="pil-bloc">
+              <h3 class="pil-bloc-titre"><i class="bi bi-calendar3" aria-hidden="true"></i> Âge</h3>
+              @include('parrainage.pilotage._barres', ['couleur' => 'primary', 'lignes' => $p['age'], 'base' => $totalProfil])
+            </div>
+            <div class="pil-bloc">
+              <h3 class="pil-bloc-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Cycle ou filière</h3>
+              @include('parrainage.pilotage._barres', ['couleur' => 'success', 'lignes' => $p['cycle']->filter(fn ($l) => $l['total'] > 0)->values(), 'base' => $totalProfil])
+            </div>
+            <div class="pil-bloc">
+              <h3 class="pil-bloc-titre"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i> Principales vulnérabilités</h3>
+              @include('parrainage.pilotage._barres', ['couleur' => 'warning', 'lignes' => $p['vulnerabilites']->take(6), 'base' => $totalProfil, 'vide' => 'Aucune vulnérabilité renseignée.'])
+              @if ($p['vulnerabilites']->count() > 6)
+                <p class="small text-muted mt-2 mb-0">+ {{ $p['vulnerabilites']->count() - 6 }} autre(s) type(s). Un OEV peut cumuler plusieurs vulnérabilités.</p>
+              @endif
+            </div>
           </div>
-        </div>
+        @endif
       </section>
     </div>
 

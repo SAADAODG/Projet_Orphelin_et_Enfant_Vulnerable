@@ -49,6 +49,7 @@
             request()->routeIs('oevs.validation') => 'validation',
             request()->routeIs('oevs.integration') => 'integration',
             request()->routeIs('oevs.liste') => 'liste',
+            request()->routeIs('oevs.sortants') => 'liste',
             request()->routeIs('oevs.*') => 'dossiers',
             default => null,
         })
@@ -208,9 +209,12 @@
             <span></span>
           </button>
 
-          <form class="d-none d-md-flex ms-3 flex-grow-1" role="search">
-            <input class="form-control search-input" type="search" placeholder="Search users, orders, reports" aria-label="Search">
+          {{-- Recherche rapide d'un OEV (code, nom, prénom) dans la zone de l'utilisateur : ouvre la liste des OEV --}}
+          @can('voir OEV')
+          <form class="d-none d-md-flex ms-3 flex-grow-1" role="search" method="GET" action="{{ route('oevs.liste') }}">
+            <input class="form-control search-input" type="search" name="q" value="{{ request()->routeIs('oevs.liste') ? request('q') : '' }}" placeholder="Rechercher un OEV : code, nom, prénom…" aria-label="Rechercher un OEV">
           </form>
+          @endcan
 
           <div class="navbar-actions ms-auto">
             <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" title="Switch color theme">

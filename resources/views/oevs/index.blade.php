@@ -24,9 +24,9 @@
 
   @include('oevs._liste', [
     'route' => 'oevs.index',
-    'carteTous' => 'Total',
+    'carteTous' => $vue === 'integres' ? null : 'Total',
     'messageVide' => 'Aucun dossier dans cette catégorie',
-    'lienVide' => auth()->user()->can('constituer dossiers') && ! $filtres['etat']
+    'lienVide' => auth()->user()->can('constituer dossiers') && ! $filtres['etat'] && $vue !== 'integres'
       ? ['url' => route('oevs.create'), 'label' => 'Constituer un premier dossier', 'icone' => 'bi-plus-lg']
       : null,
   ])

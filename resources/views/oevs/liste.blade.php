@@ -9,7 +9,9 @@
 @endpush
 
 @php
-  $filtreActif = $filtres['statut'] || $filtres['recherche'] !== '';
+  $filtreActif = $filtres['statut'] || $filtres['recherche'] !== '' || $filtres['region_id'];
+  // Paramètres de localité conservés par les cartes de statut
+  $localiteChoisie = array_filter(['region_id' => $filtres['region_id'], 'province_id' => $filtres['province_id']]);
   $iconesStatuts = [
     'orphelin_pere' => 'bi-person-dash',
     'orphelin_mere' => 'bi-person-dash',
@@ -33,11 +35,13 @@
     </div>
   </div>
 
+  <div class="mt-3">@include('oevs._onglets_liste')</div>
+
   <section class="row g-3 mt-1 oev-stats--compact" aria-label="OEV par statut">
     @foreach ($cartes as $carte)
       <div class="col-6 col-md-4 col-xxl">
         <a class="oev-stat {{ $carte['cle'] ? 'oev-stat--' . $carte['cle'] : 'oev-stat--success' }} {{ $filtres['statut'] === $carte['cle'] ? 'is-active' : '' }}"
-           href="{{ route('oevs.liste', array_filter(['statut' => $carte['cle'], 'q' => $filtres['recherche'] ?: null])) }}"
+           href="{{ route('oevs.liste', array_filter(['statut' => $carte['cle'], 'q' => $filtres['recherche'] ?: null]) + $localiteChoisie) }}"
            @if ($filtres['statut'] === $carte['cle']) aria-current="true" @endif>
           <span class="oev-stat-icone"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
           <span>
@@ -72,6 +76,7 @@
         <i class="bi bi-search" aria-hidden="true"></i>
         <input class="form-control" name="q" type="search" value="{{ $filtres['recherche'] }}" placeholder="Code OEV, nom, prénom, tuteur, localité, établissement…" aria-label="Rechercher un OEV">
       </div>
+      @include('partials.filtre-localite', ['localites' => $localites, 'regionId' => $filtres['region_id'], 'provinceId' => $filtres['province_id']])
       <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Rechercher</button>
     </form>
 

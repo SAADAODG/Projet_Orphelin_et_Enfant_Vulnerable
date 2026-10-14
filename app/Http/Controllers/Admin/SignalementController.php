@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Http\Controllers\Controller;
 use App\Models\Signalement;
 use Closure;
@@ -17,6 +18,8 @@ use Illuminate\View\View;
  */
 class SignalementController extends Controller implements HasMiddleware
 {
+    use CloisonneParZone;
+
     /** Un signalement hors de la zone de l'utilisateur n'est pas accessible. */
     public static function middleware(): array
     {
@@ -43,29 +46,28 @@ class SignalementController extends Controller implements HasMiddleware
         $statut = $request->query('statut');
         $decision = $statut === Signalement::CLOTURE ? $request->query('decision') : null;
 
-        $signalements = Signalement::with(['province', 'commune'])
-            ->dansLePerimetreDe($request->user())
+        $signalements = $this->cloisonner(Signalement::with(['province', 'commune']))
             ->when($statut, fn ($query) => $query->where('statut', $statut))
             ->when($decision, fn ($query) => $query->where('decision', $decision))
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = '%'.$request->query('q').'%';
                 $query->where(fn ($sub) => $sub
-                    ->where('recepisse', 'ilike', $q)
-                    ->orWhere('enfant_nom', 'ilike', $q)
-                    ->orWhere('enfant_prenom', 'ilike', $q)
-                    ->orWhere('declarant_nom', 'ilike', $q)
-                    ->ouLocaliteContient($q, 'ilike'));
+                    ->whereLike('recepisse', $q)
+                    ->orWhereLike('enfant_nom', $q)
+                    ->orWhereLike('enfant_prenom', $q)
+                    ->orWhereLike('declarant_nom', $q)
+                    ->ouLocaliteContient($q));
             })
             ->latest()
             ->paginate(15)
             ->withQueryString();
 
-        $compteurs = Signalement::dansLePerimetreDe($request->user())
+        $compteurs = $this->cloisonner(Signalement::query())
             ->selectRaw('statut, count(*) as total')
             ->groupBy('statut')
             ->pluck('total', 'statut');
 
-        $decisions = Signalement::dansLePerimetreDe($request->user())
+        $decisions = $this->cloisonner(Signalement::query())
             ->where('statut', Signalement::CLOTURE)
             ->selectRaw('decision, count(*) as total')
             ->groupBy('decision')
@@ -163,6 +165,6 @@ class SignalementController extends Controller implements HasMiddleware
      */
     public function nonLus(Request $request): JsonResponse
     {
-        return response()->json(['count' => Signalement::nonLus()->dansLePerimetreDe($request->user())->count()]);
+        return response()->json(['count' => $this->cloisonner(Signalement::nonLus())->count()]);
     }
 }

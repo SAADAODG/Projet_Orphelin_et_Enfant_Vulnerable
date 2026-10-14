@@ -139,6 +139,8 @@ class SelectionParrainage implements SourceSelection
 
         return Oev::beneficiaires()
             ->whereNotIn('oevs.id', BeneficiaireSession::where('session_parrainage_id', $session->id)->select('oev_id'))
+            // Entièrement financés par une autre session de l'année : plus proposés (ni éligibles ni affichés)
+            ->whereNotIn('oevs.id', $this->entierementFinances($session))
             ->select('oevs.*')
             ->selectRaw(ScoreBesoin::sql() . ' as score')
             ->when($liste('type'), fn ($q, $types) => $this->concernesPar($q, $types))
@@ -169,8 +171,13 @@ class SelectionParrainage implements SourceSelection
                 }
             }))
             ->when($f['q'] ?? null, fn ($q, $terme) => $q->where(fn ($q) => $q
-                ->where('oevs.code', 'like', "%{$terme}%")->orWhere('oevs.nom', 'like', "%{$terme}%")
-                ->orWhere('oevs.prenom', 'like', "%{$terme}%")->orWhere('oevs.etablissement_actuel', 'like', "%{$terme}%")))
+                ->whereLike('oevs.code', "%{$terme}%")->orWhereLike('oevs.nom', "%{$terme}%")
+                ->orWhereLike('oevs.prenom', "%{$terme}%")->orWhereLike('oevs.etablissement_actuel', "%{$terme}%")))
+            // Jamais financés cette année d'abord, puis les compléments (frais qui dépassaient le plafond)
+            ->tap(function (Builder $q) use ($session) {
+                $complements = $this->financementsAnterieurs($session)->select('oev_id')->toBase();
+                $q->orderByRaw('case when oevs.id in (' . $complements->toSql() . ') then 1 else 0 end', $complements->getBindings());
+            })
             ->orderByDesc('score')
             ->orderBy('oevs.date_naissance')
             ->orderBy('oevs.id');
@@ -192,17 +199,59 @@ class SelectionParrainage implements SourceSelection
             ->when($communes, fn ($q) => $q->whereIn('oevs.commune_id', $communes));
     }
 
+    /** Lignes retenues par les autres sessions de la même année, pour les natures de cette session. */
+    private function financementsAnterieurs(SessionParrainage $session): Builder
+    {
+        return BeneficiaireSession::retenus()
+            ->whereIn('type_appui', $session->naturesCouvertes())
+            ->whereHas('session', fn ($q) => $q->where('annee', $session->annee)->whereKeyNot($session->id));
+    }
+
+    /**
+     * OEV dont les frais sont entièrement couverts par l'État cette année (autres sessions) : le total versé
+     * atteint les frais, ou les frais n'étaient pas connus. Ils ne sont plus proposés.
+     */
+    private function entierementFinances(SessionParrainage $session): Builder
+    {
+        return $this->financementsAnterieurs($session)
+            ->select('oev_id')
+            ->groupBy('oev_id')
+            ->havingRaw('sum(montant_retenu) >= max(coalesce(frais_reels, 0)) or sum(case when frais_reels is null then 1 else 0 end) > 0');
+    }
+
+    /**
+     * Montant déjà versé par l'État cette année (autres sessions, mêmes natures) aux OEV financés en partie.
+     * Une session de rattrapage ne finance que le reste : frais − déjà versé, dans la limite de son plafond.
+     *
+     * @param  array<int>|null  $oevIds  OEV concernés (null : tous)
+     * @return array<int, int> oev_id => FCFA déjà versés
+     */
+    public function dejaFinance(SessionParrainage $session, ?array $oevIds = null): array
+    {
+        return $this->financementsAnterieurs($session)
+            ->when($oevIds !== null, fn ($q) => $q->whereIn('oev_id', $oevIds))
+            ->selectRaw('oev_id, sum(montant_retenu) as total')
+            ->groupBy('oev_id')
+            ->pluck('total', 'oev_id')
+            ->map(fn ($total) => (int) $total)
+            ->all();
+    }
+
+    /** Frais restant à financer après ce que l'État a déjà versé (null si les frais sont inconnus). */
+    public static function fraisRestants(?int $frais, int $dejaVerse): ?int
+    {
+        return $frais === null ? null : max(0, $frais - $dejaVerse);
+    }
+
     /** Éligibles sans les filtres de recherche (aussi ceux déjà choisis pour la session). */
     private function baseEligibles(SessionParrainage $session): Builder
     {
         $natures = $session->naturesCouvertes();
 
+        // Une autre session de l'année a déjà financé l'OEV pour la même nature : seul celui dont les frais
+        // dépassaient le plafond (financé en partie) reste éligible, pour le complément (pas de double financement)
         $requete = $this->concernesPar(Oev::beneficiaires(), $natures)
-            // Déjà retenus par une autre session de l'année pour la même nature : pas de double financement de l'État
-            ->whereNotIn('oevs.id', BeneficiaireSession::retenus()
-                ->whereIn('type_appui', $natures)
-                ->whereHas('session', fn ($q) => $q->where('annee', $session->annee)->whereKeyNot($session->id))
-                ->select('oev_id'));
+            ->whereNotIn('oevs.id', $this->entierementFinances($session));
 
         // RG-07 : OEV déjà appuyés par un partenaire pour la même nature et la même année
         if ($session->exclure_deja_appuyes) {
@@ -308,14 +357,16 @@ class SelectionParrainage implements SourceSelection
     public function estimationCout(SessionParrainage $session, Builder $eligibles): array
     {
         $groupes = array_fill_keys(array_keys(self::SITUATIONS), ['nombre' => 0, 'frais' => 0, 'sans_frais' => 0, 'pris_en_charge' => 0]);
+        $dejaFinance = $this->dejaFinance($session);
 
         $eligibles->reorder()
             ->select(['oevs.id', 'oevs.date_naissance', 'oevs.situation_scolaire', 'oevs.formation_professionnelle', 'oevs.formation_etat', 'oevs.frais_scolarite', 'oevs.frais_formation'])
             ->lazyById(500, 'oevs.id', 'id')
-            ->each(function (Oev $oev) use ($session, &$groupes) {
+            ->each(function (Oev $oev) use ($session, &$groupes, $dejaFinance) {
                 $type = self::typePour($oev, $session);
                 $groupe = $type === SessionParrainage::TYPE_FORMATION ? self::EN_FORMATION : ($oev->situation_scolaire === 'scolarise' ? self::SCOLARISE : self::A_SCOLARISER);
                 ['frais' => $frais] = self::fraisPour($oev, $session, $type);
+                $frais = self::fraisRestants($frais, $dejaFinance[$oev->id] ?? 0);
 
                 $groupes[$groupe]['nombre']++;
                 $groupes[$groupe]['frais'] += (int) $frais;
@@ -378,10 +429,13 @@ class SelectionParrainage implements SourceSelection
         DB::transaction(function () use ($session, $oevIds, $utilisateur, &$compte) {
             $budget = $this->budget($session);
             $rang = (int) $session->beneficiaires()->enAttente()->max('rang');
+            $dejaFinance = $this->dejaFinance($session, $oevIds);
 
             foreach ($this->eligibles($session)->whereIn('oevs.id', $oevIds)->get() as $oev) {
                 $type = self::typePour($oev, $session);
                 ['frais' => $frais, 'estime' => $estime] = self::fraisPour($oev, $session, $type);
+                // Complément : seul le reste à payer est financé
+                $frais = self::fraisRestants($frais, $dejaFinance[$oev->id] ?? 0);
                 $montant = BeneficiaireSession::montantPour($frais, $session->plafond_beneficiaire);
                 $retenu = $this->tientDansLeBudget($session, $budget, $oev->region_id, $montant);
 
@@ -466,11 +520,16 @@ class SelectionParrainage implements SourceSelection
      */
     public function budget(SessionParrainage $session): array
     {
-        $retenus = $session->beneficiaires()->retenus()->get(['region_id', 'montant_retenu']);
+        // Sommes calculées par la base : rien n'est chargé ligne à ligne, quelle que soit la taille de la liste
+        $parRegion = $session->beneficiaires()->retenus()
+            ->selectRaw('region_id, sum(montant_retenu) as total')
+            ->groupBy('region_id')
+            ->pluck('total', 'region_id')
+            ->map(fn ($total) => (int) $total);
 
         return [
-            'engage' => (int) $retenus->sum('montant_retenu'),
-            'regions' => $retenus->groupBy('region_id')->map(fn ($l) => (int) $l->sum('montant_retenu'))->all(),
+            'engage' => (int) $parRegion->sum(),
+            'regions' => $parRegion->all(),
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\BeneficiaireSession;
 use App\Services\Parrainage\ParcoursScolaire;
 use App\Models\Commune;
@@ -22,6 +23,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OevController extends Controller implements HasMiddleware
 {
+    use CloisonneParZone;
+
     /** Un dossier hors de la zone de l'utilisateur, ou pas encore arrivé à l'étape où il intervient, n'est pas accessible. */
     public static function middleware(): array
     {
@@ -138,9 +141,20 @@ class OevController extends Controller implements HasMiddleware
     ];
 
     /** DP — « Constituer dossier enfant » : tous les dossiers, quel que soit leur état. */
+    /**
+     * « Constituer dossier enfant » : dossiers en cours (constitution, circuit, rejetés) d'un côté,
+     * dossiers intégrés (devenus OEV) de l'autre (?vue=integres).
+     */
     public function index(Request $request): View
     {
-        return $this->lister($request, 'oevs.index', array_keys(Oev::ETATS), null);
+        $integres = $request->query('vue') === 'integres';
+        $enCours = array_values(array_diff(array_keys(Oev::ETATS), [Oev::ETAT_INTEGRE]));
+        $compter = fn (array $etats) => $this->cloisonner(Oev::visiblesPar($request->user())->etat(...$etats))->count();
+
+        return $this->lister($request, 'oevs.index', $integres ? [Oev::ETAT_INTEGRE] : $enCours, null, $integres ? ['vue' => 'integres'] : [])
+            ->with('vue', $integres ? 'integres' : 'en_cours')
+            ->with('nbEnCours', $compter($enCours))
+            ->with('nbIntegres', $compter([Oev::ETAT_INTEGRE]));
     }
 
     /** DR — « Validation des dossiers » : dossiers soumis ou revenus du central (complément), et ceux déjà traités. */
@@ -164,13 +178,20 @@ class OevController extends Controller implements HasMiddleware
         $statut = array_key_exists((string) $statut, Oev::STATUTS) ? $statut : null;
         $recherche = trim((string) $request->query('q'));
 
+        // Région / province choisies, dans la zone de l'utilisateur
+        $localite = $this->filtreLocalite($request);
+        // OEV actifs : les désactivés sont dans l'onglet « OEV sortants » (une désactivation seulement demandée reste ici)
+        $dansLaLocalite = fn ($q) => $localite['appliquer']($q)
+            ->where(fn ($q) => $q->whereNull('desactivation_etat')->orWhere('desactivation_etat', '!=', Oev::DESACTIVE));
+
         $oevs = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
             ->with(['region', 'province', 'commune'])
+            ->tap($dansLaLocalite)
             ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
                     foreach (['code', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'etablissement_actuel'] as $champ) {
-                        $q->orWhere($champ, 'like', "%{$recherche}%");
+                        $q->orWhereLike($champ, "%{$recherche}%");
                     }
                     $q->ouLocaliteContient("%{$recherche}%");
                 });
@@ -180,13 +201,18 @@ class OevController extends Controller implements HasMiddleware
             ->withQueryString();
 
         $parStatut = Oev::visiblesPar($request->user())->etat(Oev::ETAT_INTEGRE)
+            ->tap($dansLaLocalite)
             ->selectRaw('statut, count(*) as total')->groupBy('statut')
             ->pluck('total', 'statut');
 
         return view('oevs.liste', [
             'oevs' => $oevs,
             'compteurs' => collect(Oev::STATUTS)->mapWithKeys(fn ($l, $s) => [$s => (int) ($parStatut[$s] ?? 0)]),
-            'filtres' => compact('statut', 'recherche'),
+            'filtres' => ['statut' => $statut, 'recherche' => $recherche, 'region_id' => $localite['region_id'], 'province_id' => $localite['province_id']],
+            'localites' => $localite['localites'],
+            // Onglet « OEV sortants » : désactivés, et demandes en attente (signalées en orange)
+            'nbDesactives' => $this->cloisonner(Oev::etat(Oev::ETAT_INTEGRE)->where('desactivation_etat', Oev::DESACTIVE))->count(),
+            'nbDemandes' => $this->cloisonner(Oev::etat(Oev::ETAT_INTEGRE)->where('desactivation_etat', Oev::DESACTIVATION_DEMANDEE))->count(),
         ]);
     }
 
@@ -455,21 +481,24 @@ class OevController extends Controller implements HasMiddleware
      * Liste commune aux trois écrans du circuit. $etats limite les dossiers visibles ;
      * $etatParDefaut est l'onglet ouvert par défaut (null = tous les états).
      */
-    private function lister(Request $request, string $vue, array $etats, ?string $etatParDefaut): View
+    /** @param  array  $parametresVue  paramètres conservés par les onglets et le formulaire de la liste (ex : ['vue' => 'integres']) */
+    private function lister(Request $request, string $vue, array $etats, ?string $etatParDefaut, array $parametresVue = []): View
     {
         $etat = $request->query('etat', $etatParDefaut);
         $etat = in_array($etat, $etats, true) ? $etat : null;
         $statut = $request->query('statut');
         $recherche = trim((string) $request->query('q'));
+        $localite = $this->filtreLocalite($request);
 
         $oevs = Oev::with('documents:id,oev_id,type')
             ->visiblesPar($request->user())
+            ->tap($localite['appliquer'])
             ->etat(...($etat ? [$etat] : $etats))
             ->when(array_key_exists((string) $statut, Oev::STATUTS), fn ($q) => $q->where('statut', $statut))
             ->when($recherche !== '', function ($q) use ($recherche) {
                 $q->where(function ($q) use ($recherche) {
                     foreach (['code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'etablissement_actuel'] as $champ) {
-                        $q->orWhere($champ, 'like', "%{$recherche}%");
+                        $q->orWhereLike($champ, "%{$recherche}%");
                     }
                     $q->ouLocaliteContient("%{$recherche}%");
                 });
@@ -484,7 +513,7 @@ class OevController extends Controller implements HasMiddleware
             ->paginate(15)
             ->withQueryString();
 
-        $compteurs = Oev::query()->visiblesPar($request->user())->etat(...$etats)
+        $compteurs = Oev::query()->visiblesPar($request->user())->tap($localite['appliquer'])->etat(...$etats)
             ->selectRaw('statut_dossier, count(*) as total')->groupBy('statut_dossier')
             ->pluck('total', 'statut_dossier');
 
@@ -492,7 +521,9 @@ class OevController extends Controller implements HasMiddleware
             'oevs' => $oevs,
             'etats' => $etats,
             'compteurs' => collect($etats)->mapWithKeys(fn ($e) => [$e => (int) ($compteurs[$e] ?? 0)]),
-            'filtres' => compact('etat', 'statut', 'recherche'),
+            'filtres' => compact('etat', 'statut', 'recherche') + ['region_id' => $localite['region_id'], 'province_id' => $localite['province_id']],
+            'localites' => $localite['localites'],
+            'parametresVue' => $parametresVue,
         ]);
     }
 

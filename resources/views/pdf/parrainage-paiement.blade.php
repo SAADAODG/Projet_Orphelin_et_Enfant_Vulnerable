@@ -1,4 +1,10 @@
 @use('App\Support\Montant')
+{{-- Liste pour paiement (PDF) : colonnes choisies ($colonnesEtablissement, $colonnesNominatif : clé => libellé) --}}
+@php
+  $montants = ['montant', 'frais_reels', 'montant_retenu'];
+  $valeur = fn ($cle, $v) => in_array($cle, $montants, true) ? Montant::nombre($v) : $v;
+  $avantTotaux = array_search('nombre_oev', array_keys($colonnesEtablissement), true);
+@endphp
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -29,28 +35,38 @@
   <h2>Par établissement</h2>
   <table>
     <thead>
-      <tr>
-        <th>Région</th><th>Province</th><th>Établissement</th><th>Type</th><th>Banque</th><th>Code banque</th><th>Code guichet</th>
-        <th>N° de compte</th><th>Clé</th><th>Titulaire</th><th class="nombre">OEV</th><th class="nombre">Montant (FCFA)</th><th>RIB</th>
-      </tr>
+      <tr>@foreach ($colonnesEtablissement as $cle => $libelle)<th @class(['nombre' => in_array($cle, ['nombre_oev', 'montant'], true)])>{{ $libelle }}</th>@endforeach</tr>
     </thead>
     <tbody>
       @forelse ($lignes as $l)
         @if ($l['niveau'] === 'etablissement')
           <tr>
-            <td>{{ $l['region'] }}</td><td>{{ $l['province'] }}</td><td>{{ $l['etablissement'] }}</td><td>{{ $l['type'] }}</td><td>{{ $l['banque'] }}</td>
-            <td>{{ $l['code_banque'] }}</td><td>{{ $l['code_guichet'] }}</td><td>{{ $l['numero_compte'] }}</td><td>{{ $l['cle_rib'] }}</td><td>{{ $l['titulaire'] }}</td>
-            <td class="nombre">{{ $l['nombre_oev'] }}</td><td class="nombre">{{ Montant::nombre($l['montant']) }}</td>
-            <td>@if ($l['rib_manquant'])<span class="rib-manquant">RIB manquant</span>@else Complet @endif</td>
+            @foreach ($colonnesEtablissement as $cle => $libelle)
+              @if ($cle === 'rib')
+                <td>@if ($l['rib_manquant'])<span class="rib-manquant">RIB manquant</span>@else Complet @endif</td>
+              @else
+                <td @class(['nombre' => in_array($cle, ['nombre_oev', 'montant'], true), 'rib-manquant' => $l['rib_manquant'] && $loop->first && ! isset($colonnesEtablissement['rib'])])>{{ $valeur($cle, $l[$cle]) }}</td>
+              @endif
+            @endforeach
           </tr>
         @else
+          {{-- Sous-total : libellé sur les colonnes qui précèdent le nombre d'OEV --}}
           <tr class="{{ $l['niveau'] === 'general' ? 'general' : 'total' }}">
-            <td colspan="10">{{ $l['libelle'] }}</td>
-            <td class="nombre">{{ $l['nombre_oev'] }}</td><td class="nombre">{{ Montant::nombre($l['montant']) }}</td><td></td>
+            @foreach ($colonnesEtablissement as $cle => $libelle)
+              @if ($cle === 'nombre_oev')
+                <td class="nombre">{{ $l['nombre_oev'] }}</td>
+              @elseif ($cle === 'montant')
+                <td class="nombre">{{ Montant::nombre($l['montant']) }}</td>
+              @elseif ($loop->first)
+                <td colspan="{{ max(1, (int) $avantTotaux) }}">{{ $l['libelle'] }}</td>
+              @elseif ($loop->index >= $avantTotaux)
+                <td></td>
+              @endif
+            @endforeach
           </tr>
         @endif
       @empty
-        <tr><td colspan="13">Aucune ligne.</td></tr>
+        <tr><td colspan="{{ count($colonnesEtablissement) }}">Aucune ligne.</td></tr>
       @endforelse
     </tbody>
   </table>
@@ -58,20 +74,26 @@
   <h2 class="saut">Nominatif</h2>
   <table>
     <thead>
-      <tr><th>Établissement</th><th>Nom</th><th>Prénom</th><th>Sexe</th><th>Date de naissance</th><th>Classe ou filière</th><th class="nombre">Frais réels</th><th class="nombre">Montant retenu</th></tr>
+      <tr>@foreach ($colonnesNominatif as $cle => $libelle)<th @class(['nombre' => in_array($cle, $montants, true)])>{{ $libelle }}</th>@endforeach</tr>
     </thead>
     <tbody>
       @forelse ($donnees['nominatif'] as $l)
-        <tr>
-          <td>{{ $l['etablissement'] }}</td><td>{{ $l['nom'] }}</td><td>{{ $l['prenom'] }}</td><td>{{ $l['sexe'] }}</td><td>{{ $l['date_naissance'] }}</td>
-          <td>{{ $l['classe'] }}</td><td class="nombre">{{ Montant::nombre($l['frais_reels']) }}</td><td class="nombre">{{ Montant::nombre($l['montant_retenu']) }}</td>
-        </tr>
+        <tr>@foreach ($colonnesNominatif as $cle => $libelle)<td @class(['nombre' => in_array($cle, $montants, true)])>{{ $valeur($cle, $l[$cle]) }}</td>@endforeach</tr>
       @empty
-        <tr><td colspan="8">Aucune ligne.</td></tr>
+        <tr><td colspan="{{ count($colonnesNominatif) }}">Aucune ligne.</td></tr>
       @endforelse
       <tr class="general">
-        <td colspan="6">Total général ({{ $donnees['total_oev'] }} OEV)</td>
-        <td class="nombre">{{ Montant::nombre($donnees['nominatif']->sum('frais_reels')) }}</td><td class="nombre">{{ Montant::nombre($donnees['total_montant']) }}</td>
+        @foreach ($colonnesNominatif as $cle => $libelle)
+          @if ($cle === 'montant_retenu')
+            <td class="nombre">{{ Montant::nombre($donnees['total_montant']) }}</td>
+          @elseif ($cle === 'frais_reels')
+            <td class="nombre">{{ Montant::nombre($donnees['nominatif']->sum('frais_reels')) }}</td>
+          @elseif ($loop->first)
+            <td>Total général ({{ $donnees['total_oev'] }} OEV)</td>
+          @else
+            <td></td>
+          @endif
+        @endforeach
       </tr>
     </tbody>
   </table>

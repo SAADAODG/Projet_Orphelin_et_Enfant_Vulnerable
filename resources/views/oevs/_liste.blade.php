@@ -26,7 +26,9 @@
     Oev::ETAT_INTEGRE => 'oev-stat--success',
     Oev::ETAT_REJETE => 'oev-stat--rejete',
   ];
-  $filtreActif = $filtres['statut'] || $filtres['recherche'] !== '';
+  $filtreActif = $filtres['statut'] || $filtres['recherche'] !== '' || $filtres['region_id'];
+  // Localité choisie : conservée par les onglets d'état
+  $localiteChoisie = array_filter(['region_id' => $filtres['region_id'], 'province_id' => $filtres['province_id']]) + ($parametresVue ?? []);
   $cartes = collect($etats)->map(fn ($e) => ['cle' => $e, 'label' => Oev::ETATS[$e], 'valeur' => $compteurs[$e] ?? 0, 'icone' => $iconesEtats[$e], 'style' => $stylesEtats[$e]]);
   if ($carteTous) {
     $cartes->prepend(['cle' => null, 'label' => $carteTous, 'valeur' => $compteurs->sum(), 'icone' => 'bi-folder2-open', 'style' => '']);
@@ -38,7 +40,7 @@
   @foreach ($cartes as $carte)
     <div class="{{ $colonnes }}">
       <a class="oev-stat {{ $carte['style'] }} {{ $filtres['etat'] === $carte['cle'] ? 'is-active' : '' }}"
-         href="{{ route($route, ['etat' => $carte['cle'] ?? 'tous']) }}"
+         href="{{ route($route, ['etat' => $carte['cle'] ?? 'tous'] + $localiteChoisie) }}"
          @if ($filtres['etat'] === $carte['cle']) aria-current="true" @endif>
         <span class="oev-stat-icone"><i class="bi {{ $carte['icone'] }}" aria-hidden="true"></i></span>
         <span>
@@ -59,7 +61,7 @@
       </h2>
       <p class="text-muted mb-0">
         @if ($filtreActif)
-          Résultats filtrés — <a href="{{ route($route, array_filter(['etat' => $filtres['etat']])) }}" class="text-decoration-none">retirer les filtres</a>
+          Résultats filtrés — <a href="{{ route($route, array_filter(['etat' => $filtres['etat']]) + ($parametresVue ?? [])) }}" class="text-decoration-none">retirer les filtres</a>
         @else
           Cliquez sur un dossier pour ouvrir la fiche complète de l’enfant.
         @endif
@@ -69,10 +71,12 @@
 
   <form class="oev-toolbar" method="GET" action="{{ route($route) }}" role="search">
     @if ($filtres['etat'])<input type="hidden" name="etat" value="{{ $filtres['etat'] }}">@endif
+    @foreach ($parametresVue ?? [] as $cle => $valeur)<input type="hidden" name="{{ $cle }}" value="{{ $valeur }}">@endforeach
     <div class="oev-recherche">
       <i class="bi bi-search" aria-hidden="true"></i>
       <input class="form-control" name="q" type="search" value="{{ $filtres['recherche'] }}" placeholder="N° de dossier, code OEV, nom, prénom, tuteur, localité…" aria-label="Rechercher un dossier">
     </div>
+    @include('partials.filtre-localite', ['localites' => $localites, 'regionId' => $filtres['region_id'], 'provinceId' => $filtres['province_id']])
     <select class="form-select" name="statut" aria-label="Filtrer par statut de l’enfant" onchange="this.form.submit()">
       <option value="">Tous les statuts</option>
       @foreach (Oev::STATUTS as $cle => $label)

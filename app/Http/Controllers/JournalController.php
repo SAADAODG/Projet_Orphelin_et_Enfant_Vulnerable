@@ -93,8 +93,8 @@ class JournalController extends Controller
             ->when($f['du'], fn ($q, $du) => $q->where('created_at', '>=', $du . ' 00:00:00'))
             ->when($f['au'], fn ($q, $au) => $q->where('created_at', '<=', $au . ' 23:59:59'))
             ->when($f['utilisateur'], fn ($q, $id) => $q->where('user_id', $id))
-            ->when($f['module'], fn ($q, $module) => $q->where(fn ($q) => $q->where('action', $module)->orWhere('action', 'like', $module . '.%')))
-            ->when($f['q'], fn ($q, $terme) => $q->where('description', 'like', "%{$terme}%"))
+            ->when($f['module'], fn ($q, $module) => $q->where(fn ($q) => $q->where('action', $module)->orWhereLike('action', $module . '.%')))
+            ->when($f['q'], fn ($q, $terme) => $q->whereLike('description', "%{$terme}%"))
             ->latest('created_at')
             ->latest('id');
     }

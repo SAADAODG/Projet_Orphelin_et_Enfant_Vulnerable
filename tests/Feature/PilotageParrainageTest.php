@@ -267,10 +267,11 @@ class PilotageParrainageTest extends TestCase
     public function test_l_identite_complete_est_reservee_au_niveau_central_avec_confirmation(): void
     {
         $this->oev($this->ouagadougou, ['nom' => 'KABORE', 'prenom' => 'Alice']);
-        $parametres = ['parrain_id' => $this->parrain->id, 'format' => 'xlsx', 'filtre' => 1, 'source' => 'eligibles', 'annee' => '2026-2027', 'identite_complete' => 1];
+        // Données cochées comportant l'identité de l'enfant (nom, prénom)
+        $parametres = ['parrain_id' => $this->parrain->id, 'format' => 'xlsx', 'filtre' => 1, 'source' => 'eligibles', 'annee' => '2026-2027', 'donnees' => ['nom', 'prenom', 'age']];
 
         $this->actingAs($this->dp)->get(route('parrainage.pilotage.liste-parrain', $parametres + ['confirmation_identite' => 1]))
-            ->assertSessionHasErrors('identite_complete');
+            ->assertSessionHasErrors('donnees');
         $this->actingAs($this->central)->get(route('parrainage.pilotage.liste-parrain', $parametres))
             ->assertSessionHasErrors('confirmation_identite');
         $this->assertSame(0, JournalActivite::count());
@@ -283,6 +284,51 @@ class PilotageParrainageTest extends TestCase
         $journal = JournalActivite::where('action', 'extraction.liste_parrain_identite')->sole();
         $this->assertTrue($journal->details['identite_complete']);
         $this->assertSame($this->central->id, $journal->user_id);
+    }
+
+    public function test_la_liste_pour_paiement_reprend_les_colonnes_choisies(): void
+    {
+        $a = $this->oev($this->ouagadougou, ['nom' => 'KABORE', 'nom_tuteur' => 'SAWADOGO']);
+        $this->brancherSelection([['oev_id' => $a->id, 'type_appui' => 'scolaire', 'etablissement_id' => 1, 'frais_reels' => 60_000, 'montant_retenu' => 50_000]]);
+
+        $reponse = $this->actingAs($this->central)->get(route('parrainage.pilotage.paiement', [
+            'session_id' => $this->session->id, 'format' => 'xlsx',
+            'colonnes_etablissement' => ['etablissement', 'banque'],
+            'colonnes_nominatif' => ['code', 'nom', 'tuteur'],
+        ]));
+        $classeur = $this->feuilles($reponse);
+
+        $etablissements = $this->contenu($classeur, 'Par établissement');
+        $this->assertStringContainsString('Établissement | Banque | Nombre d’OEV | Montant total (FCFA)', $etablissements);
+        $this->assertStringNotContainsString('Code guichet', $etablissements);
+        $nominatif = $this->contenu($classeur, 'Nominatif');
+        $this->assertStringContainsString('Code OEV | Nom | Parent / tuteur | Montant retenu (FCFA)', $nominatif, 'Le montant retenu est toujours extrait');
+        $this->assertStringContainsString('SAWADOGO', $nominatif);
+        $this->assertStringNotContainsString('Date de naissance', $nominatif);
+    }
+
+    public function test_la_liste_pour_un_parrain_se_complete_avec_d_autres_regions_et_filtres_multiples(): void
+    {
+        $this->parrain->zones()->create(['region_id' => $this->ouagadougou->province->region_id]);
+        $this->oev($this->ouagadougou, ['nom' => 'DANS_LA_ZONE', 'sexe' => 'F']);
+        $this->oev($this->ailleurs, ['nom' => 'AJOUTEE_F', 'sexe' => 'F']);
+        $this->oev($this->ailleurs, ['nom' => 'AJOUTEE_M', 'sexe' => 'M']);
+        $filtres = ['parrain_id' => $this->parrain->id, 'filtre' => 1, 'zone_parrain' => 1, 'annee' => '2026-2027'];
+
+        $noms = fn (array $plus) => $this->actingAs($this->central)
+            ->get(route('parrainage.pilotage.extractions', $filtres + $plus))->viewData('liste')->pluck('nom')->sort()->values()->all();
+
+        $this->assertSame(['DANS_LA_ZONE'], $noms([]));
+        // Zone du parrain + une région ajoutée pour compléter la liste
+        $this->assertSame(['AJOUTEE_F', 'AJOUTEE_M', 'DANS_LA_ZONE'], $noms(['regions' => [$this->ailleurs->province->region_id]]));
+        $this->assertSame(['AJOUTEE_F', 'DANS_LA_ZONE'], $noms(['regions' => [$this->ailleurs->province->region_id], 'sexe' => ['F']]));
+
+        // Aperçu à l'écran : l'enfant est nommé ; le fichier anonymisé ne contient que les données cochées
+        $this->get(route('parrainage.pilotage.extractions', $filtres))->assertOk()->assertSee('DANS_LA_ZONE')->assertSee('Initiales');
+        $contenu = $this->contenu($this->feuilles($this->get(route('parrainage.pilotage.liste-parrain',
+            $filtres + ['format' => 'xlsx', 'source' => 'eligibles', 'donnees' => ['initiales', 'sexe', 'region']]))), 'OEV proposés');
+        $this->assertStringContainsString('Initiales | Sexe | Région', $contenu);
+        $this->assertStringNotContainsString('DANS_LA_ZONE', $contenu);
     }
 
     public function test_les_ecrans_d_extraction_s_affichent_selon_les_droits(): void

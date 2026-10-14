@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\JournalActivite;
 use App\Models\Oev;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\View\View;
 
 /**
  * Désactivation d'un OEV intégré (décès, majorité…) : il ne bénéficie plus d'aucune aide.
@@ -16,13 +18,48 @@ use Illuminate\Validation\Rule;
  */
 class DesactivationOevController extends Controller
 {
+    use CloisonneParZone;
+
+    /**
+     * « OEV sortants » : OEV désactivés et demandes de désactivation en attente, dans la zone de l'utilisateur.
+     * Le niveau central y réactive un OEV ou décide d'une demande ; les autres consultent.
+     */
+    public function index(Request $request): View
+    {
+        $vue = $request->query('vue') === 'demandes' ? 'demandes' : 'desactives';
+        $filtres = [
+            'q' => trim((string) $request->query('q')) ?: null,
+            'motif' => array_key_exists((string) $request->query('motif'), Oev::MOTIFS_DESACTIVATION) ? (string) $request->query('motif') : null,
+        ];
+        $zone = fn () => $this->cloisonner(Oev::etat(Oev::ETAT_INTEGRE));
+
+        $oevs = $zone()
+            ->where('desactivation_etat', $vue === 'demandes' ? Oev::DESACTIVATION_DEMANDEE : Oev::DESACTIVE)
+            ->when($filtres['motif'], fn ($q, $motif) => $q->where('desactivation_motif', $motif))
+            ->when($filtres['q'], fn ($q, $terme) => $q->where(fn ($q) => $q
+                ->whereLike('code', "%{$terme}%")->orWhereLike('nom', "%{$terme}%")->orWhereLike('prenom', "%{$terme}%")))
+            ->with(['commune', 'province', 'auteurDesactivation', 'demandeurDesactivation'])
+            ->orderByDesc($vue === 'demandes' ? 'desactivation_demandee_at' : 'desactive_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('oevs.sortants', [
+            'vue' => $vue,
+            'oevs' => $oevs,
+            'filtres' => $filtres,
+            'nbDesactives' => $zone()->where('desactivation_etat', Oev::DESACTIVE)->count(),
+            'nbDemandes' => $zone()->where('desactivation_etat', Oev::DESACTIVATION_DEMANDEE)->count(),
+            'central' => $request->user()->can('intégrer OEV'),
+        ]);
+    }
+
     /** DP : demande avec motif. Niveau central : désactivation immédiate. */
     public function desactiver(Request $request, Oev $oev): RedirectResponse
     {
         $utilisateur = $request->user();
         $central = $utilisateur->can('intégrer OEV');
         abort_unless($central || $utilisateur->can('constituer dossiers'), 403);
-        abort_unless($oev->estDansLePerimetreDe($utilisateur), 403);
+        $this->verifierZone($oev, message: 'Cet OEV n’est pas dans votre zone.');
 
         if (! $oev->estIntegre() || $oev->desactivation_etat !== null) {
             return back()->withErrors(['desactivation' => 'Seul un OEV intégré et actif peut être désactivé.']);

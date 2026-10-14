@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\BeneficiaireSession;
 use App\Models\JournalActivite;
 use App\Models\Oev;
@@ -9,7 +10,6 @@ use App\Models\SessionParrainage;
 use App\Models\SuiviParrainage;
 use App\Services\Parrainage\FicheApresSuivi;
 use App\Support\Montant;
-use App\Support\Perimetre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +23,8 @@ use Illuminate\View\View;
  */
 class SuiviParrainageController extends Controller
 {
+    use CloisonneParZone;
+
     private const PAR_PAGE = 50;
 
     public function __construct(private readonly FicheApresSuivi $fiche)
@@ -38,7 +40,6 @@ class SuiviParrainageController extends Controller
 
     public function index(Request $request): View
     {
-        $perimetre = Perimetre::pour($request->user());
         $annees = SessionParrainage::where('etat', '!=', SessionParrainage::ETAT_EN_COURS)->distinct()->orderByDesc('annee')->pluck('annee');
         $filtres = [
             'annee' => $annees->contains($request->query('annee')) ? (string) $request->query('annee') : (string) $annees->first(),
@@ -50,8 +51,9 @@ class SuiviParrainageController extends Controller
 
         $base = BeneficiaireSession::parraines()
             ->whereHas('session', fn ($q) => $q->where('annee', $filtres['annee'])->when($filtres['session'], fn ($q, $id) => $q->whereKey($id)))
-            ->whereHas('oev', fn ($q) => $perimetre->appliquer($q)->when($filtres['q'], fn ($q, $t) => $q->where(fn ($q) => $q
-                ->where('code', 'like', "%{$t}%")->orWhere('nom', 'like', "%{$t}%")->orWhere('prenom', 'like', "%{$t}%"))))
+            ->tap(fn ($q) => $this->cloisonner($q, 'oev'))
+            ->whereHas('oev', fn ($q) => $q->when($filtres['q'], fn ($q, $t) => $q->where(fn ($q) => $q
+                ->whereLike('code', "%{$t}%")->orWhereLike('nom', "%{$t}%")->orWhereLike('prenom', "%{$t}%"))))
             ->when($filtres['type'], fn ($q, $type) => $q->where('type_appui', $type));
 
         $compteurs = [
@@ -85,7 +87,7 @@ class SuiviParrainageController extends Controller
     {
         $ligne->load(['session', 'oev']);
         abort_unless($ligne->statut === BeneficiaireSession::RETENU && $ligne->session->etat !== SessionParrainage::ETAT_EN_COURS, 404);
-        abort_unless(Perimetre::pour($request->user())->appliquer(Oev::whereKey($ligne->oev_id))->exists(), 403);
+        $this->verifierZone($ligne, 'oev');
 
         $formation = $ligne->type_appui === SessionParrainage::TYPE_FORMATION;
         $existant = $ligne->suivi()->first();

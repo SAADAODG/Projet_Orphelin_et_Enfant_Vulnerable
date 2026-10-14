@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\AppuiPartenaire;
 use App\Models\EngagementParrain;
 use App\Models\JournalActivite;
@@ -24,6 +25,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ParrainController extends Controller
 {
+    use CloisonneParZone;
+
     public function index(Request $request): View
     {
         $filtres = [
@@ -37,8 +40,8 @@ class ParrainController extends Controller
         $parrains = Parrain::with(['zones.region', 'zones.province'])
             ->withCount(['appuis as oev_appuyes_count' => fn ($q) => $q->select(DB::raw('count(distinct oev_id)'))])
             ->when($filtres['q'] !== '', fn ($q) => $q->where(fn ($q) => $q
-                ->where('nom', 'like', "%{$filtres['q']}%")
-                ->orWhere('contact_nom', 'like', "%{$filtres['q']}%")))
+                ->whereLike('nom', "%{$filtres['q']}%")
+                ->orWhereLike('contact_nom', "%{$filtres['q']}%")))
             ->when(array_key_exists($filtres['type'], Parrain::TYPES), fn ($q) => $q->where('type', $filtres['type']))
             ->when($region, fn ($q) => $q->intervenantDans($region))
             ->when(in_array($filtres['actif'], ['1', '0'], true), fn ($q) => $q->where('actif', $filtres['actif'] === '1'))
@@ -81,7 +84,7 @@ class ParrainController extends Controller
     {
         $parrain->load(['zones.region', 'zones.province', 'engagements']);
         // Statistiques limitées aux OEV de la zone de l'utilisateur
-        $appuis = AppuiPartenaire::where('parrain_id', $parrain->id)->dansLePerimetreDe($request->user());
+        $appuis = $this->cloisonner(AppuiPartenaire::where('parrain_id', $parrain->id), 'oev');
 
         return view('parrainage.parrains.show', [
             'parrain' => $parrain,
@@ -92,7 +95,6 @@ class ParrainController extends Controller
                 ->orderByDesc('annee')
                 ->get(),
             'natures' => NatureAppui::actives()->get(),
-            'journal' => JournalActivite::de($parrain)->with('utilisateur')->limit(10)->get(),
         ]);
     }
 

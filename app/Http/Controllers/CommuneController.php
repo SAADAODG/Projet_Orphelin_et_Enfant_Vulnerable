@@ -22,7 +22,7 @@ class CommuneController extends Controller
         $provinceId = $request->query('province_id');
 
         $communes = Commune::with('province.region')
-            ->when($search !== '', fn ($query) => $query->where('nom', 'like', "%{$search}%"))
+            ->when($search !== '', fn ($query) => $query->whereLike('nom', "%{$search}%"))
             ->when($provinceId, fn ($query) => $query->where('province_id', $provinceId))
             ->when($regionId && ! $provinceId, function ($query) use ($regionId) {
                 $query->whereHas('province', fn ($q) => $q->where('region_id', $regionId));

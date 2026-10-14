@@ -60,10 +60,11 @@ trait AppartientALocalite
     }
 
     /** Recherche par nom de région, de province ou de commune (à utiliser dans un orWhere). */
-    public function scopeOuLocaliteContient(Builder $query, string $terme, string $operateur = 'like'): Builder
+    /** Région, province ou commune dont le nom contient le terme (« %terme% »), sans tenir compte de la casse. */
+    public function scopeOuLocaliteContient(Builder $query, string $terme): Builder
     {
         foreach (['region', 'province', 'commune'] as $relation) {
-            $query->orWhereHas($relation, fn (Builder $q) => $q->where('nom', $operateur, $terme));
+            $query->orWhereHas($relation, fn (Builder $q) => $q->whereLike('nom', $terme));
         }
 
         return $query;
