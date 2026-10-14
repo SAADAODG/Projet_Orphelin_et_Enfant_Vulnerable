@@ -183,23 +183,6 @@
       </section>
     </div>
 
-    <div class="col-12">
-      <section class="oev-carte">
-        <h2 class="oev-carte-titre"><i class="bi bi-clock-history" aria-hidden="true"></i> Historique</h2>
-        @if ($journal->isEmpty())
-          <p class="text-muted mb-0">Aucune action enregistrée.</p>
-        @else
-          <ul class="list-unstyled mb-0">
-            @foreach ($journal as $entree)
-              <li class="py-2 @unless ($loop->last) border-bottom @endunless">
-                <span class="fw-semibold">{{ $entree->description }}</span>
-                <span class="d-block text-muted small">{{ $entree->created_at->format('d/m/Y à H:i') }} · {{ $entree->utilisateur?->name ?? 'Système' }}</span>
-              </li>
-            @endforeach
-          </ul>
-        @endif
-      </section>
-    </div>
   </div>
 </div>
 @endsection

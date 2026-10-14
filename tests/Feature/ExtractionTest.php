@@ -96,6 +96,22 @@ class ExtractionTest extends TestCase
         $this->get(route('extraction.index', ['sexe' => 'X']))->assertOk()->assertSee('GARCON')->assertSee('PETITE');
     }
 
+    public function test_la_liste_des_oev_se_filtre_par_region_et_province(): void
+    {
+        $this->enfant(['nom' => 'OUAGA']);
+        $this->enfant(['nom' => 'AILLEURS'], $this->ailleurs);
+        $region = $this->ouagadougou->province->region_id;
+
+        $this->actingAs($this->central)->get(route('oevs.liste'))->assertOk()->assertSee('OUAGA')->assertSee('AILLEURS')->assertSee('Toutes les régions');
+        $this->get(route('oevs.liste', ['region_id' => $region]))->assertOk()->assertSee('OUAGA')->assertDontSee('AILLEURS');
+        $this->get(route('oevs.liste', ['region_id' => $region, 'province_id' => $this->ouagadougou->province_id]))->assertOk()->assertSee('OUAGA');
+        // Province d'une autre région : ignorée
+        $this->get(route('oevs.liste', ['region_id' => $region, 'province_id' => $this->ailleurs->province_id]))->assertOk()->assertSee('OUAGA');
+        // Le DP, limité à sa province, n'a pas de filtre de région
+        $this->actingAs($this->dp)->get(route('oevs.liste', ['region_id' => $this->ailleurs->province->region_id]))
+            ->assertOk()->assertSee('OUAGA')->assertDontSee('AILLEURS')->assertDontSee('Toutes les régions');
+    }
+
     public function test_le_dp_ne_voit_que_sa_province(): void
     {
         $this->enfant(['nom' => 'CHEZ_MOI']);

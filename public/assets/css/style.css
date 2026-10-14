@@ -681,8 +681,9 @@ html[data-theme="dark"] .profile-button .avatar-sm {
   white-space: nowrap;
 }
 
+/* Pas de largeur minimale imposée aux cellules : elle forçait un défilement horizontal
+   même quand le contenu tenait dans la page */
 .table tbody td {
-  min-width: 120px;
   padding-top: 1rem;
   padding-bottom: 1rem;
 }

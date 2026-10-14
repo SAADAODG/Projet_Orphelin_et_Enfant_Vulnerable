@@ -28,7 +28,7 @@ class VillageController extends Controller
         $filtres = $request->only(['region_id', 'province_id', 'commune_id']);
 
         $villages = Village::with('commune.province.region')
-            ->when($search !== '', fn ($query) => $query->where('nom', 'like', "%{$search}%"))
+            ->when($search !== '', fn ($query) => $query->whereLike('nom', "%{$search}%"))
             ->when($filtres['commune_id'] ?? null, fn ($query, $id) => $query->where('commune_id', $id))
             ->when(! ($filtres['commune_id'] ?? null) && ($filtres['province_id'] ?? null),
                 fn ($query) => $query->whereHas('commune', fn ($q) => $q->where('province_id', $filtres['province_id'])))

@@ -23,8 +23,8 @@ class ProvinceController extends Controller
             ->withCount('communes')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('nom', 'like', "%{$search}%")
-                        ->orWhere('chef_lieu', 'like', "%{$search}%");
+                    $q->whereLike('nom', "%{$search}%")
+                        ->orWhereLike('chef_lieu', "%{$search}%");
                 });
             })
             ->when($regionId, fn ($query) => $query->where('region_id', $regionId))

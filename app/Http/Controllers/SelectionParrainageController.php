@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\BeneficiaireSession;
 use App\Models\Oev;
 use App\Models\Region;
@@ -10,7 +11,6 @@ use App\Services\Parrainage\ParrainageService;
 use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\TransitionSessionInvalide;
 use App\Support\Montant;
-use App\Support\Perimetre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -22,6 +22,8 @@ use Illuminate\View\View;
  */
 class SelectionParrainageController extends Controller
 {
+    use CloisonneParZone;
+
     private const PAR_PAGE = 50;
 
     /** Au-delà, « tout ajouter » demande d'affiner les filtres. */
@@ -37,7 +39,7 @@ class SelectionParrainageController extends Controller
     {
         $session->load('quotas');
         $utilisateur = $request->user();
-        $perimetre = Perimetre::pour($utilisateur);
+        $perimetre = $this->zone();
         $gere = $utilisateur->can('gérer sessions parrainage');
         $modifiable = $gere && $session->parametresModifiables();
         // Tant que la liste est modifiable, on arrive sur tous les éligibles : les filtres ne font que réduire la liste
@@ -48,10 +50,30 @@ class SelectionParrainageController extends Controller
         };
         $filtres = $this->lireFiltres($request);
 
-        $lignes = $session->beneficiaires()
-            ->whereHas('oev', fn ($q) => $perimetre->appliquer($q))
-            ->with(['oev.region', 'oev.province', 'oev.commune', 'region'])
-            ->get();
+        // Liste de la session et liste d'attente : comptées par la base, affichées page par page
+        // (seules PAR_PAGE lignes sont chargées, quelle que soit la taille de la liste)
+        $rechercheListe = trim((string) $request->query('recherche')) ?: null;
+        $lignes = fn () => $session->beneficiaires()
+            ->whereHas('oev', fn ($q) => $perimetre->appliquer($q)->when($rechercheListe, fn ($q, $terme) => $q->where(fn ($q) => $q
+                ->whereLike('code', "%{$terme}%")->orWhereLike('nom', "%{$terme}%")->orWhereLike('prenom', "%{$terme}%"))));
+        // Nombre et montant total de chaque liste (zone de l'utilisateur), en une requête
+        $totaux = $session->beneficiaires()->whereHas('oev', fn ($q) => $perimetre->appliquer($q))
+            ->selectRaw('statut, count(*) as nombre, coalesce(sum(montant_retenu), 0) as montant')
+            ->groupBy('statut')
+            ->get()
+            ->keyBy('statut');
+        $nbRetenus = (int) ($totaux[BeneficiaireSession::RETENU]->nombre ?? 0);
+        $nbAttente = (int) ($totaux[BeneficiaireSession::ATTENTE]->nombre ?? 0);
+        $retenus = $onglet === 'liste'
+            ? $lignes()->retenus()->with(['oev.region', 'oev.province', 'oev.commune', 'region'])
+                ->orderByDesc('score')->orderBy('id')
+                ->paginate(self::PAR_PAGE, ['*'], 'page_retenus')->withQueryString()
+            : null;
+        $attente = $onglet === 'liste'
+            ? $lignes()->enAttente()->with(['oev.region', 'oev.province', 'oev.commune', 'region'])
+                ->orderBy('rang')->orderBy('id')
+                ->paginate(self::PAR_PAGE, ['*'], 'page_attente')->withQueryString()->fragment('liste-attente')
+            : null;
 
         // Tous les OEV intégrés de la zone sont listés ; les non éligibles le sont avec leur motif, sans pouvoir être ajoutés
         $eligibles = $onglet === 'eligibles'
@@ -62,6 +84,8 @@ class SelectionParrainageController extends Controller
                 ->withQueryString()
             : null;
         $motifs = $eligibles ? $this->selection->motifsInegibilite($session, $eligibles->items()) : [];
+        // Compléments : montant déjà versé par l'État cette année (autres sessions), pour les OEV de la page
+        $dejaFinance = $eligibles ? $this->selection->dejaFinance($session, collect($eligibles->items())->pluck('id')->all()) : [];
         // Résultat du dernier parrainage, pour décider d'un nouveau
         $suivis = $eligibles ? $this->selection->derniersSuivis($eligibles->items()) : collect();
         // Coût estimé des éligibles correspondant aux filtres (ceux que « Tout ajouter » ajouterait)
@@ -77,10 +101,16 @@ class SelectionParrainageController extends Controller
             'onglet' => $onglet,
             'gere' => $gere,
             'modifiable' => $modifiable,
-            'retenus' => $lignes->where('statut', BeneficiaireSession::RETENU)->sortByDesc('score')->values(),
-            'attente' => $lignes->where('statut', BeneficiaireSession::ATTENTE)->sortBy('rang')->values(),
+            'retenus' => $retenus,
+            'attente' => $attente,
+            'nbRetenus' => $nbRetenus,
+            'nbAttente' => $nbAttente,
+            'montantRetenus' => (int) ($totaux[BeneficiaireSession::RETENU]->montant ?? 0),
+            'montantAttente' => (int) ($totaux[BeneficiaireSession::ATTENTE]->montant ?? 0),
+            'rechercheListe' => $rechercheListe,
             'eligibles' => $eligibles,
             'motifs' => $motifs,
+            'dejaFinance' => $dejaFinance,
             'suivis' => $suivis,
             'nbAjoutables' => $nbAjoutables,
             'estimation' => $estimation,

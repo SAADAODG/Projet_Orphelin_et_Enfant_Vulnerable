@@ -27,10 +27,10 @@ class PlainteController extends Controller
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = '%'.$request->query('q').'%';
                 $query->where(fn ($sub) => $sub
-                    ->where('reference', 'ilike', $q)
-                    ->orWhere('description', 'ilike', $q)
-                    ->orWhere('localite', 'ilike', $q)
-                    ->ouLocaliteContient($q, 'ilike'));
+                    ->whereLike('reference', $q)
+                    ->orWhereLike('description', $q)
+                    ->orWhereLike('localite', $q)
+                    ->ouLocaliteContient($q));
             })
             ->latest()
             ->paginate(15)

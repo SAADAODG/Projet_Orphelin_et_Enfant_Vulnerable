@@ -20,8 +20,8 @@ class RegionController extends Controller
         $regions = Region::withCount('provinces')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('nom', 'like', "%{$search}%")
-                        ->orWhere('ancien_nom', 'like', "%{$search}%");
+                    $q->whereLike('nom', "%{$search}%")
+                        ->orWhereLike('ancien_nom', "%{$search}%");
                 });
             })
             ->orderBy('nom')

@@ -65,9 +65,9 @@
       <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.sessions.index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Sessions</a>
       @if ($modifiable)
         <form method="POST" action="{{ route('parrainage.sessions.selection.valider', $session) }}"
-              data-confirm="Valider la liste définitive ? {{ $retenus->count() }} OEV retenu(s) pour {{ Montant::fcfa($budget['engage']) }}. La liste, l’enveloppe et les quotas seront figés.">
+              data-confirm="Valider la liste définitive ? {{ $nbRetenus }} OEV retenu(s) pour {{ Montant::fcfa($budget['engage']) }}. La liste, l’enveloppe et les quotas seront figés.">
           @csrf
-          <button class="btn btn-success btn-sm" type="submit" @disabled($retenus->isEmpty())><i class="bi bi-patch-check" aria-hidden="true"></i> Valider la liste définitive</button>
+          <button class="btn btn-success btn-sm" type="submit" @disabled($nbRetenus === 0)><i class="bi bi-patch-check" aria-hidden="true"></i> Valider la liste définitive</button>
         </form>
       @endif
     </div>
@@ -86,8 +86,8 @@
       ['bi-wallet2', 'Enveloppe', Montant::fcfa($session->enveloppe), '', null],
       ['bi-cash-coin', 'Engagé (retenus)', Montant::fcfa($budget['engage']), '', null],
       ['bi-piggy-bank', 'Reste disponible', Montant::fcfa($reste), $reste < 0 ? 'oev-stat--danger' : 'oev-stat--success', null],
-      ['bi-person-check', 'OEV retenus', $retenus->count(), 'oev-stat--info', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste'])],
-      ['bi-hourglass-split', 'En liste d’attente', $attente->count(), 'oev-stat--warning', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) . '#liste-attente'],
+      ['bi-person-check', 'OEV retenus', $nbRetenus, 'oev-stat--info', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste'])],
+      ['bi-hourglass-split', 'En liste d’attente', $nbAttente, 'oev-stat--warning', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) . '#liste-attente'],
     ] as [$icone, $libelle, $valeur, $style, $url])
       <div class="col-6 col-md-4 col-xl">
         <{{ $url ? 'a' : 'div' }} class="oev-stat {{ $style }} {{ $url && $onglet === 'liste' ? 'is-active' : '' }}" @if ($url) href="{{ $url }}" @endif>
@@ -130,7 +130,7 @@
   <ul class="nav nav-pills mt-3 gap-2">
     <li class="nav-item">
       <a class="nav-link {{ $onglet === 'liste' ? 'active' : '' }}" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}">
-        <i class="bi bi-list-check" aria-hidden="true"></i> Liste de la session <span class="badge rounded-pill text-bg-light border ms-1">{{ $retenus->count() + $attente->count() }}</span>
+        <i class="bi bi-list-check" aria-hidden="true"></i> Liste de la session <span class="badge rounded-pill text-bg-light border ms-1">{{ $nbRetenus + $nbAttente }}</span>
       </a>
     </li>
     @if ($session->parametresModifiables())
@@ -143,15 +143,24 @@
   </ul>
 
   @if ($onglet === 'liste')
-    {{-- ================= Liste de la session ================= --}}
+    {{-- ================= Liste de la session : page par page, recherche par code, nom ou prénom ================= --}}
+    @if ($nbRetenus + $nbAttente > 0)
+      <form class="d-flex flex-wrap gap-2 mt-3" method="GET" action="{{ route('parrainage.sessions.selection', $session) }}" role="search">
+        <input type="hidden" name="onglet" value="liste">
+        <input class="form-control form-control-sm w-auto" type="search" name="recherche" value="{{ $rechercheListe }}" placeholder="Code OEV, nom ou prénom" aria-label="Rechercher dans la liste de la session">
+        <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Rechercher</button>
+        @if ($rechercheListe)<a class="btn btn-link btn-sm" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}">Effacer</a>@endif
+      </form>
+    @endif
+
     <section class="panel mt-3">
       <div class="panel-header">
         <div>
-          <h2 class="h5 mb-1">OEV retenus <span class="badge rounded-pill text-bg-light border ms-1">{{ $retenus->count() }}</span></h2>
+          <h2 class="h5 mb-1">OEV retenus <span class="badge rounded-pill text-bg-light border ms-1">{{ $rechercheListe ? $retenus->total() . ' / ' : '' }}{{ $nbRetenus }}</span></h2>
           <p class="text-muted mb-0 small">@if ($session->plafond_beneficiaire === null)Montant retenu : les frais réels (session sans plafond).@else Montant retenu : le plus petit des frais réels et du plafond ({{ Montant::fcfa($session->plafond_beneficiaire) }}) ; le plafond quand les frais ne sont pas renseignés.@endif</p>
         </div>
       </div>
-      @if ($retenus->isEmpty())
+      @if ($nbRetenus === 0)
         <div class="oev-vide">
           <div class="oev-vide-icone"><i class="bi bi-person-plus" aria-hidden="true"></i></div>
           <h3 class="h5">Aucun OEV retenu pour le moment</h3>
@@ -160,20 +169,28 @@
             <a class="btn btn-primary" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'eligibles']) }}"><i class="bi bi-person-plus" aria-hidden="true"></i> Ajouter des OEV</a>
           @endif
         </div>
+      @elseif ($retenus->isEmpty())
+        <p class="text-muted mb-0">Aucun OEV retenu ne correspond à « {{ $rechercheListe }} ».</p>
       @else
-        @include('parrainage.selection._lignes', ['lignes' => $retenus, 'statut' => BeneficiaireSession::RETENU])
+        @include('parrainage.selection._lignes', ['lignes' => $retenus, 'statut' => BeneficiaireSession::RETENU, 'total' => $rechercheListe ? null : $montantRetenus])
+        @include('parrainage.selection._pagination', ['liste' => $retenus])
       @endif
     </section>
 
-    @if ($attente->isNotEmpty())
+    @if ($nbAttente > 0)
       <section class="panel mt-3" id="liste-attente">
         <div class="panel-header">
           <div>
-            <h2 class="h5 mb-1">Liste d’attente <span class="badge rounded-pill text-bg-light border ms-1">{{ $attente->count() }}</span></h2>
+            <h2 class="h5 mb-1">Liste d’attente <span class="badge rounded-pill text-bg-light border ms-1">{{ $rechercheListe ? $attente->total() . ' / ' : '' }}{{ $nbAttente }}</span></h2>
             <p class="text-muted mb-0 small">OEV hors enveloppe ou hors quota, par rang. Ils pourront être retenus si des fonds se libèrent (retrait d’un OEV, session de rattrapage, parrain).</p>
           </div>
         </div>
-        @include('parrainage.selection._lignes', ['lignes' => $attente, 'statut' => BeneficiaireSession::ATTENTE])
+        @if ($attente->isEmpty())
+          <p class="text-muted mb-0">Aucun OEV en attente ne correspond à « {{ $rechercheListe }} ».</p>
+        @else
+          @include('parrainage.selection._lignes', ['lignes' => $attente, 'statut' => BeneficiaireSession::ATTENTE, 'total' => $rechercheListe ? null : $montantAttente])
+          @include('parrainage.selection._pagination', ['liste' => $attente])
+        @endif
       </section>
     @endif
   @else
@@ -345,6 +362,9 @@
                   @php
                     $type = SelectionParrainage::typePour($oev, $session);
                     ['frais' => $frais, 'estime' => $estime] = SelectionParrainage::fraisPour($oev, $session, $type);
+                    // Complément : l'État a déjà versé une partie des frais cette année (session précédente)
+                    $dejaVerse = $dejaFinance[$oev->id] ?? 0;
+                    $frais = SelectionParrainage::fraisRestants($frais, $dejaVerse);
                     $montantPrevu = BeneficiaireSession::montantPour($frais, $session->plafond_beneficiaire);
                     $motif = $motifs[$oev->id] ?? null;
                   @endphp
@@ -361,6 +381,7 @@
                     <td class="sel-wrap">
                       @include('parrainage._oev', ['oev' => $oev, 'detail' => '· ' . $oev->age() . ' ans', 'nouvelOnglet' => true])
                       @if ($motif)<span class="badge rounded-pill text-bg-secondary mt-1"><i class="bi bi-slash-circle me-1" aria-hidden="true"></i>Non éligible : {{ $motif }}</span>@endif
+                      @if ($dejaVerse && ! $motif)<span class="badge rounded-pill text-bg-warning mt-1" title="Frais supérieurs au plafond d’une session précédente de l’année"><i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Complément : {{ Montant::fcfa($dejaVerse) }} déjà versés</span>@endif
                       @if ($dernierSuivi = $suivis[$oev->id] ?? null)
                         <span class="d-block small mt-1 {{ $dernierSuivi->a_reconduire ? 'text-success' : 'text-danger' }}" title="{{ $dernierSuivi->observation }}">
                           <i class="bi bi-journal-check" aria-hidden="true"></i> Déjà parrainé : {{ $dernierSuivi->resume() }}

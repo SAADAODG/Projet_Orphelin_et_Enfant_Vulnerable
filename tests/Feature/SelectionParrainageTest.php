@@ -126,6 +126,56 @@ class SelectionParrainageTest extends TestCase
         $this->assertEqualsCanonicalizing(['ICI', 'PARTIELLE_P1'], $session->beneficiaires()->with('oev')->get()->pluck('oev.nom')->all());
     }
 
+    public function test_une_session_de_rattrapage_propose_les_non_parraines_puis_les_complements(): void
+    {
+        $selection = app(SelectionParrainage::class);
+        $principale = $this->nouvelleSession(['plafond_beneficiaire' => 50_000]);
+        $couvert = $this->oev('COUVERT', ['frais_scolarite' => 40_000, 'niveau_priorite' => 'eleve']);
+        $plafonne = $this->oev('PLAFONNE', ['frais_scolarite' => 120_000, 'niveau_priorite' => 'eleve']);
+        $this->oev('JAMAIS', ['frais_scolarite' => 30_000, 'niveau_priorite' => 'faible']);
+        $selection->ajouter($principale, [$couvert->id, $plafonne->id], $this->central);
+
+        // Rattrapage : COUVERT n'est plus proposé ; JAMAIS (non parrainé) passe avant PLAFONNE (complément), malgré un besoin moins urgent
+        $rattrapage = $this->nouvelleSession(['numero' => 2, 'plafond_beneficiaire' => 100_000, 'session_origine_id' => $principale->id]);
+        $this->assertSame(['JAMAIS', 'PLAFONNE'], $selection->candidats($rattrapage)->pluck('nom')->all());
+        $this->assertSame(50_000, $selection->dejaFinance($rattrapage)[$plafonne->id]);
+
+        // Le complément ne finance que le reste : 120 000 − 50 000 déjà versés
+        $this->actingAs($this->central)->get(route('parrainage.sessions.selection', ['session' => $rattrapage, 'onglet' => 'eligibles']))
+            ->assertOk()->assertDontSee('COUVERT')->assertSee("Complément : 50\u{00A0}000\u{00A0}FCFA déjà versés", false);
+        $selection->ajouter($rattrapage, [$plafonne->id], $this->central);
+        $ligne = $rattrapage->beneficiaires()->sole();
+        $this->assertSame(70_000, $ligne->montant_retenu);
+        $this->assertSame(70_000, $ligne->frais_reels);
+
+        // Frais désormais entièrement couverts : plus proposé dans une troisième session
+        $troisieme = $this->nouvelleSession(['numero' => 3]);
+        $this->assertSame(['JAMAIS'], $selection->candidats($troisieme)->pluck('nom')->all());
+    }
+
+    public function test_la_liste_de_la_session_est_paginee_avec_recherche_et_total_global(): void
+    {
+        $session = $this->nouvelleSession();
+        for ($i = 1; $i <= 60; $i++) {
+            $session->beneficiaires()->create([
+                'oev_id' => $this->oev(sprintf('ENFANT%02d', $i))->id, 'type_appui' => 'scolaire', 'statut' => BeneficiaireSession::RETENU,
+                'score' => 100 - $i, 'region_id' => $this->region->id, 'montant_retenu' => 1_000,
+            ]);
+        }
+
+        // Page 1 : 50 lignes ; le total porte sur les 60 OEV de la liste
+        $this->actingAs($this->central)->get(route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']))
+            ->assertOk()
+            ->assertViewHas('retenus', fn ($page) => $page->count() === 50 && $page->total() === 60)
+            ->assertSee('ENFANT01')->assertDontSee('ENFANT60')
+            ->assertSee('Total de la liste')->assertSee("60\u{00A0}000\u{00A0}FCFA", false);
+        $this->get(route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste', 'page_retenus' => 2]))
+            ->assertOk()->assertSee('ENFANT60')->assertDontSee('ENFANT01');
+        // Recherche dans la liste
+        $this->get(route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste', 'recherche' => 'ENFANT07']))
+            ->assertOk()->assertViewHas('retenus', fn ($page) => $page->total() === 1)->assertSee('ENFANT07');
+    }
+
     public function test_tous_les_oev_integres_sont_listes_et_les_non_eligibles_portent_leur_motif(): void
     {
         $premiere = $this->nouvelleSession();
@@ -138,20 +188,20 @@ class SelectionParrainageTest extends TestCase
         $selection->ajouter($premiere, [$deja->id], $this->central);
         $session = $this->nouvelleSession(['numero' => 2]);
 
+        // DEJA_RETENU : frais entièrement financés par la première session de l'année, il n'est plus proposé du tout
         $candidats = $selection->candidats($session)->get();
-        $this->assertEqualsCanonicalizing(['DEJA_RETENU', 'NON_SCOLARISE', 'ELIGIBLE'], $candidats->pluck('nom')->all());
+        $this->assertEqualsCanonicalizing(['NON_SCOLARISE', 'ELIGIBLE'], $candidats->pluck('nom')->all());
         $this->assertSame(['ELIGIBLE'], $selection->candidats($session, ['eligibilite' => 'oui'])->pluck('nom')->all());
-        $this->assertEqualsCanonicalizing(['DEJA_RETENU', 'NON_SCOLARISE'], $selection->candidats($session, ['eligibilite' => 'non'])->pluck('nom')->all());
+        $this->assertEqualsCanonicalizing(['NON_SCOLARISE'], $selection->candidats($session, ['eligibilite' => 'non'])->pluck('nom')->all());
 
         $motifs = $selection->motifsInegibilite($session, $candidats);
-        $this->assertSame('Déjà retenu par la session ' . $premiere->reference(), $motifs[$deja->id]);
         $this->assertSame('Non scolarisé et hors de l’âge scolaire (6 à 16 ans)', $motifs[$candidats->firstWhere('nom', 'NON_SCOLARISE')->id]);
-        $this->assertCount(2, $motifs);
+        $this->assertCount(1, $motifs);
 
         $this->actingAs($this->central)->get(route('parrainage.sessions.selection', $session))
-            ->assertOk()->assertSee('DEJA_RETENU')->assertSee('Non éligible : Non scolarisé et hors de l’âge scolaire')->assertSee('Tout ajouter (1)');
+            ->assertOk()->assertDontSee('DEJA_RETENU')->assertSee('Non éligible : Non scolarisé et hors de l’âge scolaire')->assertSee('Tout ajouter (1)');
 
-        // Un non éligible coché quand même n'est pas ajouté
+        // Un OEV déjà financé, coché quand même, n'est pas ajouté
         $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$deja->id]]);
         $this->assertSame(0, $session->beneficiaires()->count());
     }

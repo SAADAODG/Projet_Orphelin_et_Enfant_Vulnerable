@@ -231,9 +231,10 @@ class ExtractionController extends Controller
         foreach (self::OUI_NON as $cle) {
             $requete->when($f[$cle] !== null, fn ($q) => $q->where($cle, $f[$cle] === '1'));
         }
-        // Listes enregistrées en JSON (["orphelin","precarite"]) : on cherche la valeur entre guillemets
-        $requete->when($f['vulnerabilite'], fn ($q, $v) => $q->where('vulnerabilites', 'like', '%"' . $v . '"%'));
-        $requete->when($f['type_handicap'], fn ($q, $v) => $q->where('types_handicap', 'like', '%"' . $v . '"%'));
+        // Listes enregistrées en JSON (["orphelin","precarite"]) : on cherche la valeur entre guillemets,
+        // dans la colonne lue comme texte (PostgreSQL refuse LIKE sur une colonne json)
+        $requete->when($f['vulnerabilite'], fn ($q, $v) => $q->whereRaw('CAST(vulnerabilites AS TEXT) LIKE ?', ['%"' . $v . '"%']));
+        $requete->when($f['type_handicap'], fn ($q, $v) => $q->whereRaw('CAST(types_handicap AS TEXT) LIKE ?', ['%"' . $v . '"%']));
 
         // Âge en années révolues
         $requete->when($f['age_min'] !== null, fn ($q) => $q->whereDate('date_naissance', '<=', now()->subYears($f['age_min'])));
@@ -245,7 +246,7 @@ class ExtractionController extends Controller
         $requete->when($f['q'], function ($q, $terme) {
             $q->where(function ($q) use ($terme) {
                 foreach (['code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur', 'mere_nom', 'pere_nom', 'etablissement_actuel', 'quartier'] as $champ) {
-                    $q->orWhere($champ, 'like', "%{$terme}%");
+                    $q->orWhereLike($champ, "%{$terme}%");
                 }
                 $q->ouLocaliteContient("%{$terme}%");
             });

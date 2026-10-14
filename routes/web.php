@@ -138,6 +138,8 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
         Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
         // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
+        // OEV sortants : désactivés (décès, majorité…) et demandes de désactivation en attente
+        Route::get('/oevs-sortants', [DesactivationOevController::class, 'index'])->name('oevs.sortants');
         Route::post('/oevs/{oev}/desactiver', [DesactivationOevController::class, 'desactiver'])->name('oevs.desactiver');
         Route::post('/oevs/{oev}/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('oevs.desactivation.decider');
         Route::post('/oevs/{oev}/reactiver', [DesactivationOevController::class, 'reactiver'])->name('oevs.reactiver');

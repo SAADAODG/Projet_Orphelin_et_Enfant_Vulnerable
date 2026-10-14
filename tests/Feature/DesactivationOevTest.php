@@ -73,6 +73,28 @@ class DesactivationOevTest extends TestCase
         $this->actingAs($this->central)->get(route('oevs.show', $this->oev))->assertOk()->assertSee('OEV désactivé')->assertSee('Décès');
     }
 
+    public function test_l_ecran_des_oev_sortants_liste_les_desactives_et_les_demandes(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.desactiver', $this->oev), ['desactivation_motif' => 'majorite']);
+
+        $this->actingAs($this->central)->get(route('oevs.sortants', ['vue' => 'demandes']))
+            ->assertOk()->assertSee('OUEDRAOGO Awa')->assertSee('Devenu majeur')->assertSee('Valider');
+        $this->get(route('oevs.sortants'))->assertOk()->assertDontSee('OUEDRAOGO Awa')->assertSee('Aucun OEV désactivé');
+
+        // Onglet « OEV sortants » de la Liste des OEV : la demande en attente est signalée
+        $this->get(route('oevs.liste'))->assertOk()->assertSee('OEV sortants')->assertSee('1 à traiter')->assertSee('OUEDRAOGO');
+
+        $this->post(route('oevs.desactivation.decider', $this->oev), ['decision' => 'valider']);
+        $this->get(route('oevs.sortants'))->assertOk()->assertSee('OUEDRAOGO Awa')->assertSee('Réactiver');
+        // Désactivé : il quitte l'onglet « OEV actifs »
+        $this->get(route('oevs.liste'))->assertOk()->assertDontSee('OUEDRAOGO')->assertDontSee('à traiter');
+        $this->get(route('oevs.sortants', ['q' => 'awa']))->assertOk()->assertSee('OUEDRAOGO Awa');
+        $this->get(route('oevs.sortants', ['motif' => 'deces']))->assertOk()->assertDontSee('OUEDRAOGO Awa');
+
+        // Le DP consulte sans pouvoir réactiver
+        $this->actingAs($this->dp)->get(route('oevs.sortants'))->assertOk()->assertSee('OUEDRAOGO Awa')->assertDontSee('Réactiver');
+    }
+
     public function test_le_central_refuse_une_demande_avec_un_motif(): void
     {
         $this->actingAs($this->dp)->post(route('oevs.desactiver', $this->oev), ['desactivation_motif' => 'majorite']);

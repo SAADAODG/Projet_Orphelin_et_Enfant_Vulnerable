@@ -1,6 +1,6 @@
 {{--
   Lignes de la sélection d'une session (retenus ou liste d'attente).
-  Variables : $lignes (BeneficiaireSession), $statut, $session, $modifiable
+  Variables : $lignes (BeneficiaireSession, une page), $statut, $session, $modifiable, $total (montant de toute la liste)
 --}}
 @php
   $estAttente = $statut === App\Models\BeneficiaireSession::ATTENTE;
@@ -65,8 +65,9 @@
     </tbody>
     <tfoot>
       <tr class="fw-semibold">
-        <td colspan="{{ $estAttente ? 6 : 5 }}" class="text-end">Total</td>
-        <td class="text-end">{{ App\Support\Montant::fcfa($lignes->sum('montant_retenu')) }}</td>
+        {{-- Total de toute la liste (calculé par la base), pas seulement de la page affichée --}}
+        <td colspan="{{ $estAttente ? 6 : 5 }}" class="text-end">{{ isset($total) ? 'Total de la liste' : 'Total de la page' }}</td>
+        <td class="text-end">{{ App\Support\Montant::fcfa($total ?? $lignes->sum('montant_retenu')) }}</td>
         @if ($modifiable)<td></td>@endif
       </tr>
     </tfoot>
