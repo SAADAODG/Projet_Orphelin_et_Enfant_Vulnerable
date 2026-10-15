@@ -2,6 +2,8 @@
 @use('App\Models\Oev')
 @use('App\Models\SessionParrainage')
 @use('App\Services\Parrainage\ExtractionsParrainage')
+@use('App\Services\Parrainage\FichiersExtraction')
+@use('App\Support\Montant')
 
 @section('title', 'Extractions du parrainage | ' . $siteSetting->structure_nom)
 
@@ -263,10 +265,16 @@
       </div>
 
       @if ($parrain)
-        <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
+        {{-- Exports limités (mémoire du serveur) : le bouton est désactivé, avec l'explication, au-delà --}}
+        @php($pdfTropGrand = $nombreListe > FichiersExtraction::PDF_LIGNES_MAX)
+        <div class="d-flex flex-wrap justify-content-end align-items-center gap-2 mt-4"
+             data-limite-export data-lignes="{{ $nombreListe }}" data-cellules-max="{{ FichiersExtraction::CELLULES_MAX }}" data-lignes-max="{{ FichiersExtraction::LIGNES_MAX }}">
+          <p class="small text-muted mb-0 me-auto" data-limite-message @unless ($pdfTropGrand) hidden @endunless>
+            @if ($pdfTropGrand) PDF limité à {{ Montant::nombre(FichiersExtraction::PDF_LIGNES_MAX) }} lignes : exportez en Excel ou affinez les filtres. @endif
+          </p>
           <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Actualiser l’aperçu</button>
-          <button class="btn btn-outline-primary" type="submit" formaction="{{ route('parrainage.pilotage.liste-parrain') }}" name="format" value="pdf"><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
-          <button class="btn btn-primary" type="submit" formaction="{{ route('parrainage.pilotage.liste-parrain') }}" name="format" value="xlsx"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-primary" type="submit" formaction="{{ route('parrainage.pilotage.liste-parrain') }}" name="format" value="pdf" @disabled($pdfTropGrand)><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
+          <button class="btn btn-primary" type="submit" formaction="{{ route('parrainage.pilotage.liste-parrain') }}" name="format" value="xlsx" data-export-excel><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Excel</button>
         </div>
       @endif
     </form>
@@ -277,7 +285,7 @@
           <div>
             <h2 class="h5 mb-1 section-title"><i class="bi bi-eye" aria-hidden="true"></i><span>Aperçu</span></h2>
             <p class="text-muted mb-0">
-              {{ $liste->count() }} OEV correspondent aux filtres{{ $liste->count() > 10 ? ' (10 premiers affichés)' : '' }}, par ordre de priorité.
+              {{ Montant::nombre($nombreListe) }} OEV correspondent aux filtres{{ $nombreListe > 10 ? ' (10 premiers affichés)' : '' }}, par ordre de priorité.
               L’aperçu, réservé aux agents, nomme les enfants ; le fichier ne contient que les données cochées.
               @if ($f['source'] === 'attente' && ! $disponible) Liste d’attente : données non disponibles (module Sélection). @endif
             </p>
@@ -325,6 +333,28 @@
     };
     formulaire.addEventListener('change', maj);
     maj();
+
+    // Export Excel limité en cellules (lignes × données cochées) : bouton désactivé au-delà, avec l'explication
+    var limite = formulaire.querySelector('[data-limite-export]');
+    if (limite) {
+      var excel = limite.querySelector('[data-export-excel]');
+      var message = limite.querySelector('[data-limite-message]');
+      var messagePdf = message.textContent.trim();
+      var lignes = +limite.dataset.lignes;
+      var nombre = function (n) { return n.toLocaleString('fr-FR'); };
+      var verifier = function () {
+        var colonnes = Math.max(1, formulaire.querySelectorAll('input[name="donnees[]"]:checked').length);
+        var max = Math.min(+limite.dataset.lignesMax, Math.floor(+limite.dataset.cellulesMax / colonnes));
+        excel.disabled = lignes > max;
+        var texte = excel.disabled
+          ? 'Excel limité à ' + nombre(max) + ' lignes avec ' + colonnes + ' donnée(s) cochée(s) (' + nombre(lignes) + ' OEV) : affinez les filtres ou cochez moins de données.'
+          : '';
+        message.textContent = [messagePdf, texte].filter(Boolean).join(' ');
+        message.hidden = !message.textContent;
+      };
+      formulaire.addEventListener('change', verifier);
+      verifier();
+    }
   });
 </script>
 @endpush

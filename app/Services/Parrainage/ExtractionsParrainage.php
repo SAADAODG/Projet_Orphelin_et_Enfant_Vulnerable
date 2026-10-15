@@ -3,6 +3,7 @@
 namespace App\Services\Parrainage;
 
 use App\Models\AppuiPartenaire;
+use App\Models\Commune;
 use App\Models\NatureAppui;
 use App\Models\Oev;
 use App\Models\Parrain;
@@ -11,7 +12,10 @@ use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\LazyCollection;
 
 /**
  * Données des deux extractions du module « Pilotage » :
@@ -75,6 +79,27 @@ class ExtractionsParrainage
      *   etablissements : une ligne par établissement (avec rib_manquant), triées par région, province, nom ;
      *   nominatif : une ligne par bénéficiaire, triées par établissement puis nom.
      */
+    /**
+     * Nombre de bénéficiaires de la liste pour paiement (mêmes filtres que paiement()), compté par la base
+     * quand la liste y est : permet de refuser un export trop volumineux avant de le préparer.
+     */
+    public function nombrePaiement(SessionParrainage $session, User $utilisateur, array $filtres): ?int
+    {
+        if (! $this->source instanceof SourceSelectionEnBase || ($filtres['etablissement_id'] ?? null)) {
+            return null;
+        }
+        $types = PilotageParrainage::naturesDuType($filtres['type_appui'] ?? '');
+
+        return DB::query()->fromSub($this->source->requeteListeDefinitive(collect([$session])), 'd')
+            ->when($types, fn ($q) => $q->where(fn ($q) => $q->whereNull('d.type_appui')->orWhereIn('d.type_appui', $types)))
+            ->whereExists(Oev::query()->dansLePerimetreDe($utilisateur)
+                ->when($filtres['region_id'] ?? null, fn ($q, $id) => $q->where('region_id', $id))
+                ->when($filtres['province_id'] ?? null, fn ($q, $id) => $q->where('province_id', $id))
+                ->when($filtres['commune_id'] ?? null, fn ($q, $id) => $q->where('commune_id', $id))
+                ->select(DB::raw(1))->whereColumn('oevs.id', 'd.oev_id'))
+            ->count();
+    }
+
     public function paiement(SessionParrainage $session, User $utilisateur, array $filtres): array
     {
         $types = PilotageParrainage::naturesDuType($filtres['type_appui'] ?? '');
@@ -82,18 +107,27 @@ class ExtractionsParrainage
             ->filter(fn (array $b) => ! $types || ! isset($b['type_appui']) || in_array($b['type_appui'], $types, true))
             ->when($filtres['etablissement_id'] ?? null, fn ($l, $id) => $l->where('etablissement_id', $id));
 
-        $oevs = Oev::with(['region', 'province', 'commune'])
-            ->whereIn('id', $liste->pluck('oev_id'))
-            ->dansLePerimetreDe($utilisateur)
-            ->when($filtres['region_id'] ?? null, fn ($q, $id) => $q->where('region_id', $id))
-            ->when($filtres['province_id'] ?? null, fn ($q, $id) => $q->where('province_id', $id))
-            ->when($filtres['commune_id'] ?? null, fn ($q, $id) => $q->where('commune_id', $id))
-            ->get()
-            ->keyBy('id');
+        // Fiches lues par paquets, en lignes brutes (pas de modèles) ; noms des localités par correspondance
+        $oevs = collect();
+        foreach ($liste->pluck('oev_id')->unique()->chunk(self::PAQUET) as $paquet) {
+            Oev::query()
+                ->whereIn('id', $paquet->values()->all())
+                ->dansLePerimetreDe($utilisateur)
+                ->when($filtres['region_id'] ?? null, fn ($q, $id) => $q->where('region_id', $id))
+                ->when($filtres['province_id'] ?? null, fn ($q, $id) => $q->where('province_id', $id))
+                ->when($filtres['commune_id'] ?? null, fn ($q, $id) => $q->where('commune_id', $id))
+                ->toBase()
+                ->get(['id', 'code', 'nom', 'prenom', 'sexe', 'date_naissance', 'region_id', 'province_id', 'commune_id',
+                    'classe', 'formation_filiere', 'nom_tuteur', 'prenom_tuteur', 'contact_tuteur'])
+                ->each(fn ($oev) => $oevs->put((int) $oev->id, $oev));
+        }
+        $regions = Region::pluck('nom', 'id');
+        $provinces = Province::pluck('nom', 'id');
+        $communes = Commune::whereIn('id', $oevs->pluck('commune_id')->filter()->unique()->values()->all())->pluck('nom', 'id');
         $etablissements = $this->source->etablissements()->keyBy('id');
         $liste = $liste->filter(fn (array $b) => $oevs->has($b['oev_id']));
 
-        $nominatif = $liste->map(function (array $b) use ($oevs, $etablissements) {
+        $nominatif = $liste->map(function (array $b) use ($oevs, $etablissements, $regions, $provinces, $communes) {
             $oev = $oevs[$b['oev_id']];
 
             return [
@@ -102,10 +136,10 @@ class ExtractionsParrainage
                 'nom' => $oev->nom,
                 'prenom' => $oev->prenom,
                 'sexe' => Oev::SEXES[$oev->sexe] ?? $oev->sexe,
-                'date_naissance' => $oev->date_naissance?->format('d/m/Y'),
-                'region' => $oev->region?->nom,
-                'province' => $oev->province?->nom,
-                'commune' => $oev->commune?->nom,
+                'date_naissance' => $oev->date_naissance ? Carbon::parse($oev->date_naissance)->format('d/m/Y') : null,
+                'region' => $regions[$oev->region_id] ?? null,
+                'province' => $provinces[$oev->province_id] ?? null,
+                'commune' => $communes[$oev->commune_id] ?? null,
                 'type_appui' => SessionParrainage::TYPES_APPUI[$b['type_appui'] ?? ''] ?? '',
                 'classe' => $oev->classe ?: ($oev->formation_filiere ?: '—'),
                 'tuteur' => trim($oev->nom_tuteur . ' ' . $oev->prenom_tuteur),
@@ -115,15 +149,16 @@ class ExtractionsParrainage
             ];
         })->sortBy([['etablissement', 'asc'], ['nom', 'asc'], ['prenom', 'asc']])->values();
 
-        $parEtablissement = $liste->groupBy(fn (array $b) => $b['etablissement_id'] ?? 0)->map(function (Collection $beneficiaires, $id) use ($etablissements, $oevs) {
+        $parEtablissement = $liste->groupBy(fn (array $b) => $b['etablissement_id'] ?? 0)->map(function (Collection $beneficiaires, $id) use ($etablissements, $oevs, $regions, $provinces) {
             $etab = $etablissements[$id] ?? null;
-            $premier = $oevs[$beneficiaires->first()['oev_id']];
+            $oevPremier = $oevs[$beneficiaires->first()['oev_id']];
+            $premier = (object) ['region' => $regions[$oevPremier->region_id] ?? null, 'province' => $provinces[$oevPremier->province_id] ?? null];
             $rib = collect(['code_banque', 'code_guichet', 'numero_compte', 'cle_rib'])->map(fn ($champ) => $etab[$champ] ?? null);
 
             return [
                 // Localisation de l'établissement, à défaut celle du premier bénéficiaire
-                'region' => $etab ? ($this->nomLocalite('region', $etab['region_id'] ?? null) ?? $premier->region?->nom) : $premier->region?->nom,
-                'province' => $etab ? ($this->nomLocalite('province', $etab['province_id'] ?? null) ?? $premier->province?->nom) : $premier->province?->nom,
+                'region' => $etab ? ($this->nomLocalite('region', $etab['region_id'] ?? null) ?? $premier->region) : $premier->region,
+                'province' => $etab ? ($this->nomLocalite('province', $etab['province_id'] ?? null) ?? $premier->province) : $premier->province,
                 'etablissement' => $etab['nom'] ?? 'Établissement non renseigné',
                 'type' => $etab['type'] ?? null,
                 'banque' => $etab['banque'] ?? null,
@@ -187,18 +222,21 @@ class ExtractionsParrainage
      * provinces cochées (« regions », « provinces ») quand la zone ne suffit pas. Les autres filtres
      * acceptent plusieurs valeurs (« l'une ou l'autre »).
      *
+     * La liste n'est jamais chargée en entier : « nombre » est compté par la base et « oevs » est parcouru
+     * par paquets (tri par la base pour les éligibles ; ordre de la liste d'attente sinon). Chaque OEV porte
+     * besoin_estime.
+     *
      * @param  array  $f  source (« attente » : liste d'attente de la session ; « eligibles » : OEV sans appui de
      *                    cette nature pour l'année), session, annee, nature, zone_parrain, regions, provinces,
      *                    sexe, statut, vulnerabilite, niveau_priorite, niveau_etude, handicap, age_min, age_max
-     * @return Collection<int, Oev>
+     * @return array{nombre: int, oevs: LazyCollection<int, Oev>, apercu: callable(int): array<int, Oev>}
      */
-    public function listeParrain(Parrain $parrain, User $utilisateur, array $f): Collection
+    public function listeParrain(Parrain $parrain, User $utilisateur, array $f): array
     {
         $liste = fn (string $cle) => array_values(array_filter((array) ($f[$cle] ?? []), fn ($v) => $v !== null && $v !== ''));
         $handicap = $liste('handicap');
 
         $requete = Oev::beneficiaires()
-            ->with(['commune', 'province', 'region'])
             ->dansLePerimetreDe($utilisateur)
             ->tap(fn ($q) => $this->dansLesLocalites($q, $f['zone_parrain'] ? $parrain : null, $liste('regions'), $liste('provinces')))
             ->when($liste('sexe'), fn ($q, $v) => $q->whereIn('sexe', $v))
@@ -215,35 +253,83 @@ class ExtractionsParrainage
             ->when(isset($f['age_max']), fn ($q) => $q->whereDate('date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)));
 
         if ($f['source'] === 'attente') {
-            $attente = $f['session'] ? $this->source->listeAttente($f['session'])->sortBy('rang')->values() : collect();
-            $rangs = $attente->pluck('rang', 'oev_id');
-            $besoins = $attente->pluck('besoin_estime', 'oev_id');
-
-            return $requete->whereIn('id', $rangs->keys())->get()
-                ->each(fn (Oev $oev) => $oev->setAttribute('besoin_estime', $besoins[$oev->id] ?? $oev->frais_scolarite))
-                ->sortBy(fn (Oev $oev) => $rangs[$oev->id])
-                ->values();
+            return $this->dansLOrdreDeLAttente($requete, $f['session'] ? $this->source->listeAttente($f['session']) : collect());
         }
 
         if ($f['nature']) {
             $requete->whereNotIn('id', AppuiPartenaire::where('annee', $f['annee'])->where('nature_appui_id', $f['nature']->id)->select('oev_id'));
             // Nature financée par l'État : les bénéficiaires des sessions de l'année sont aussi exclus
             if ($f['nature']->scolaire && $this->source->disponible()) {
-                $etat = SessionParrainage::where('annee', $f['annee'])->get()
-                    ->flatMap(fn ($s) => $this->source->listeDefinitive($s))
-                    ->filter(fn ($b) => ($b['type_appui'] ?? $f['nature']->code) === $f['nature']->code)
-                    ->pluck('oev_id');
-                $requete->whereNotIn('id', $etat->all());
+                $sessions = SessionParrainage::where('annee', $f['annee'])->get();
+                if ($this->source instanceof SourceSelectionEnBase) {
+                    // Listes dans la base : exclusion par « NOT EXISTS », sans charger les bénéficiaires
+                    $code = $f['nature']->code;
+                    $requete->whereNotExists(DB::query()->fromSub($this->source->requeteListeDefinitive($sessions), 'd')
+                        ->select(DB::raw(1))->whereColumn('d.oev_id', 'oevs.id')
+                        ->where(fn ($q) => $q->whereNull('d.type_appui')->orWhere('d.type_appui', $code)));
+                } else {
+                    $etat = $sessions->flatMap(fn ($s) => $this->source->listeDefinitive($s))
+                        ->filter(fn ($b) => ($b['type_appui'] ?? $f['nature']->code) === $f['nature']->code)
+                        ->pluck('oev_id')
+                        ->unique();
+                    foreach ($etat->chunk(self::PAQUET) as $paquet) {
+                        $requete->whereNotIn('id', $paquet->values()->all());
+                    }
+                }
             }
         }
 
-        return $requete->get()
-            ->each(fn (Oev $oev) => $oev->setAttribute('besoin_estime', $oev->frais_scolarite))
-            ->sortBy([
-                fn (Oev $a, Oev $b) => (self::ORDRE_PRIORITE[$a->niveau_priorite] ?? 3) <=> (self::ORDRE_PRIORITE[$b->niveau_priorite] ?? 3),
-                fn (Oev $a, Oev $b) => strcmp($a->nom . $a->prenom, $b->nom . $b->prenom),
-            ])
-            ->values();
+        // Priorité du cas (élevée d'abord), puis nom et prénom accolés, comparés octet par octet (comme strcmp)
+        $binaire = $requete->getConnection()->getDriverName() === 'pgsql' ? 'COLLATE "C"' : 'COLLATE BINARY';
+        $priorite = collect(self::ORDRE_PRIORITE)->map(fn ($rang, $code) => "WHEN '{$code}' THEN {$rang}")->implode(' ');
+        $ordonnee = (clone $requete)
+            ->orderByRaw("CASE niveau_priorite {$priorite} ELSE 3 END")
+            ->orderByRaw("(COALESCE(nom, '') || COALESCE(prenom, '')) {$binaire}")
+            ->orderBy('id');
+
+        $besoin = fn (Oev $oev) => $oev->setAttribute('besoin_estime', $oev->frais_scolarite);
+
+        return [
+            'nombre' => (clone $requete)->count(),
+            'oevs' => FichiersExtraction::dansLOrdre($ordonnee, ['commune', 'province', 'region'], self::PAQUET_LECTURE)->map($besoin),
+            // Aperçu : les premiers OEV seulement, lus directement dans l'ordre
+            'apercu' => fn (int $nombre) => (clone $ordonnee)->with(['commune', 'province', 'region'])->limit($nombre)->get()->map($besoin)->all(),
+        ];
+    }
+
+    /** Taille des listes d'identifiants envoyées à la base, et des paquets d'OEV lus pour un export. */
+    private const PAQUET = 5000;
+    private const PAQUET_LECTURE = 500;
+
+    /**
+     * OEV de la liste d'attente correspondant aux filtres, dans l'ordre de la liste (rang) : les identifiants
+     * sont confrontés aux filtres par paquets, les fiches lues par paquets au fil du parcours.
+     */
+    private function dansLOrdreDeLAttente(Builder $requete, Collection $attente): array
+    {
+        $attente = $attente->sortBy('rang')->values();
+        $retenus = collect();
+        foreach ($attente->pluck('oev_id')->unique()->chunk(self::PAQUET) as $paquet) {
+            $retenus = $retenus->merge((clone $requete)->whereIn('id', $paquet->values()->all())->pluck('id'));
+        }
+        $retenus = $retenus->flip();
+        $ordre = $attente->filter(fn (array $b) => $retenus->has($b['oev_id']))->unique('oev_id')->values();
+
+        $oevs = LazyCollection::make(function () use ($ordre) {
+                foreach ($ordre->chunk(self::PAQUET_LECTURE) as $paquet) {
+                    $fiches = Oev::with(['commune', 'province', 'region'])->whereIn('id', $paquet->pluck('oev_id')->all())->get()->keyBy('id');
+                    foreach ($paquet as $b) {
+                        $oev = $fiches[$b['oev_id']];
+                        yield $oev->setAttribute('besoin_estime', $b['besoin_estime'] ?? $oev->frais_scolarite);
+                    }
+                }
+            });
+
+        return [
+            'nombre' => $ordre->count(),
+            'oevs' => $oevs,
+            'apercu' => fn (int $nombre) => $oevs->take($nombre)->values()->all(),
+        ];
     }
 
     /**

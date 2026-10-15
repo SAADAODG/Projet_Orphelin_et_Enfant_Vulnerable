@@ -40,7 +40,8 @@ class JournalController extends Controller
     public function export(Request $request): StreamedResponse|RedirectResponse
     {
         $filtres = $this->lireFiltres($request);
-        $requete = $this->requete($filtres)->with('utilisateur');
+        FichiersExtraction::prevoirGrosFichier();
+        $requete = $this->requete($filtres);
         if (($total = (clone $requete)->count()) > self::EXPORT_MAX) {
             return back()->with('error', "{$total} entrées correspondent aux filtres : l’export est limité à " . self::EXPORT_MAX . '. Réduisez la période.');
         }
@@ -62,7 +63,8 @@ class JournalController extends Controller
 
         JournalActivite::consigner('extraction.journal', null, "Export du journal d’audit ({$total} entrée(s))", ['filtres' => array_filter($filtres), 'lignes' => $total]);
 
-        return $this->fichiers->listeExcel($requete->get(), $colonnes, $entete, 'journal-audit-' . now()->format('Y-m-d-His') . '.xlsx', 'Journal');
+        // Entrées lues par paquets au fil de l'écriture (20 000 × 8 colonnes : sous la limite de FichiersExtraction)
+        return $this->fichiers->listeExcel(FichiersExtraction::dansLOrdre($requete, ['utilisateur'], 1000), $colonnes, $entete, 'journal-audit-' . now()->format('Y-m-d-His') . '.xlsx', 'Journal');
     }
 
     /** Détails lisibles : « motif : … ; champs : nom, prénom ». */

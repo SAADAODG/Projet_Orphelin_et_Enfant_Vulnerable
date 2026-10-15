@@ -24,6 +24,8 @@ use Illuminate\View\View;
  */
 class SessionParrainageController extends Controller
 {
+    private const RETENUS_PAR_PAGE = 50;
+
     use CloisonneParZone;
 
     public function __construct(
@@ -133,6 +135,7 @@ class SessionParrainageController extends Controller
         $prorata = $vue === 'quotas' && $request->boolean('prorata') && $gere && $session->parametresModifiables();
 
         $origine = $session->sessionOrigine;
+        $retenus = fn () => $session->beneficiaires()->retenus()->tap(fn ($q) => $this->cloisonner($q, 'oev'));
         $engageOrigine = $origine ? $this->sourceSelection->montantEngage($origine) : null;
 
         return view('parrainage.sessions.show', [
@@ -146,14 +149,17 @@ class SessionParrainageController extends Controller
             'prorata' => $prorata,
             'eligibles' => $vue === 'quotas' ? $this->sourceSelection->eligiblesParRegion($session) : [],
             'resteOrigine' => $engageOrigine === null ? null : $origine->enveloppe - $engageOrigine,
-            // OEV retenus sur la liste de la session (dans la zone de l'utilisateur), et taille de la liste d'attente
+            // OEV retenus sur la liste de la session (dans la zone de l'utilisateur), page par page ; nombre et
+            // montant total calculés par la base. Taille de la liste d'attente.
             'retenus' => $vue === 'informations'
-                ? $session->beneficiaires()->retenus()
-                    ->tap(fn ($q) => $this->cloisonner($q, 'oev'))
-                    ->with(['oev.province', 'oev.commune', 'region', 'suivi'])
+                ? $retenus()->with(['oev.province', 'oev.commune', 'region', 'suivi'])
                     ->orderBy('id')
-                    ->get()
-                : collect(),
+                    ->paginate(self::RETENUS_PAR_PAGE)
+                    ->withQueryString()
+                : null,
+            'totalRetenus' => $vue === 'informations'
+                ? $retenus()->toBase()->selectRaw('count(*) as nombre, coalesce(sum(montant_retenu), 0) as montant')->first()
+                : null,
             'nbAttente' => $session->beneficiaires()->enAttente()->count(),
         ]);
     }
