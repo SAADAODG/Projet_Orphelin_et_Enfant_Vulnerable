@@ -2,6 +2,7 @@
 
 @use('App\Models\Oev')
 @use('App\Http\Controllers\ExtractionController')
+@use('App\Services\Parrainage\FichiersExtraction')
 
 @section('title', 'Filtrage et extraction | OEV')
 
@@ -250,7 +251,10 @@
 <div class="modal fade" id="extraireModal" tabindex="-1" aria-labelledby="extraireModalTitre" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <form class="modal-formulaire" method="GET" action="{{ route('extraction.export') }}" id="formExtraction">
+      {{-- Exports limités (mémoire du serveur) : boutons désactivés, avec l'explication, au-delà --}}
+      <form class="modal-formulaire" method="GET" action="{{ route('extraction.export') }}" id="formExtraction"
+            data-lignes="{{ (int) ($synthese->total ?? 0) }}" data-pdf-max="{{ FichiersExtraction::PDF_LIGNES_MAX }}"
+            data-cellules-max="{{ FichiersExtraction::CELLULES_MAX }}" data-lignes-max="{{ FichiersExtraction::LIGNES_MAX }}">
         @foreach ($requeteActuelle as $cle => $valeur)
           @continue(in_array($cle, ['page', 'colonnes', 'format'], true))
           @foreach ((array) $valeur as $element)
@@ -290,7 +294,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <span class="small text-muted me-auto" data-nb-colonnes></span>
+          <span class="small text-muted me-auto"><span data-nb-colonnes></span> <span class="d-block text-danger" data-limite-message hidden></span></span>
           <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Annuler</button>
           <button class="btn btn-outline-danger" type="submit" name="format" value="pdf"><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
           <button class="btn btn-success" type="submit" name="format" value="xlsx"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Excel</button>
@@ -315,11 +319,26 @@
     if (!formulaire) { return; }
     var cases = formulaire.querySelectorAll('input[name="colonnes[]"]');
     var compteur = formulaire.querySelector('[data-nb-colonnes]');
-    var boutons = formulaire.querySelectorAll('button[name="format"]');
+    var pdf = formulaire.querySelector('button[value="pdf"]');
+    var excel = formulaire.querySelector('button[value="xlsx"]');
+    var message = formulaire.querySelector('[data-limite-message]');
+    var lignes = +formulaire.dataset.lignes;
+    var nombre = function (v) { return v.toLocaleString('fr-FR'); };
     var maj = function () {
       var n = formulaire.querySelectorAll('input[name="colonnes[]"]:checked').length;
       compteur.textContent = n + ' donnée(s) choisie(s)';
-      boutons.forEach(function (b) { b.disabled = n === 0; });
+      // Limites des exports : PDF en lignes, Excel en cellules (lignes × données cochées)
+      var excelMax = Math.min(+formulaire.dataset.lignesMax, Math.floor(+formulaire.dataset.cellulesMax / Math.max(1, n)));
+      var pdfTrop = lignes > +formulaire.dataset.pdfMax;
+      var excelTrop = lignes > excelMax;
+      pdf.disabled = n === 0 || pdfTrop;
+      excel.disabled = n === 0 || excelTrop;
+      var textes = [];
+      if (pdfTrop) { textes.push('PDF limité à ' + nombre(+formulaire.dataset.pdfMax) + ' lignes.'); }
+      if (excelTrop) { textes.push('Excel limité à ' + nombre(excelMax) + ' lignes avec ' + n + ' donnée(s) cochée(s).'); }
+      if (textes.length) { textes.push(nombre(lignes) + ' dossiers : affinez les filtres' + (excelTrop ? ' ou cochez moins de données.' : '.')); }
+      message.textContent = textes.join(' ');
+      message.hidden = !textes.length;
     };
     formulaire.querySelectorAll('[data-cocher]').forEach(function (b) {
       b.addEventListener('click', function () { cases.forEach(function (c) { c.checked = b.dataset.cocher === 'tout'; }); maj(); });

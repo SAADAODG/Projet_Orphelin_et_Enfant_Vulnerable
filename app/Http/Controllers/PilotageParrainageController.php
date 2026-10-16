@@ -15,6 +15,7 @@ use App\Services\Parrainage\ExtractionsParrainage;
 use App\Services\Parrainage\FichiersExtraction;
 use App\Services\Parrainage\PilotageParrainage;
 use App\Services\Parrainage\SourceSelection;
+use App\Support\Montant;
 use App\Support\Perimetre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,7 +62,8 @@ class PilotageParrainageController extends Controller
         $vue = $request->query('vue') === 'paiement' && $this->peutExtrairePaiement($utilisateur) ? 'paiement' : 'parrain';
         $parrain = Parrain::with(['zones.region', 'zones.province', 'engagements'])->find($request->integer('parrain_id'));
         $filtresParrain = $parrain ? $this->filtresListeParrain($request, $parrain) : null;
-        $liste = $parrain ? $this->extractions->listeParrain($parrain, $utilisateur, $filtresParrain) : collect();
+        // Liste comptée par la base ; seuls les 10 premiers OEV sont lus pour l'aperçu
+        $liste = $parrain ? $this->extractions->listeParrain($parrain, $utilisateur, $filtresParrain) : ['nombre' => 0, 'apercu' => fn () => []];
 
         return view('parrainage.pilotage.extractions', [
             'vue' => $vue,
@@ -76,8 +78,8 @@ class PilotageParrainageController extends Controller
             'parrain' => $parrain,
             'f' => $filtresParrain,
             'natures' => NatureAppui::actives()->get(),
-            'liste' => $liste,
-            'apercu' => $liste->take(10),
+            'nombreListe' => $liste['nombre'],
+            'apercu' => ($liste['apercu'])(10),
             // Aperçu à l'écran (agents) : nom et prénom ; l'extraction, elle, est anonymisée par défaut
             'colonnesApercu' => ExtractionsParrainage::colonnesListeParrain(ExtractionsParrainage::DONNEES_APERCU),
             'donneesParrain' => ExtractionsParrainage::donneesListeParrain(),
@@ -92,6 +94,8 @@ class PilotageParrainageController extends Controller
     {
         $utilisateur = $request->user();
         abort_unless($this->peutExtrairePaiement($utilisateur), 403);
+        // La liste définitive est lue avant le contrôle de taille : mémoire relevée dès maintenant
+        FichiersExtraction::prevoirGrosFichier();
 
         $donnees = $request->validate([
             'session_id' => ['required', 'integer', Rule::exists('sessions_parrainage', 'id')->whereIn('etat', self::ETATS_PAIEMENT)],
@@ -112,7 +116,15 @@ class PilotageParrainageController extends Controller
 
         $session = SessionParrainage::findOrFail($donnees['session_id']);
         $filtres = collect($donnees)->except(['session_id', 'format', 'colonnes_etablissement', 'colonnes_nominatif'])->filter()->all();
+        // Feuille la plus grande : le nominatif (une ligne par bénéficiaire). Compté avant de préparer la liste
+        $nombre = $this->extractions->nombrePaiement($session, $utilisateur, $filtres);
+        if ($nombre !== null && ($refus = $this->refuserSiTropGrand($nombre, count($colonnesNominatif), $donnees['format']))) {
+            return $refus;
+        }
         $resultat = $this->extractions->paiement($session, $utilisateur, $filtres);
+        if ($refus = $this->refuserSiTropGrand($resultat['total_oev'], count($colonnesNominatif), $donnees['format'])) {
+            return $refus;
+        }
 
         JournalActivite::consigner('extraction.paiement', $session, "Liste pour paiement de la session {$session->reference()} ({$donnees['format']})", [
             'filtres' => $filtres,
@@ -145,6 +157,7 @@ class PilotageParrainageController extends Controller
      */
     public function listeParrain(Request $request): Response|RedirectResponse
     {
+        FichiersExtraction::prevoirGrosFichier();
         $utilisateur = $request->user();
         $request->validate([
             'parrain_id' => ['required', 'integer', Rule::exists('parrains', 'id')],
@@ -169,8 +182,12 @@ class PilotageParrainageController extends Controller
         if ($f['source'] === 'attente' && ! $f['session']) {
             return back()->withInput()->withErrors(['session_id' => 'Choisissez la session dont la liste d’attente est extraite.']);
         }
-        $oevs = $this->extractions->listeParrain($parrain, $utilisateur, $f);
+        $liste = $this->extractions->listeParrain($parrain, $utilisateur, $f);
         $format = $request->input('format');
+        $colonnes = ExtractionsParrainage::colonnesListeParrain($donnees);
+        if ($refus = $this->refuserSiTropGrand($liste['nombre'], count($colonnes), $format)) {
+            return $refus;
+        }
 
         $resume = collect([
             'source' => $f['source'],
@@ -185,7 +202,7 @@ class PilotageParrainageController extends Controller
             $identiteComplete ? 'extraction.liste_parrain_identite' : 'extraction.liste_parrain',
             $parrain,
             "Liste d’OEV pour {$parrain->nom} (" . ($identiteComplete ? 'identité complète' : 'anonymisée') . ", {$format})",
-            ['filtres' => $resume, 'donnees' => $donnees, 'lignes' => $oevs->count(), 'identite_complete' => $identiteComplete, 'format' => $format],
+            ['filtres' => $resume, 'donnees' => $donnees, 'lignes' => $liste['nombre'], 'identite_complete' => $identiteComplete, 'format' => $format],
         );
 
         $entete = [
@@ -199,12 +216,11 @@ class PilotageParrainageController extends Controller
                 $f['source'] === 'attente' && ! $this->source->disponible() ? 'Données non disponibles : le module Sélection n’est pas encore branché.' : null,
             ]),
         ];
-        $colonnes = ExtractionsParrainage::colonnesListeParrain($donnees);
         $nom = 'oev-' . Str::slug($parrain->nom) . '-' . now()->format('Ymd-His') . '.' . $format;
 
         return $format === 'pdf'
-            ? $this->fichiers->listePdf($oevs, $colonnes, $entete, $nom)
-            : $this->fichiers->listeExcel($oevs, $colonnes, $entete, $nom);
+            ? $this->fichiers->listePdf($liste['oevs']->collect(), $colonnes, $entete, $nom)
+            : $this->fichiers->listeExcel($liste['oevs'], $colonnes, $entete, $nom);
     }
 
     /**
@@ -241,6 +257,20 @@ class PilotageParrainageController extends Controller
             'age_max' => is_numeric($request->input('age_max')) ? max(0, min(25, (int) $request->input('age_max'))) : null,
             'natures_parrain' => $preferences['natures'],
         ];
+    }
+
+    /** Export trop volumineux pour être produit sans risque (voir FichiersExtraction) : message, à la place du fichier. */
+    private function refuserSiTropGrand(int $lignes, int $colonnes, string $format): ?RedirectResponse
+    {
+        $max = $format === 'pdf' ? FichiersExtraction::PDF_LIGNES_MAX : FichiersExtraction::lignesExcelMax($colonnes);
+        if ($lignes <= $max) {
+            return null;
+        }
+
+        return back()->withInput()->with('error', Montant::nombre($lignes) . ' lignes correspondent aux filtres : '
+            . ($format === 'pdf'
+                ? 'le PDF est limité à ' . Montant::nombre($max) . ' lignes. Exportez en Excel ou affinez les filtres.'
+                : 'avec ' . $colonnes . ' donnée(s) cochée(s), l’export Excel est limité à ' . Montant::nombre($max) . ' lignes. Affinez les filtres ou cochez moins de données.'));
     }
 
     private function peutExtrairePaiement(User $utilisateur): bool

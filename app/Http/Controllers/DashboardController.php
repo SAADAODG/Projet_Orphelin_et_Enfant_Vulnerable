@@ -22,6 +22,9 @@ class DashboardController extends Controller
 {
     private const MOIS_AFFICHES = 6;
 
+    /** Dossiers « à traiter » affichés. */
+    private const A_TRAITER = 5;
+
     private User $utilisateur;
 
     public function __invoke(Request $request): View
@@ -143,20 +146,37 @@ class DashboardController extends Controller
             ->values();
     }
 
-    /** Signalements reçus et OEV intégrés sur les derniers mois (mois en cours inclus). */
+    /**
+     * Signalements reçus et OEV intégrés sur les derniers mois (mois en cours inclus) : un comptage par mois,
+     * en une requête par table (sum(case …) sur la période entière).
+     */
     private function evolution(Perimetre $perimetre, bool $avecSignalements): Collection
     {
-        return collect(range(self::MOIS_AFFICHES - 1, 0))->map(function (int $decalage) use ($perimetre, $avecSignalements) {
+        $mois = collect(range(self::MOIS_AFFICHES - 1, 0))->map(function (int $decalage) {
             $debut = Carbon::now()->locale('fr')->startOfMonth()->subMonthsNoOverflow($decalage);
-            $periode = [$debut, $debut->copy()->endOfMonth()];
 
-            return [
-                'mois' => ucfirst($debut->translatedFormat('M')),
-                'moisComplet' => ucfirst($debut->translatedFormat('F Y')),
-                'signalements' => $avecSignalements ? $perimetre->appliquer(Signalement::whereBetween('created_at', $periode))->count() : 0,
-                'integres' => $this->oevs($perimetre)->whereBetween('integre_at', $periode)->count(),
-            ];
+            return ['debut' => $debut, 'periode' => [$debut, $debut->copy()->endOfMonth()]];
         });
+        $parMois = function (Builder $requete, string $colonne) use ($mois): array {
+            $colonnes = [];
+            $liaisons = [];
+            foreach ($mois as $i => $m) {
+                $colonnes[] = "sum(case when {$colonne} between ? and ? then 1 else 0 end) as m{$i}";
+                array_push($liaisons, ...$m['periode']);
+            }
+
+            return (array) $requete->whereBetween($colonne, [$mois->first()['periode'][0], $mois->last()['periode'][1]])
+                ->toBase()->selectRaw(implode(', ', $colonnes), $liaisons)->first();
+        };
+        $integres = $parMois($this->oevs($perimetre), 'integre_at');
+        $signalements = $avecSignalements ? $parMois($perimetre->appliquer(Signalement::query()), 'created_at') : [];
+
+        return $mois->map(fn (array $m, int $i) => [
+            'mois' => ucfirst($m['debut']->translatedFormat('M')),
+            'moisComplet' => ucfirst($m['debut']->translatedFormat('F Y')),
+            'signalements' => (int) ($signalements["m{$i}"] ?? 0),
+            'integres' => (int) ($integres["m{$i}"] ?? 0),
+        ]);
     }
 
     /** Dossiers qui attendent une action de l'utilisateur : l'état prioritaire d'abord, puis les plus anciens. */
@@ -168,13 +188,22 @@ class DashboardController extends Controller
             default => [[Oev::ETAT_VALIDE], 'verifie_at'],
         };
 
-        return $this->oevs($perimetre)
-            ->etat(...$etats)
-            ->with(['province', 'commune'])
-            ->withCount('documents')
-            ->orderByRaw('case when statut_dossier = ? then 0 else 1 end', [$etats[0]])
-            ->orderBy($date)
-            ->limit(5)
-            ->get();
+        // Un état après l'autre (le prioritaire d'abord), chacun lu dans l'ordre de l'index (état, date) :
+        // même résultat qu'un tri sur « état prioritaire, puis date », sans trier tous les dossiers de l'état
+        $dossiers = collect();
+        foreach ($etats as $etat) {
+            if ($dossiers->count() >= self::A_TRAITER) {
+                break;
+            }
+            $dossiers = $dossiers->merge($this->oevs($perimetre)
+                ->etat($etat)
+                ->with(['province', 'commune'])
+                ->withCount('documents')
+                ->orderBy($date)
+                ->limit(self::A_TRAITER - $dossiers->count())
+                ->get());
+        }
+
+        return $dossiers;
     }
 }

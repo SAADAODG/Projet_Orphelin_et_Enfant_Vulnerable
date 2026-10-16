@@ -3,6 +3,7 @@
 namespace App\Services\Parrainage;
 
 use App\Models\Oev;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Score d'urgence du besoin d'un OEV (0 à 100), pour classer les éligibles d'une session :
@@ -85,6 +86,70 @@ final class ScoreBesoin
     public static function calculer(Oev $oev): int
     {
         return array_sum(self::detail($oev));
+    }
+
+    /* ---------- Score enregistré (oevs.score_besoin) ---------- */
+
+    /** Champs de la fiche dont dépend le score : leur modification le fait recalculer. */
+    public const CHAMPS = [
+        'niveau_priorite', 'statut', 'source_revenu', 'niveau_revenu', 'logement',
+        'handicap', 'maladie_chronique', 'vulnerabilites', 'tuteur_pret_continuer',
+    ];
+
+    /** Paquets d'identifiants recalculés en une requête. */
+    private const PAQUET = 5000;
+
+    /** Mode différé : identifiants des fiches à recalculer à la fin (null : calcul immédiat). */
+    private static ?array $differes = null;
+
+    /**
+     * Recalcule le score enregistré d'un OEV, en SQL direct (ni événement, ni journal d'audit) ; en mode
+     * différé, le note pour la fin. La fiche en mémoire reçoit la nouvelle valeur.
+     */
+    public static function recalculer(Oev $oev): void
+    {
+        if (self::$differes !== null) {
+            self::$differes[$oev->getKey()] = true;
+
+            return;
+        }
+        self::recalculerIds([$oev->getKey()]);
+        $oev->setRawAttributes(['score_besoin' => (int) Oev::whereKey($oev->getKey())->value('score_besoin')] + $oev->getAttributes(), true);
+    }
+
+    /**
+     * Exécute $traitement (import, modification en masse…) sans recalcul fiche par fiche : les scores des
+     * fiches enregistrées pendant le traitement sont recalculés à la fin, par paquets.
+     */
+    public static function differer(callable $traitement): mixed
+    {
+        if (self::$differes !== null) {
+            return $traitement();
+        }
+        self::$differes = [];
+        try {
+            return $traitement();
+        } finally {
+            $ids = array_keys(self::$differes);
+            self::$differes = null;
+            foreach (array_chunk($ids, self::PAQUET) as $paquet) {
+                self::recalculerIds($paquet);
+            }
+        }
+    }
+
+    /** Recalcule les scores enregistrés de ces fiches, par la base. */
+    public static function recalculerIds(array $ids): void
+    {
+        if ($ids) {
+            Oev::query()->whereKey($ids)->toBase()->update(['score_besoin' => DB::raw(self::sql())]);
+        }
+    }
+
+    /** Recalcule le score de toutes les fiches (migration, après un import en SQL direct) ; renvoie le nombre de fiches. */
+    public static function recalculerTout(): int
+    {
+        return DB::table('oevs')->update(['score_besoin' => DB::raw(self::sql())]);
     }
 
     /** [libellé, couleur Bootstrap] du niveau d'urgence correspondant à un score. */

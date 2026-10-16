@@ -250,7 +250,8 @@ class PilotageParrainageTest extends TestCase
         // Aperçu : préfiltré sur la zone et la nature du parrain
         $this->actingAs($this->dp)->get(route('parrainage.pilotage.extractions', ['parrain_id' => $this->parrain->id, 'annee' => '2026-2027']))
             ->assertOk()
-            ->assertViewHas('liste', fn ($liste) => $liste->pluck('id')->all() === [$propose->id]);
+            ->assertViewHas('nombreListe', 1)
+            ->assertViewHas('apercu', fn ($apercu) => collect($apercu)->pluck('id')->all() === [$propose->id]);
 
         $reponse = $this->actingAs($this->dp)->get(route('parrainage.pilotage.liste-parrain', [
             'parrain_id' => $this->parrain->id, 'format' => 'xlsx', 'filtre' => 1, 'source' => 'eligibles',
@@ -315,8 +316,8 @@ class PilotageParrainageTest extends TestCase
         $this->oev($this->ailleurs, ['nom' => 'AJOUTEE_M', 'sexe' => 'M']);
         $filtres = ['parrain_id' => $this->parrain->id, 'filtre' => 1, 'zone_parrain' => 1, 'annee' => '2026-2027'];
 
-        $noms = fn (array $plus) => $this->actingAs($this->central)
-            ->get(route('parrainage.pilotage.extractions', $filtres + $plus))->viewData('liste')->pluck('nom')->sort()->values()->all();
+        $noms = fn (array $plus) => collect($this->actingAs($this->central)
+            ->get(route('parrainage.pilotage.extractions', $filtres + $plus))->viewData('apercu'))->pluck('nom')->sort()->values()->all();
 
         $this->assertSame(['DANS_LA_ZONE'], $noms([]));
         // Zone du parrain + une région ajoutée pour compléter la liste

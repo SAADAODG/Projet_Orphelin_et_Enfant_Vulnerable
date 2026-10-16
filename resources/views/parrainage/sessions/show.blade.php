@@ -193,7 +193,7 @@
           <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
             <h2 class="oev-carte-titre mb-0">
               <i class="bi bi-person-check" aria-hidden="true"></i> OEV retenus
-              <span class="badge rounded-pill text-bg-light border ms-1">{{ $retenus->count() }}</span>
+              <span class="badge rounded-pill text-bg-light border ms-1">{{ $totalRetenus->nombre }}</span>
             </h2>
             <div class="d-flex flex-wrap gap-2">
               <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}"><i class="bi bi-list-check" aria-hidden="true"></i> Gérer la liste</a>
@@ -206,8 +206,8 @@
             </div>
           </div>
           <p class="text-muted small mt-1 mb-2">
-            Montant engagé : <strong>{{ Montant::fcfa($retenus->sum('montant_retenu')) }}</strong> sur {{ Montant::fcfa($session->enveloppe) }}
-            · reste {{ Montant::fcfa($session->enveloppe - $retenus->sum('montant_retenu')) }}
+            Montant engagé : <strong>{{ Montant::fcfa((int) $totalRetenus->montant) }}</strong> sur {{ Montant::fcfa($session->enveloppe) }}
+            · reste {{ Montant::fcfa($session->enveloppe - (int) $totalRetenus->montant) }}
             @if ($nbAttente) · {{ $nbAttente }} OEV en liste d’attente @endif
             @unless ($session->parametresModifiables()) · liste définitive @endunless
           </p>
@@ -229,7 +229,7 @@
                 <tbody>
                   @foreach ($retenus as $ligne)
                     <tr>
-                      <td class="text-muted">{{ $loop->iteration }}</td>
+                      <td class="text-muted">{{ $retenus->firstItem() + $loop->index }}</td>
                       <td>@include('parrainage._oev', ['oev' => $ligne->oev, 'detail' => '· ' . $ligne->oev->age() . ' ans'])</td>
                       <td><span class="oev-statut oev-statut--{{ $ligne->oev->statut }}">{{ $ligne->oev->libelle('statut', App\Models\Oev::STATUTS) }}</span></td>
                       <td class="small">{{ $ligne->oev->commune?->nom }} <span class="text-muted">· {{ $ligne->region?->nom }}</span></td>
@@ -254,12 +254,15 @@
                 <tfoot>
                   <tr class="fw-semibold">
                     <td colspan="6" class="text-end">Total</td>
-                    <td class="text-end text-nowrap">{{ Montant::fcfa($retenus->sum('montant_retenu')) }}</td>
+                    <td class="text-end text-nowrap">{{ Montant::fcfa((int) $totalRetenus->montant) }}</td>
                     @if ($avecSuivi)<td></td>@endif
                   </tr>
                 </tfoot>
               </table>
             </div>
+            @if ($retenus->hasPages())
+              <div class="mt-3">{{ $retenus->links('pagination::bootstrap-5') }}</div>
+            @endif
           @endif
         </section>
       </div>

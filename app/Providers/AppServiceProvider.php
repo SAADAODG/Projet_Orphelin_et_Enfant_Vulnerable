@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Oev;
 use App\Models\Plainte;
 use App\Models\QuickLink;
 use App\Models\Service;
@@ -11,6 +12,7 @@ use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
 use App\Listeners\JournalAudit;
 use App\Observers\AuditObserver;
+use App\Observers\ScoreBesoinObserver;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -50,6 +52,8 @@ class AppServiceProvider extends ServiceProvider
         foreach (AuditObserver::MODELES as $modele) {
             $modele::observe(AuditObserver::class);
         }
+        // Score d'urgence enregistré sur la fiche, recalculé en SQL direct (hors journal d'audit)
+        Oev::observe(ScoreBesoinObserver::class);
         config(['permission.events_enabled' => true]);
         Event::listen(Login::class, [JournalAudit::class, 'connexion']);
         Event::listen(Logout::class, [JournalAudit::class, 'deconnexion']);

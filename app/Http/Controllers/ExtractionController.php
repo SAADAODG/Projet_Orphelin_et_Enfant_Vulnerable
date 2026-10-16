@@ -6,6 +6,7 @@ use App\Models\JournalActivite;
 use App\Models\Oev;
 use App\Models\Region;
 use App\Services\Parrainage\FichiersExtraction;
+use App\Support\Montant;
 use App\Support\Perimetre;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,9 +25,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExtractionController extends Controller
 {
     private const PAR_PAGE = 25;
-
-    /** Au-delà, le PDF devient illisible et lourd à produire : l'export Excel est proposé. */
-    private const PDF_MAX = 1000;
 
     /** Données cochées par défaut dans la fenêtre d'extraction. */
     public const COLONNES_PAR_DEFAUT = [
@@ -127,12 +125,19 @@ class ExtractionController extends Controller
             return back()->with('error', 'Cochez au moins une donnée à extraire.');
         }
 
+        FichiersExtraction::prevoirGrosFichier();
         $filtres = $this->lireFiltres($request);
-        $requete = $this->requete($request, $filtres)
-            ->with(['region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune']);
+        $requete = $this->requete($request, $filtres);
+        $relations = ['region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune'];
         $total = (clone $requete)->count();
-        if ($donnees['format'] === 'pdf' && $total > self::PDF_MAX) {
-            return back()->with('error', "{$total} dossiers correspondent aux filtres : le PDF est limité à " . self::PDF_MAX . ' lignes. Exportez en Excel ou affinez les filtres.');
+        // Limites mesurées (voir FichiersExtraction) : au-delà, le fichier n'est pas produit
+        if ($donnees['format'] === 'pdf' && $total > FichiersExtraction::PDF_LIGNES_MAX) {
+            return back()->with('error', Montant::nombre($total) . ' dossiers correspondent aux filtres : le PDF est limité à '
+                . Montant::nombre(FichiersExtraction::PDF_LIGNES_MAX) . ' lignes. Exportez en Excel ou affinez les filtres.');
+        }
+        if ($donnees['format'] === 'xlsx' && $total > ($max = FichiersExtraction::lignesExcelMax(count($colonnes)))) {
+            return back()->with('error', Montant::nombre($total) . ' dossiers correspondent aux filtres : avec ' . count($colonnes)
+                . ' donnée(s) cochée(s), l’export Excel est limité à ' . Montant::nombre($max) . ' lignes. Affinez les filtres ou cochez moins de données.');
         }
 
         $utilisateur = $request->user();
@@ -151,11 +156,11 @@ class ExtractionController extends Controller
             ],
         ];
         $nom = 'extraction-oev-' . now()->format('Y-m-d-His') . '.' . $donnees['format'];
-        $oevs = $requete->get();
 
+        // Excel : dossiers lus par paquets au fil de l'écriture (l'ordre du tri est conservé)
         return $donnees['format'] === 'pdf'
-            ? $this->fichiers->listePdf($oevs, $colonnes, $entete, $nom)
-            : $this->fichiers->listeExcel($oevs, $colonnes, $entete, $nom, 'Dossiers OEV');
+            ? $this->fichiers->listePdf($requete->with($relations)->get(), $colonnes, $entete, $nom)
+            : $this->fichiers->listeExcel(FichiersExtraction::dansLOrdre($requete, $relations), $colonnes, $entete, $nom, 'Dossiers OEV');
     }
 
     /**

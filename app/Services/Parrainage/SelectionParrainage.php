@@ -13,6 +13,7 @@ use App\Models\SuiviParrainage;
 use App\Models\User;
 use App\Support\Montant;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -29,7 +30,7 @@ use Illuminate\Support\Facades\DB;
  * Les établissements (RIB) ne sont pas encore gérés : liste vide. Les résultats scolaires viennent du
  * module « Suivi des parrainés » (SuiviParrainage).
  */
-class SelectionParrainage implements SourceSelection
+class SelectionParrainage implements SourceSelectionEnBase
 {
     /** Âge scolaire (années révolues) : un enfant non scolarisé de cet âge peut être inscrit grâce à l'appui scolaire. */
     public const AGE_SCOLAIRE_MIN = 6;
@@ -142,7 +143,8 @@ class SelectionParrainage implements SourceSelection
             // Entièrement financés par une autre session de l'année : plus proposés (ni éligibles ni affichés)
             ->whereNotIn('oevs.id', $this->entierementFinances($session))
             ->select('oevs.*')
-            ->selectRaw(ScoreBesoin::sql() . ' as score')
+            // Score d'urgence enregistré sur la fiche (ScoreBesoinObserver), indexé
+            ->selectRaw('oevs.score_besoin as score')
             ->when($liste('type'), fn ($q, $types) => $this->concernesPar($q, $types))
             ->tap(fn ($q) => $this->dansLesLocalites($q, $liste('regions', 'region_id'), $liste('provinces', 'province_id'), $liste('commune_id')))
             ->when($liste('sexe'), fn ($q, $v) => $q->whereIn('oevs.sexe', $v))
@@ -178,7 +180,7 @@ class SelectionParrainage implements SourceSelection
                 $complements = $this->financementsAnterieurs($session)->select('oev_id')->toBase();
                 $q->orderByRaw('case when oevs.id in (' . $complements->toSql() . ') then 1 else 0 end', $complements->getBindings());
             })
-            ->orderByDesc('score')
+            ->orderByDesc('oevs.score_besoin')
             ->orderBy('oevs.date_naissance')
             ->orderBy('oevs.id');
     }
@@ -356,23 +358,52 @@ class SelectionParrainage implements SourceSelection
      */
     public function estimationCout(SessionParrainage $session, Builder $eligibles): array
     {
-        $groupes = array_fill_keys(array_keys(self::SITUATIONS), ['nombre' => 0, 'frais' => 0, 'sans_frais' => 0, 'pris_en_charge' => 0]);
-        $dejaFinance = $this->dejaFinance($session);
+        $natures = $session->naturesCouvertes();
+        $couvreScolaire = in_array(SessionParrainage::TYPE_SCOLAIRE, $natures, true);
+        $couvreFormation = in_array(SessionParrainage::TYPE_FORMATION, $natures, true);
 
-        $eligibles->reorder()
-            ->select(['oevs.id', 'oevs.date_naissance', 'oevs.situation_scolaire', 'oevs.formation_professionnelle', 'oevs.formation_etat', 'oevs.frais_scolarite', 'oevs.frais_formation'])
-            ->lazyById(500, 'oevs.id', 'id')
-            ->each(function (Oev $oev) use ($session, &$groupes, $dejaFinance) {
-                $type = self::typePour($oev, $session);
-                $groupe = $type === SessionParrainage::TYPE_FORMATION ? self::EN_FORMATION : ($oev->situation_scolaire === 'scolarise' ? self::SCOLARISE : self::A_SCOLARISER);
-                ['frais' => $frais] = self::fraisPour($oev, $session, $type);
-                $frais = self::fraisRestants($frais, $dejaFinance[$oev->id] ?? 0);
+        // Mêmes règles que typePour(), fraisPour(), fraisRestants() et BeneficiaireSession::montantPour(),
+        // calculées par la base en une requête (une ligne par situation) au lieu d'un parcours de tous les éligibles
+        $scolarise = "oevs.situation_scolaire = 'scolarise'";
+        $enFormation = "COALESCE(oevs.situation_scolaire, '') <> 'scolarise' AND oevs.formation_professionnelle = ? AND oevs.formation_etat = 'en_cours'";
+        [$typeFormation, $liaisonsType] = match (true) {
+            ! $couvreScolaire => ['1 = 1', []],
+            $couvreFormation => [$enFormation, [true]],
+            default => ['1 = 0', []],
+        };
+        $situations = (clone $eligibles)->reorder()
+            ->select('oevs.id')
+            ->selectRaw("CASE WHEN {$typeFormation} THEN ? WHEN {$scolarise} THEN ? ELSE ? END AS groupe",
+                [...$liaisonsType, self::EN_FORMATION, self::SCOLARISE, self::A_SCOLARISER])
+            ->selectRaw("CASE WHEN {$typeFormation} THEN COALESCE(oevs.frais_formation, ?) WHEN {$scolarise} THEN oevs.frais_scolarite ELSE ? END AS frais",
+                [...$liaisonsType, $session->estimation_formation, $session->estimation_scolarisation]);
+        $dejaVerse = $this->financementsAnterieurs($session)->toBase()
+            ->selectRaw('oev_id, SUM(montant_retenu) AS total')->groupBy('oev_id');
+        // Frais restant à financer après ce que l'État a déjà versé (null si inconnus)
+        $restants = DB::query()->fromSub($situations->toBase(), 'e')
+            ->leftJoinSub($dejaVerse, 'd', 'd.oev_id', '=', 'e.id')
+            ->selectRaw('e.groupe, CASE WHEN e.frais IS NULL THEN NULL WHEN e.frais - COALESCE(d.total, 0) < 0 THEN 0 ELSE e.frais - COALESCE(d.total, 0) END AS frais');
+        $plafond = $session->plafond_beneficiaire;
+        [$prisEnCharge, $liaisonsPlafond] = $plafond === null
+            ? ['COALESCE(r.frais, 0)', []]
+            : ['CASE WHEN r.frais IS NULL OR r.frais > ? THEN ? ELSE r.frais END', [$plafond, $plafond]];
+        $totaux = DB::query()->fromSub($restants, 'r')
+            ->selectRaw("r.groupe, COUNT(*) AS nombre, COALESCE(SUM(r.frais), 0) AS frais,
+                SUM(CASE WHEN r.frais IS NULL THEN 1 ELSE 0 END) AS sans_frais, COALESCE(SUM({$prisEnCharge}), 0) AS pris_en_charge", $liaisonsPlafond)
+            ->groupBy('r.groupe')
+            ->get()
+            ->keyBy('groupe');
 
-                $groupes[$groupe]['nombre']++;
-                $groupes[$groupe]['frais'] += (int) $frais;
-                $groupes[$groupe]['sans_frais'] += $frais === null ? 1 : 0;
-                $groupes[$groupe]['pris_en_charge'] += BeneficiaireSession::montantPour($frais, $session->plafond_beneficiaire);
-            });
+        $groupes = [];
+        foreach (array_keys(self::SITUATIONS) as $groupe) {
+            $ligne = $totaux[$groupe] ?? null;
+            $groupes[$groupe] = [
+                'nombre' => (int) ($ligne->nombre ?? 0),
+                'frais' => (int) ($ligne->frais ?? 0),
+                'sans_frais' => (int) ($ligne->sans_frais ?? 0),
+                'pris_en_charge' => (int) ($ligne->pris_en_charge ?? 0),
+            ];
+        }
 
         return [
             'groupes' => $groupes,
@@ -592,22 +623,29 @@ class SelectionParrainage implements SourceSelection
             return collect();
         }
 
-        return $session->beneficiaires()->retenus()->orderByDesc('score')->get()->map(fn (BeneficiaireSession $b) => [
-            'oev_id' => $b->oev_id,
-            'type_appui' => $b->type_appui,
-            'etablissement_id' => null,
-            'frais_reels' => $b->frais_reels ?? $b->montant_retenu,
-            'montant_retenu' => $b->montant_retenu,
-        ])->values();
+        // Lignes brutes (pas de modèles) : la liste peut compter des dizaines de milliers de bénéficiaires
+        return $session->beneficiaires()->retenus()->orderByDesc('score')->orderBy('id')->toBase()
+            ->get(['oev_id', 'type_appui', 'frais_reels', 'montant_retenu'])
+            ->map(fn ($b) => [
+                'oev_id' => (int) $b->oev_id,
+                'type_appui' => $b->type_appui,
+                'etablissement_id' => null,
+                'frais_reels' => self::entier($b->frais_reels ?? $b->montant_retenu),
+                'montant_retenu' => self::entier($b->montant_retenu),
+            ]);
     }
 
     public function listeAttente(SessionParrainage $session): Collection
     {
-        return $session->beneficiaires()->enAttente()->orderBy('rang')->get()->map(fn (BeneficiaireSession $b) => [
-            'oev_id' => $b->oev_id,
-            'rang' => $b->rang,
-            'besoin_estime' => $b->montant_retenu,
-        ])->values();
+        return $session->beneficiaires()->enAttente()->orderBy('rang')->orderBy('id')->toBase()
+            ->get(['oev_id', 'rang', 'montant_retenu'])
+            ->map(fn ($b) => ['oev_id' => (int) $b->oev_id, 'rang' => self::entier($b->rang), 'besoin_estime' => self::entier($b->montant_retenu)]);
+    }
+
+    /** Même conversion que le cast « integer » du modèle : null reste null. */
+    private static function entier(mixed $valeur): ?int
+    {
+        return $valeur === null ? null : (int) $valeur;
     }
 
     public function etablissements(): Collection
@@ -623,6 +661,24 @@ class SelectionParrainage implements SourceSelection
             ->distinct()
             ->pluck('type_appui')
             ->all();
+    }
+
+    public function requeteListeDefinitive(Collection $sessions): QueryBuilder
+    {
+        $arretees = $sessions->filter(fn (SessionParrainage $s) => $this->listeArretee($s))->pluck('id')->all();
+
+        return BeneficiaireSession::retenus()->whereIn('session_parrainage_id', $arretees)->toBase()
+            ->select(['oev_id', 'type_appui', 'montant_retenu']);
+    }
+
+    public function requeteListeAttente(Collection $sessions): QueryBuilder
+    {
+        return BeneficiaireSession::enAttente()->whereIn('session_parrainage_id', $sessions->pluck('id')->all())->toBase()->select('oev_id');
+    }
+
+    public function requeteResultatsScolaires(string $annee): QueryBuilder
+    {
+        return SuiviParrainage::where('annee', $annee)->where('type_appui', SessionParrainage::TYPE_SCOLAIRE)->toBase()->select(['oev_id', 'resultat']);
     }
 
     /** Résultats scolaires du module « Suivi des parrainés » (appui scolaire seulement). */
