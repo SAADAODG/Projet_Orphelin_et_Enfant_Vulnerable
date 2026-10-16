@@ -127,10 +127,10 @@
                 <label class="form-label small fw-semibold mb-1" for="f-age_max">Âge maximum</label>
                 <input class="form-control form-control-sm {{ $f['age_max'] !== null ? 'is-filtre' : '' }}" id="f-age_max" name="age_max" type="number" min="0" max="25" value="{{ $f['age_max'] }}" placeholder="ans">
               </div>
-              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::GROUPES_POPULATION, 'valeur' => $f['groupe_population']])</div>
+              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::groupesPopulation(), 'valeur' => $f['groupe_population']])</div>
               <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'a_acte_naissance', 'label' => 'Acte de naissance', 'options' => $ouiNon, 'valeur' => $f['a_acte_naissance']])</div>
-              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'lieu_de_vie', 'label' => 'Lieu de vie', 'options' => Oev::LIEUX_DE_VIE, 'valeur' => $f['lieu_de_vie']])</div>
-              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'vulnerabilite', 'label' => 'Situation de vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeur' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
+              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'lieu_de_vie', 'label' => 'Lieu de vie', 'options' => Oev::lieuxDeVie(), 'valeur' => $f['lieu_de_vie']])</div>
+              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'vulnerabilite', 'label' => 'Situation de vulnérabilité', 'options' => Oev::vulnerabilites(), 'valeur' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
               <div class="col-sm-4">@include('extraction._filtre', ['nom' => 'handicap', 'label' => 'Handicap', 'options' => $ouiNon, 'valeur' => $f['handicap']])</div>
               <div class="col-sm-4">@include('extraction._filtre', ['nom' => 'type_handicap', 'label' => 'Type de handicap', 'options' => Oev::TYPES_HANDICAP, 'valeur' => $f['type_handicap']])</div>
               <div class="col-sm-4">@include('extraction._filtre', ['nom' => 'maladie_chronique', 'label' => 'Maladie', 'options' => $ouiNon, 'valeur' => $f['maladie_chronique']])</div>
@@ -144,7 +144,7 @@
             <div class="row g-2">
               <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'mere_vivante', 'label' => 'Mère vivante', 'options' => Oev::PARENT_VIVANT, 'valeur' => $f['mere_vivante']])</div>
               <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'pere_vivant', 'label' => 'Père vivant', 'options' => Oev::PARENT_VIVANT, 'valeur' => $f['pere_vivant']])</div>
-              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'tuteur_lien', 'label' => 'Qui s’occupe de l’enfant', 'options' => Oev::LIENS_TUTEUR, 'valeur' => $f['tuteur_lien']])</div>
+              <div class="col-sm-6">@include('extraction._filtre', ['nom' => 'tuteur_lien', 'label' => 'Qui s’occupe de l’enfant', 'options' => Oev::liensTuteur(), 'valeur' => $f['tuteur_lien']])</div>
               <div class="col-sm-3">@include('extraction._filtre', ['nom' => 'tuteur_a_cnib', 'label' => 'Tuteur avec CNIB', 'options' => $ouiNon, 'valeur' => $f['tuteur_a_cnib']])</div>
               <div class="col-sm-3">@include('extraction._filtre', ['nom' => 'tuteur_pret_continuer', 'label' => 'Prêt à continuer', 'options' => $ouiNon, 'valeur' => $f['tuteur_pret_continuer']])</div>
               <div class="col-sm-4">@include('extraction._filtre', ['nom' => 'source_revenu', 'label' => 'Source de revenu', 'options' => Oev::SOURCES_REVENU, 'valeur' => $f['source_revenu'], 'tous' => 'Toutes'])</div>

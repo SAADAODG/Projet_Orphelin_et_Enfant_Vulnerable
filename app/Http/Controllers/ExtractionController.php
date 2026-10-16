@@ -43,11 +43,11 @@ class ExtractionController extends Controller
             'statut_dossier' => Oev::ETATS,
             'statut' => Oev::STATUTS,
             'sexe' => Oev::SEXES,
-            'groupe_population' => Oev::GROUPES_POPULATION,
-            'lieu_de_vie' => Oev::LIEUX_DE_VIE,
+            'groupe_population' => Oev::groupesPopulation(),
+            'lieu_de_vie' => Oev::lieuxDeVie(),
             'mere_vivante' => Oev::PARENT_VIVANT,
             'pere_vivant' => Oev::PARENT_VIVANT,
-            'tuteur_lien' => Oev::LIENS_TUTEUR,
+            'tuteur_lien' => Oev::liensTuteur(),
             'source_revenu' => Oev::SOURCES_REVENU,
             'niveau_revenu' => Oev::NIVEAUX,
             'logement' => Oev::LOGEMENTS,
@@ -174,7 +174,7 @@ class ExtractionController extends Controller
         $groupes = [
             'Dossier' => ['Code OEV', 'N° de dossier', 'État du dossier', 'Constitué le', 'Soumis au DR le', 'Intégré le'],
             'Identité' => ['Nom', 'Prénom(s)', 'Sexe', 'Date de naissance', 'Âge', 'Lieu de naissance', 'Nationalité', 'Acte de naissance', 'N° acte de naissance', 'Statut OEV', 'Groupe de population'],
-            'Localité' => ['Région', 'Province', 'Commune', 'Village / secteur', 'Quartier', 'Lieu de provenance'],
+            'Localité' => ['Région', 'Province', 'Commune', 'Village / ville', 'Quartier', 'Lieu de provenance'],
             'Parents et tuteur' => ['Mère', 'Mère vivante', 'Décès de la mère', 'Père', 'Père vivant', 'Décès du père', 'Qui s’occupe de l’enfant', 'Parent / tuteur', 'Téléphone du tuteur', 'CNIB du tuteur', 'Prêt à continuer', 'Lieu de vie'],
             'Situation et santé' => ['Vulnérabilités', 'Handicap', 'Type de handicap', 'Maladie', 'Source de revenu', 'Niveau de revenu', 'Logement'],
             'Scolarité et formation' => ['Situation scolaire', 'Niveau d’étude', 'Classe précédente', 'Moyenne annuelle', 'Appréciation', 'Établissement actuel', 'Public / privé', 'Classe actuelle', 'Frais de scolarité (FCFA)', 'Performances', 'Formation professionnelle'],
@@ -207,7 +207,7 @@ class ExtractionController extends Controller
             $filtres[$cle] = array_key_exists($valeur, $liste) ? $valeur : null;
         }
         $vulnerabilite = (string) $request->query('vulnerabilite');
-        $filtres['vulnerabilite'] = array_key_exists($vulnerabilite, Oev::VULNERABILITES) ? $vulnerabilite : null;
+        $filtres['vulnerabilite'] = array_key_exists($vulnerabilite, Oev::vulnerabilites()) ? $vulnerabilite : null;
         $handicap = (string) $request->query('type_handicap');
         $filtres['type_handicap'] = array_key_exists($handicap, Oev::TYPES_HANDICAP) ? $handicap : null;
         foreach (self::OUI_NON as $cle) {
@@ -287,11 +287,11 @@ class ExtractionController extends Controller
             'Acte de naissance' => fn (Oev $o) => $ouiNon($o->a_acte_naissance),
             'N° acte de naissance' => fn (Oev $o) => $o->numero_acte_naissance ?? '',
             'Statut OEV' => $lib('statut', Oev::STATUTS),
-            'Groupe de population' => $lib('groupe_population', Oev::GROUPES_POPULATION),
+            'Groupe de population' => $lib('groupe_population', Oev::groupesPopulation()),
             'Région' => fn (Oev $o) => $o->region?->nom ?? '',
             'Province' => fn (Oev $o) => $o->province?->nom ?? '',
             'Commune' => fn (Oev $o) => $o->commune?->nom ?? '',
-            'Village / secteur' => fn (Oev $o) => $o->village?->nom ?? '',
+            'Village / ville' => fn (Oev $o) => $o->village?->nom ?? '',
             'Quartier' => fn (Oev $o) => $o->quartier ?? '',
             'Lieu de provenance' => fn (Oev $o) => $o->lieuDeProvenance() ?? '',
             'Mère' => fn (Oev $o) => trim($o->mere_nom . ' ' . $o->mere_prenoms),
@@ -300,13 +300,13 @@ class ExtractionController extends Controller
             'Père' => fn (Oev $o) => trim($o->pere_nom . ' ' . $o->pere_prenoms),
             'Père vivant' => $lib('pere_vivant', Oev::PARENT_VIVANT),
             'Décès du père' => fn (Oev $o) => $date($o->pere_date_deces),
-            'Qui s’occupe de l’enfant' => $lib('tuteur_lien', Oev::LIENS_TUTEUR),
+            'Qui s’occupe de l’enfant' => $lib('tuteur_lien', Oev::liensTuteur()),
             'Parent / tuteur' => fn (Oev $o) => trim($o->nom_tuteur . ' ' . $o->prenom_tuteur),
             'Téléphone du tuteur' => fn (Oev $o) => $o->contact_tuteur ?? '',
             'CNIB du tuteur' => fn (Oev $o) => $o->tuteur_cnib ?? '',
             'Prêt à continuer' => fn (Oev $o) => $ouiNon($o->tuteur_pret_continuer),
-            'Lieu de vie' => $lib('lieu_de_vie', Oev::LIEUX_DE_VIE),
-            'Vulnérabilités' => $multi('vulnerabilites', Oev::VULNERABILITES),
+            'Lieu de vie' => $lib('lieu_de_vie', Oev::lieuxDeVie()),
+            'Vulnérabilités' => $multi('vulnerabilites', Oev::vulnerabilites()),
             'Handicap' => fn (Oev $o) => $ouiNon($o->handicap),
             'Type de handicap' => $multi('types_handicap', Oev::TYPES_HANDICAP),
             'Maladie' => fn (Oev $o) => $o->maladie_chronique ? ($o->maladie_nom ?: 'Oui') : $ouiNon($o->maladie_chronique),

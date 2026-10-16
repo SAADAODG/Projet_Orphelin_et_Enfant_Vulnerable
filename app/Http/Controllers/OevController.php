@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\BeneficiaireSession;
 use App\Services\Parrainage\ParcoursScolaire;
 use App\Models\Commune;
+use App\Models\Ecole;
 use App\Models\Oev;
 use App\Models\OevDocument;
 use App\Models\Region;
@@ -74,6 +75,8 @@ class OevController extends Controller implements HasMiddleware
         'moyenne_annuelle' => 'moyenne annuelle',
         'appreciation' => 'appréciation',
         'etablissement_actuel' => 'établissement de l’année en cours',
+        'ecole_id' => 'établissement de l’année en cours',
+        'ecole_precedente_id' => 'établissement de l’année précédente',
         'type_etablissement' => 'public ou privé',
         'classe' => 'classe',
         'frais_scolarite' => 'frais de scolarité',
@@ -81,7 +84,7 @@ class OevController extends Controller implements HasMiddleware
         'province_id' => 'province',
         'commune_id' => 'commune',
         'village_id' => 'village / secteur',
-        'nom_structure_rib' => 'nom de la structure',
+        'rib_etablissement' => 'RIB de l’établissement',
         'date_naissance_estimee' => 'date estimée',
         'lieu_naissance' => 'lieu de naissance',
         'nationalite' => 'nationalité',
@@ -578,13 +581,19 @@ class OevController extends Controller implements HasMiddleware
 
     private function valider(Request $request, ?Oev $oev = null): array
     {
-        $ribExistant = $oev?->documents()->where('type', 'rib')->exists() ?? false;
-
         // Le numéro est saisi sans indicatif (8 chiffres) ; on retire espaces et +226 éventuels avant validation.
         foreach (['contact_tuteur', 'gestionnaire_contact'] as $champTelephone) {
             if ($request->filled($champTelephone)) {
                 $request->merge([$champTelephone => Oev::numeroLocal($request->input($champTelephone))]);
             }
+        }
+
+        // École de l'année précédente choisie dans la liste : son nom devient l'établissement précédent
+        // (les règles de l'année précédente — classe, moyenne, appréciation — s'appuient sur lui)
+        $idEcolePrecedente = $request->input('ecole_precedente_id');
+        if (filled($idEcolePrecedente) && $idEcolePrecedente !== 'autre'
+            && ($ecolePrecedente = Ecole::whereKey($idEcolePrecedente)->where('commune_id', $request->input('commune_id'))->first())) {
+            $request->merge(['etablissement_precedent' => $ecolePrecedente->nom]);
         }
 
         $choix = fn (array $liste) => ['nullable', Rule::in(array_keys($liste))];
@@ -598,6 +607,16 @@ class OevController extends Controller implements HasMiddleware
         $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
         $sansActivite = Oev::sansScolariteNiFormation($situation, $entree('formation_professionnelle'), $entree('formation_etat'));
         $scolariseRequis = Rule::requiredIf($estScolarise);
+        // École de l'année en cours : choisie parmi celles de la commune de l'enfant (Paramètres > Écoles),
+        // ou « autre » pour un établissement hors liste, alors saisi
+        $ecoleDeLaListe = filled($entree('ecole_id')) && $entree('ecole_id') !== 'autre';
+        $ecoleDeLaCommune = fn (bool $demandee) => function (string $attribut, $valeur, \Closure $echec) use ($entree, $demandee): void {
+            if ($demandee && $valeur !== 'autre' && ! Ecole::whereKey($valeur)->where('commune_id', $entree('commune_id'))->exists()) {
+                $echec('Choisissez l’établissement dans la liste des écoles de la commune de l’enfant.');
+            }
+        };
+        // Année précédente : école de la liste, « autre » (alors saisie) ou aucune
+        $ecolePrecedenteDemandee = filled($situation) && $situation !== 'non_scolarise';
 
         // Parent(s) qui s'occupent de l'enfant : ils doivent être déclarés vivants, et leurs nom et prénoms
         // (saisis dans la partie « Parents ») sont repris comme ceux du tuteur.
@@ -696,7 +715,7 @@ class OevController extends Controller implements HasMiddleware
             'nationalite' => ['nullable', 'string', 'max:100'],
             'a_acte_naissance' => ['required', 'boolean'],
             'numero_acte_naissance' => ['nullable', 'required_if:a_acte_naissance,1', 'string', 'max:50'],
-            'groupe_population' => $choix(Oev::GROUPES_POPULATION),
+            'groupe_population' => $choix(Oev::groupesPopulation(true)),
 
             // Adresse : région, province et commune choisies dans le référentiel des localités
             ...Oev::reglesLocalite($request),
@@ -720,7 +739,7 @@ class OevController extends Controller implements HasMiddleware
             'pere_deces_confirme' => ['nullable', 'boolean'],
 
             // Tuteur
-            'tuteur_lien' => ['required', Rule::in(array_keys(Oev::LIENS_TUTEUR)), $tuteurVivant],
+            'tuteur_lien' => ['required', Rule::in(array_keys(Oev::liensTuteur(true))), $tuteurVivant],
             'tuteur_lien_precision' => ['nullable', 'required_if:tuteur_lien,autre_parent', 'string', 'max:100'],
             // Nom, prénoms et sexe demandés seulement si le tuteur n'est pas un parent (déjà saisi plus haut)
             'nom_tuteur' => ['nullable', Rule::requiredIf(! $tuteurEstParent), 'string', 'max:100'],
@@ -733,10 +752,10 @@ class OevController extends Controller implements HasMiddleware
             'tuteur_raison_arret' => ['nullable', 'required_if:tuteur_pret_continuer,0', 'string', 'max:255'],
 
             // Conditions de vie et vulnérabilités
-            'lieu_de_vie' => $choix(Oev::LIEUX_DE_VIE),
+            'lieu_de_vie' => $choix(Oev::lieuxDeVie(true)),
             'lieu_de_vie_precision' => ['nullable', 'required_if:lieu_de_vie,autre', 'string', 'max:150'],
             'vulnerabilites' => ['nullable', 'array'],
-            'vulnerabilites.*' => [Rule::in(array_keys(Oev::VULNERABILITES))],
+            'vulnerabilites.*' => [Rule::in(array_keys(Oev::vulnerabilites(true)))],
             'vulnerabilite_precision' => ['nullable', Rule::requiredIf(in_array('autre', $vulnerabilitesSaisies, true)), 'string', 'max:255'],
 
             // Santé
@@ -768,7 +787,8 @@ class OevController extends Controller implements HasMiddleware
             'niveau_etude' => ['nullable', Rule::requiredIf($aEteScolarise), Rule::in(array_keys(Oev::NIVEAUX_ETUDE))],
             'raison_non_scolarisation' => ['nullable', Rule::requiredIf($nonScolarise), Rule::in(array_keys(Oev::RAISONS_NON_SCOLARISATION))],
             'raison_non_scolarisation_precision' => ['nullable', Rule::requiredIf($nonScolarise && $entree('raison_non_scolarisation') === 'autre'), 'string', 'max:255'],
-            'etablissement_precedent' => ['nullable', 'string', 'max:255'],
+            'ecole_precedente_id' => ['nullable', $ecoleDeLaCommune($ecolePrecedenteDemandee)],
+            'etablissement_precedent' => ['nullable', Rule::requiredIf($ecolePrecedenteDemandee && $entree('ecole_precedente_id') === 'autre'), 'string', 'max:255'],
             // La classe de l'année précédente fixe le barème de la moyenne (/10 ou /20)
             'classe_precedente' => ['nullable', Rule::requiredIf(filled($entree('moyenne_annuelle'))), Rule::in(array_keys(Oev::toutesLesClasses()))],
             'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', $moyenneDansLeBareme],
@@ -776,8 +796,10 @@ class OevController extends Controller implements HasMiddleware
             'performance_scolaire' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::PERFORMANCES_SCOLAIRES))],
             'performance_difficultes' => ['nullable', Rule::requiredIf($estScolarise && $entree('performance_scolaire') === 'difficultes'), 'string', 'max:255'],
             'systeme_educatif' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
-            'etablissement_actuel' => ['nullable', $scolariseRequis, 'string', 'max:255'],
+            'ecole_id' => ['nullable', $ecoleDeLaCommune($estScolarise)],
+            'etablissement_actuel' => ['nullable', Rule::requiredIf($estScolarise && ! $ecoleDeLaListe), 'string', 'max:255'],
             'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            'rib_etablissement' => ['nullable', 'string', 'max:60'],
             // La classe doit appartenir au niveau d'étude choisi (ex. pas de « 6e » en primaire)
             'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($entree('niveau_etude')))), $classeActuelleCoherente],
             'frais_scolarite' => ['nullable', 'integer', 'min:0'],
@@ -792,7 +814,6 @@ class OevController extends Controller implements HasMiddleware
             'souhait_avenir' => ['nullable', Rule::requiredIf($sansActivite), Rule::in(array_keys(Oev::SOUHAITS_AVENIR))],
             'souhait_avenir_precision' => ['nullable', 'string', 'max:150'],
 
-            'nom_structure_rib' => [($request->hasFile('rib') || $ribExistant) ? 'required' : 'nullable', 'string', 'max:255'],
         ];
 
         $messagesFichiers = $this->limiterALaZone($request, $regles);
@@ -827,7 +848,6 @@ class OevController extends Controller implements HasMiddleware
             'date_identification.after_or_equal' => 'La date d’identification ne peut pas précéder la naissance de l’enfant.',
             'mere_vivante.required' => 'Indiquez si la mère de l’enfant est vivante.',
             'pere_vivant.required' => 'Indiquez si le père de l’enfant est vivant.',
-            'nom_structure_rib.required' => 'Précisez le nom de la structure titulaire du RIB.',
             'numero_acte_naissance.required_if' => 'Saisissez le numéro de l’acte de naissance de l’enfant.',
             'mere_nom.required' => 'La mère s’occupe de l’enfant : saisissez son nom (partie « Mère »).',
             'mere_prenoms.required' => 'La mère s’occupe de l’enfant : saisissez ses prénoms (partie « Mère »).',
@@ -876,7 +896,7 @@ class OevController extends Controller implements HasMiddleware
         $effacer((bool) $validated['tuteur_pret_continuer'], ['tuteur_raison_arret']);
         $effacer(! $validated['a_acte_naissance'], ['numero_acte_naissance']);
         $effacer(! ($validated['maladie_chronique'] ?? false), ['maladie_nom', 'suivi_clinique']);
-        $effacer($validated['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes']);
+        $effacer($validated['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes']);
         $effacer(($validated['performance_scolaire'] ?? null) !== 'difficultes', ['performance_difficultes']);
         $effacer(! in_array($validated['situation_scolaire'], ['scolarise', 'descolarise'], true), ['niveau_etude']);
         $effacer($validated['situation_scolaire'] === 'non_scolarise', ['etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation']);
@@ -890,6 +910,19 @@ class OevController extends Controller implements HasMiddleware
         // Formation achevée : toute la durée a été reçue
         if (($validated['formation_etat'] ?? null) === 'achevee') {
             $validated['formation_duree_recue_mois'] = $validated['formation_duree_mois'];
+        }
+
+        // École de la liste : son nom est repris comme établissement fréquenté ; sinon établissement saisi, sans école rattachée
+        if ($validated['situation_scolaire'] === 'scolarise' && filled($validated['ecole_id'] ?? null) && $validated['ecole_id'] !== 'autre') {
+            $validated['etablissement_actuel'] = Ecole::findOrFail($validated['ecole_id'])->nom;
+        } else {
+            $validated['ecole_id'] = null;
+        }
+        // École précédente de la liste (son nom a été repris avant la validation) ; sinon établissement saisi ou aucun
+        if (filled($validated['etablissement_precedent'] ?? null) && filled($validated['ecole_precedente_id'] ?? null) && $validated['ecole_precedente_id'] !== 'autre') {
+            $validated['ecole_precedente_id'] = (int) $validated['ecole_precedente_id'];
+        } else {
+            $validated['ecole_precedente_id'] = null;
         }
 
         // Lieu de naissance saisi librement : l'ancien rattachement à une commune est abandonné

@@ -7,8 +7,10 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesactivationOevController;
+use App\Http\Controllers\EcoleController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ListeReferenceController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
@@ -27,6 +29,7 @@ use App\Http\Controllers\SuiviParrainageController;
 use App\Http\Controllers\SignalementController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VillageController;
+use App\Models\ListeReference;
 use App\Models\Province;
 use Illuminate\Support\Facades\Route;
 
@@ -220,6 +223,18 @@ Route::middleware('auth')->prefix('admin')->group(function () {
 
         Route::get('/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
         Route::put('/parametres', [ParametreController::class, 'update'])->name('parametres.update');
+        // Paramètres > Écoles : référentiel proposé dans le formulaire OEV (établissement fréquenté)
+        Route::prefix('parametres')->name('parametres.')->group(function () {
+            Route::post('/ecoles/import', [EcoleController::class, 'import'])->name('ecoles.import');
+            Route::resource('ecoles', EcoleController::class)->except('show');
+            // Listes de choix de la fiche OEV : groupes de population, qui s'occupe de l'enfant, conditions de vie, vulnérabilités
+            Route::prefix('listes/{liste}')->name('listes.')->whereIn('liste', array_keys(ListeReference::listes()))->group(function () {
+                Route::get('/', [ListeReferenceController::class, 'index'])->name('index');
+                Route::post('/', [ListeReferenceController::class, 'store'])->name('store');
+                Route::put('/{element}', [ListeReferenceController::class, 'update'])->name('update');
+                Route::delete('/{element}', [ListeReferenceController::class, 'destroy'])->name('destroy');
+            });
+        });
         Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
         Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');
         Route::delete('/quick-links/{quickLink}', [QuickLinkController::class, 'destroy'])->name('quick-links.destroy');
@@ -236,6 +251,8 @@ Route::middleware('auth')->prefix('admin')->group(function () {
 
     // Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)
     Route::get('/localites/communes/{commune}/villages', [VillageController::class, 'parCommune'])->name('localites.villages-commune');
+    // Écoles d'une commune, chargées à la demande par le formulaire OEV (tout agent connecté)
+    Route::get('/localites/communes/{commune}/ecoles', [EcoleController::class, 'parCommune'])->name('localites.ecoles-commune');
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');

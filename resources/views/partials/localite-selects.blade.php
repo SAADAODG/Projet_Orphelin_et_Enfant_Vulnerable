@@ -9,6 +9,7 @@
     $avecVillage  bool, false par défaut : ajoute la liste des villages / secteurs de la commune
     $colonnes     classes de colonne Bootstrap par champ (facultatif)
     $attributs    attributs HTML supplémentaires par champ, ex. ['region_id' => 'data-recap="region_id"'] (facultatif)
+    $libelleVillage  libellé du champ village, « Village / secteur » par défaut (facultatif)
 --}}
 @php
   $requis ??= true;
@@ -22,7 +23,7 @@
     'commune_id' => ['label' => 'Commune', 'vide' => "Choisir d'abord la province", 'choisir' => 'Choisir la commune', 'requis' => $requis],
   ];
   if ($avecVillage) {
-    $champs['village_id'] = ['label' => 'Village / secteur', 'vide' => 'Aucun village enregistré pour cette commune', 'choisir' => 'Choisir le village ou secteur', 'requis' => false];
+    $champs['village_id'] = ['label' => $libelleVillage ?? 'Village / secteur', 'vide' => 'Aucun village enregistré pour cette commune', 'choisir' => 'Choisir le village ou secteur', 'requis' => false];
   }
 @endphp
 

@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @use('App\Models\Oev')
+@use('App\Models\Ecole')
 
 @php
   $edition = $oev->exists;
@@ -18,6 +19,9 @@
   // Lieu de naissance : id de commune, « autre » si un lieu hors référentiel est saisi
   // Lieu de naissance saisi librement (un ancien dossier rattaché à une commune affiche son nom)
   $lieuNaissance = old('lieu_naissance', $oev->lieuDeNaissance());
+  // École en cours : id d'une école du référentiel, « autre » si l'établissement a été saisi (hors liste ou ancien dossier)
+  $ecoleChoisie = (string) old('ecole_id', $oev->ecole_id ?? ($oev->etablissement_actuel ? 'autre' : ''));
+  $ecolePrecedenteChoisie = (string) old('ecole_precedente_id', $oev->ecole_precedente_id ?? ($oev->etablissement_precedent ? 'autre' : ''));
   $lieuProvenanceChoisi = old('lieu_provenance_commune_id', $oev->lieu_provenance_commune_id ?? ($oev->lieu_provenance ? 'autre' : ''));
   // Gestionnaire du cas : l'agent qui saisit le dossier, par défaut
   $gestionnaireNom = old('gestionnaire_nom', $oev->exists ? $oev->gestionnaire_nom : auth()->user()->name);
@@ -43,11 +47,11 @@
     3 => ['lieu_de_vie', 'lieu_de_vie_precision', 'vulnerabilites', 'vulnerabilite_precision', 'handicap', 'types_handicap', 'nature_handicap', 'maladie_chronique', 'maladie_nom', 'suivi_clinique',
           'source_revenu', 'niveau_revenu', 'logement', 'date_identification', 'identifie_par', 'niveau_priorite',
           'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact'],
-    4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
-          'appreciation', 'performance_scolaire', 'performance_difficultes', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
+    4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'ecole_precedente_id', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
+          'appreciation', 'performance_scolaire', 'performance_difficultes', 'ecole_id', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
           'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
           'souhait_avenir', 'souhait_avenir_precision'],
-    5 => array_merge(array_keys(Oev::DOCUMENTS), ['nom_structure_rib']),
+    5 => array_keys(Oev::DOCUMENTS),
   ];
   $etapeInitiale = 1;
   foreach ($champsParEtape as $numero => $champs) {
@@ -59,17 +63,21 @@
     'certificat_scolarite' => 'bi-journal-bookmark',
     'photo' => 'bi-camera',
     'cnib_tuteur' => 'bi-person-badge',
-    'rib' => 'bi-bank',
+    'bulletin' => 'bi-award',
+    'enquete_sociale' => 'bi-clipboard2-check',
   ];
   // Pièce demandée seulement si la condition est remplie (mêmes règles que Oev::pieceRequise)
   $conditionsPieces = [
     'acte_naissance' => 'a_acte_naissance:1',
     'certificat_scolarite' => 'situation_scolaire:scolarise',
+    'bulletin' => 'situation_scolaire!:non_scolarise&&ecole_precedente_id:*',
     'cnib_tuteur' => 'tuteur_a_cnib:1',
   ];
   // Enfant ni scolarisé ni en formation (en cours) : son souhait est demandé (mêmes règles que Oev::sansScolariteNiFormation)
   $sansScolarite = 'situation_scolaire:non_scolarise|descolarise|non_formelle|foyer_coranique';
   $sansActivite = "{$sansScolarite}&&formation_professionnelle!:1||{$sansScolarite}&&formation_etat:achevee";
+  // Souhait « école » formulé selon la situation : retourner à l'école (déscolarisé), intégrer l'école classique…
+  $souhaitEcoleSelonSituation = ['descolarise' => 'Retourner à l’école', 'non_formelle' => 'Intégrer l’école classique', 'foyer_coranique' => 'Intégrer l’école classique'];
 
   // Limites de taille réelles (application ∩ configuration PHP du serveur)
   $maxFichiersKo = collect(Oev::DOCUMENTS)->keys()->mapWithKeys(fn ($t) => [$t => Oev::tailleMaxFichierKo($t)])->all();
@@ -249,7 +257,7 @@
                 <div class="col-md-4">@include('oevs.champs._texte', ['nom' => 'nationalite', 'label' => 'Nationalité', 'valeur' => $v('nationalite') ?? ($edition ? null : 'Burkinabè'), 'max' => 100])</div>
                 <div class="col-md-4">@include('oevs.champs._choix', ['nom' => 'a_acte_naissance', 'label' => 'L’enfant a-t-il un acte de naissance ?', 'options' => Oev::OUI_NON, 'valeur' => $vBool('a_acte_naissance'), 'requis' => true, 'aide' => 'Détermine si l’acte de naissance est demandé dans les pièces.'])</div>
                 <div class="col-md-4" data-si="a_acte_naissance:1">@include('oevs.champs._texte', ['nom' => 'numero_acte_naissance', 'label' => 'N° de l’acte de naissance', 'valeur' => $v('numero_acte_naissance'), 'max' => 50, 'requis' => true, 'placeholder' => 'Numéro inscrit sur l’acte', 'erreur' => 'Saisissez le numéro de l’acte de naissance.'])</div>
-                <div class="col-md-4">@include('oevs.champs._choix', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::GROUPES_POPULATION, 'valeur' => $v('groupe_population'), 'mode' => 'liste'])</div>
+                <div class="col-md-4">@include('oevs.champs._choix', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::groupesPopulation(true), 'valeur' => $v('groupe_population'), 'mode' => 'liste'])</div>
               </div>
             </div>
           </div>
@@ -263,11 +271,12 @@
                   @include('partials.localite-selects', [
                     'localites' => $localitesZone,
                     'avecVillage' => true,
+                    'libelleVillage' => 'Village / ville',
                     'valeurs' => $oev->only(['region_id', 'province_id', 'commune_id', 'village_id']),
                     'colonnes' => ['region_id' => 'col-md-3', 'province_id' => 'col-md-3', 'commune_id' => 'col-md-3', 'village_id' => 'col-md-3'],
                   ])
                 </div>
-                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'quartier', 'label' => 'Quartier / précision de l’adresse', 'valeur' => $v('quartier'), 'max' => 150, 'placeholder' => 'Quartier, hameau, repère… (ou village non encore enregistré)'])</div>
+                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'quartier', 'label' => 'Quartier', 'valeur' => $v('quartier'), 'max' => 150, 'placeholder' => 'Quartier, hameau, repère… (ou village non encore enregistré)'])</div>
                 {{-- Lieu de provenance (enfant déplacé, réfugié…) : commune du référentiel, ou « autre lieu » à préciser --}}
                 <div class="col-md-6" data-si="groupe_population:{{ $groupesMobiles }}">
                   <label class="form-label" for="lieu_provenance_commune_id">Lieu de provenance de l’enfant</label>
@@ -303,7 +312,7 @@
                 <div class="oev-bloc-titre"><i class="bi {{ $p['icone'] }}" aria-hidden="true"></i> {{ $p['titre'] }}</div>
                 <div class="row g-3">
                   {{-- Obligatoires quand ce parent s'occupe de l'enfant : ils sont repris comme nom du tuteur --}}
-                  <div class="col-sm-5">@include('oevs.champs._texte', ['nom' => "{$parent}_nom", 'label' => 'Nom de famille', 'valeur' => $v("{$parent}_nom"), 'max' => 100, 'requisSi' => "tuteur_lien:{$parent}|parents", 'erreur' => 'Obligatoire : ce parent s’occupe de l’enfant.'])</div>
+                  <div class="col-sm-5">@include('oevs.champs._texte', ['nom' => "{$parent}_nom", 'label' => 'Nom', 'valeur' => $v("{$parent}_nom"), 'max' => 100, 'requisSi' => "tuteur_lien:{$parent}|parents", 'erreur' => 'Obligatoire : ce parent s’occupe de l’enfant.'])</div>
                   <div class="col-sm-7">@include('oevs.champs._texte', ['nom' => "{$parent}_prenoms", 'label' => 'Prénoms', 'valeur' => $v("{$parent}_prenoms"), 'max' => 150, 'requisSi' => "tuteur_lien:{$parent}|parents", 'erreur' => 'Obligatoire : ce parent s’occupe de l’enfant.'])</div>
                   <div class="col-12">@include('oevs.champs._choix', ['nom' => $p['vivant'], 'label' => $p['question'], 'options' => Oev::PARENT_VIVANT, 'valeur' => $v($p['vivant']), 'requis' => true])</div>
                   <div class="col-12" data-si="{{ $p['vivant'] }}:non">
@@ -336,7 +345,7 @@
                   <label class="form-label" for="tuteur_lien">Qui s’occupe de l’enfant ? <span class="text-danger">*</span></label>
                   <select class="form-select @error('tuteur_lien') is-invalid @enderror" id="tuteur_lien" name="tuteur_lien" required>
                     <option value="">Sélectionner…</option>
-                    @foreach (Oev::LIENS_TUTEUR as $cle => $label)
+                    @foreach (Oev::liensTuteur(true) as $cle => $label)
                       {{-- Les parents ne sont proposés que s'ils sont déclarés vivants --}}
                       <option value="{{ $cle }}" @selected($v('tuteur_lien') === $cle)
                         @if ($cle === 'mere') data-masquer-si="mere_vivante!:oui" @elseif ($cle === 'pere') data-masquer-si="pere_vivant!:oui" @elseif ($cle === 'parents') data-masquer-si="mere_vivante!:oui||pere_vivant!:oui" @endif>{{ $label }}</option>
@@ -345,15 +354,6 @@
                   <div class="invalid-feedback">{{ $errors->first('tuteur_lien') ?: 'Indiquez qui s’occupe de l’enfant.' }}</div>
                 </div>
                 <div class="col-md-4" data-si="tuteur_lien:autre_parent">@include('oevs.champs._texte', ['nom' => 'tuteur_lien_precision', 'label' => 'Quel membre de la famille ?', 'valeur' => $v('tuteur_lien_precision'), 'max' => 100, 'requis' => true, 'placeholder' => 'ex : cousin, belle-mère…', 'erreur' => 'Précisez le lien.'])</div>
-
-                {{-- Parent(s) : identité déjà saisie plus haut, simplement rappelée --}}
-                <div class="col-md-8" data-si="tuteur_lien:parents|mere|pere">
-                  <span class="form-label d-block">Nom et prénoms</span>
-                  <div class="oev-note align-items-center">
-                    <i class="bi bi-person" aria-hidden="true"></i>
-                    <strong class="text-body" data-rappel-tuteur>—</strong>
-                  </div>
-                </div>
 
                 {{-- Tuteur autre qu'un parent : identité à saisir --}}
                 <div class="col-sm-5 col-md-4" data-si="tuteur_lien!:parents|mere|pere">@include('oevs.champs._texte', ['nom' => 'nom_tuteur', 'label' => 'Nom du tuteur', 'valeur' => $v('nom_tuteur'), 'max' => 100, 'requis' => true, 'erreur' => 'Le nom est obligatoire.'])</div>
@@ -394,10 +394,10 @@
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-house-heart" aria-hidden="true"></i> Conditions de vie</div>
               <div class="row g-3">
-                <div class="col-12">@include('oevs.champs._choix', ['nom' => 'lieu_de_vie', 'label' => 'Où vit l’enfant ?', 'options' => Oev::LIEUX_DE_VIE, 'valeur' => $v('lieu_de_vie'), 'mode' => 'liste'])</div>
+                <div class="col-12">@include('oevs.champs._choix', ['nom' => 'lieu_de_vie', 'label' => 'Où vit l’enfant ?', 'options' => Oev::lieuxDeVie(true), 'valeur' => $v('lieu_de_vie'), 'mode' => 'liste'])</div>
                 <div class="col-12" data-si="lieu_de_vie:autre">@include('oevs.champs._texte', ['nom' => 'lieu_de_vie_precision', 'label' => 'Précisez le lieu de vie', 'valeur' => $v('lieu_de_vie_precision'), 'max' => 150, 'requis' => true, 'erreur' => 'Précisez le lieu de vie.'])</div>
                 <div class="col-12">
-                  @include('oevs.champs._cases', ['nom' => 'vulnerabilites', 'label' => 'Situations de vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeurs' => $vListe('vulnerabilites'),
+                  @include('oevs.champs._cases', ['nom' => 'vulnerabilites', 'label' => 'Situations de vulnérabilité', 'options' => Oev::vulnerabilites(true), 'valeurs' => $vListe('vulnerabilites'),
                     'automatiques' => ['orphelin' => 'mere_vivante:non||pere_vivant:non', 'handicap' => 'handicap:1', 'sans_acte_naissance' => 'a_acte_naissance:0'],
                     'conditions' => ['grossesse' => 'sexe:F']])
                 </div>
@@ -506,20 +506,21 @@
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-clock-history" aria-hidden="true"></i> Année précédente</div>
               <div class="row g-3">
-                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'etablissement_precedent', 'label' => 'Établissement fréquenté', 'valeur' => $v('etablissement_precedent'), 'max' => 255, 'placeholder' => 'La classe, la moyenne et l’appréciation seront demandées ensuite'])</div>
-                <div class="col-md-3" data-si="etablissement_precedent:*">
+                <div class="col-md-6">@include('oevs.champs._ecole', ['nom' => 'ecole_precedente_id', 'label' => 'Établissement fréquenté', 'valeur' => $ecolePrecedenteChoisie, 'vide' => 'Non renseigné'])</div>
+                <div class="col-md-6" data-si="ecole_precedente_id:autre">@include('oevs.champs._texte', ['nom' => 'etablissement_precedent', 'label' => 'Nom de l’établissement', 'valeur' => $v('etablissement_precedent'), 'max' => 255, 'requis' => true, 'placeholder' => 'Établissement absent de la liste (lycée, collège, autre commune…)', 'erreur' => 'Saisissez le nom de l’établissement.'])</div>
+                <div class="col-md-3" data-si="ecole_precedente_id:*">
                   <label class="form-label" for="classe_precedente">Classe <span class="text-danger" data-si="moyenne_annuelle:*">*</span></label>
                   <select class="form-select @error('classe_precedente') is-invalid @enderror" id="classe_precedente" name="classe_precedente">
                     <option value="">Sélectionner…</option>
                     @foreach (Oev::CLASSES as $niveau => $classes)
                       <optgroup label="{{ Oev::NIVEAUX_ETUDE[$niveau] }}">
-                        @foreach ($classes as $cle => $label)<option value="{{ $cle }}" data-rang="{{ Oev::rangClasse($cle) }}" @selected($v('classe_precedente') === $cle)>{{ $label }}</option>@endforeach
+                        @foreach ($classes as $cle => $label)<option value="{{ $cle }}" data-niveau="{{ $niveau }}" data-rang="{{ Oev::rangClasse($cle) }}" @selected($v('classe_precedente') === $cle)>{{ $label }}</option>@endforeach
                       </optgroup>
                     @endforeach
                   </select>
                   <div class="invalid-feedback">{{ $errors->first('classe_precedente') ?: 'Indiquez la classe (elle fixe le barème de la moyenne).' }}</div>
                 </div>
-                <div class="col-md-3" data-si="etablissement_precedent:*">
+                <div class="col-md-3" data-si="ecole_precedente_id:*">
                   <label class="form-label" for="moyenne_annuelle">Moyenne annuelle obtenue</label>
                   <div class="input-group">
                     <input class="form-control @error('moyenne_annuelle') is-invalid @enderror" id="moyenne_annuelle" name="moyenne_annuelle" type="number" step="0.01" min="0" max="20" value="{{ $v('moyenne_annuelle') }}">
@@ -527,7 +528,7 @@
                     <div class="invalid-feedback" data-bareme-erreur>{{ $errors->first('moyenne_annuelle') ?: 'Moyenne entre 0 et 20.' }}</div>
                   </div>
                 </div>
-                <div class="col-md-6" data-si="etablissement_precedent:*">
+                <div class="col-md-6" data-si="ecole_precedente_id:*">
                   <span class="form-label d-block">Appréciation</span>
                   <div class="oev-choix" role="radiogroup" aria-label="Appréciation">
                     @foreach (Oev::APPRECIATIONS as $cle => $label)
@@ -544,7 +545,9 @@
             <div class="oev-bloc">
               <div class="oev-bloc-titre"><i class="bi bi-mortarboard" aria-hidden="true"></i> Année en cours</div>
               <div class="row g-3">
-                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'etablissement_actuel', 'label' => 'Établissement fréquenté', 'valeur' => $v('etablissement_actuel'), 'max' => 255, 'requis' => true, 'erreur' => 'L’établissement est obligatoire.'])</div>
+                <div class="col-md-6">@include('oevs.champs._ecole', ['nom' => 'ecole_id', 'label' => 'Établissement fréquenté', 'valeur' => $ecoleChoisie, 'requis' => true, 'vide' => 'Choisir l’établissement…'])</div>
+                <div class="col-md-6" data-si="ecole_id:autre">@include('oevs.champs._texte', ['nom' => 'etablissement_actuel', 'label' => 'Nom de l’établissement', 'valeur' => $v('etablissement_actuel'), 'max' => 255, 'requis' => true, 'placeholder' => 'Établissement absent de la liste (lycée, collège, autre commune…)', 'erreur' => 'Saisissez le nom de l’établissement.'])</div>
+                <div class="col-md-6">@include('oevs.champs._texte', ['nom' => 'rib_etablissement', 'label' => 'RIB de l’établissement', 'valeur' => $v('rib_etablissement'), 'max' => 60, 'placeholder' => 'Code banque, guichet, n° de compte, clé RIB'])</div>
                 <div class="col-md-6">@include('oevs.champs._choix', ['nom' => 'type_etablissement', 'label' => 'Public ou privé', 'options' => Oev::TYPES_ETABLISSEMENT, 'valeur' => $v('type_etablissement'), 'requis' => true])</div>
                 <div class="col-md-4">
                   <label class="form-label" for="systeme_educatif">Système éducatif <span class="text-danger">*</span></label>
@@ -564,6 +567,7 @@
                       @endforeach
                     @endforeach
                   </select>
+                  <div class="form-text" data-aide-classe hidden></div>
                   <div class="invalid-feedback">{{ $errors->first('classe') ?: 'Choisissez la classe correspondant au niveau (pas en dessous de celle de l’année précédente).' }}</div>
                 </div>
                 <div class="col-md-4">
@@ -632,8 +636,30 @@
               <div class="oev-bloc-titre"><i class="bi bi-signpost" aria-hidden="true"></i> Souhait de l’enfant</div>
               <div class="row g-3">
                 <div class="col-lg-8">
-                  @include('oevs.champs._choix', ['nom' => 'souhait_avenir', 'label' => 'L’enfant n’est ni à l’école ni en formation : que souhaite-t-il ?', 'options' => Oev::SOUHAITS_AVENIR, 'valeur' => $v('souhait_avenir'), 'requis' => true,
-                    'aide' => 'Sa réponse oriente un futur parrainage : inscription à l’école ou formation professionnelle.'])
+                  {{-- Question et premier choix adaptés à la situation scolaire cochée --}}
+                  <span class="form-label d-block" id="souhait_avenir-label">
+                    <span data-si="situation_scolaire:non_scolarise">L’enfant n’a jamais été à l’école : que souhaite-t-il ?</span>
+                    <span data-si="situation_scolaire:descolarise">L’enfant a quitté l’école : que souhaite-t-il ?</span>
+                    <span data-si="situation_scolaire:non_formelle">L’enfant suit une éducation non formelle : que souhaite-t-il ?</span>
+                    <span data-si="situation_scolaire:foyer_coranique">L’enfant est au foyer coranique : que souhaite-t-il ?</span>
+                    <span class="text-danger">*</span>
+                  </span>
+                  <div class="oev-choix" role="radiogroup" aria-labelledby="souhait_avenir-label">
+                    @foreach (Oev::SOUHAITS_AVENIR as $cle => $label)
+                      <input class="btn-check" type="radio" name="souhait_avenir" id="souhait_avenir-{{ $cle }}" value="{{ $cle }}" @checked($v('souhait_avenir') === $cle) required data-libelle="{{ $label }}">
+                      <label class="btn btn-outline-primary" for="souhait_avenir-{{ $cle }}">
+                        @if ($cle === 'ecole')
+                          <span data-si="situation_scolaire!:descolarise|non_formelle|foyer_coranique">{{ $label }}</span>
+                          @foreach ($souhaitEcoleSelonSituation as $situationSouhait => $texteSouhait)<span data-si="situation_scolaire:{{ $situationSouhait }}">{{ $texteSouhait }}</span>@endforeach
+                        @else
+                          {{ $label }}
+                        @endif
+                      </label>
+                    @endforeach
+                  </div>
+                  <div class="form-text">Sa réponse oriente un futur parrainage : inscription à l’école ou formation professionnelle.</div>
+                  <div class="text-danger small mt-1" data-erreur-groupe="souhait_avenir" hidden>Ce choix est obligatoire.</div>
+                  @error('souhait_avenir')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-lg-4" data-si="souhait_avenir:formation">
                   @include('oevs.champs._texte', ['nom' => 'souhait_avenir_precision', 'label' => 'Quelle formation ? (facultatif)', 'valeur' => $v('souhait_avenir_precision'), 'max' => 150, 'placeholder' => 'ex : couture, mécanique…'])
@@ -674,14 +700,6 @@
               </label>
             </div>
           @endforeach
-          <div class="col-sm-6 col-xl-4">
-            <div class="oev-bloc d-flex flex-column justify-content-center">
-              <div class="oev-bloc-titre mb-2"><i class="bi bi-building" aria-hidden="true"></i> Structure du RIB</div>
-              <label class="form-label" for="nom_structure_rib">Nom de la structure <span class="text-danger" data-rib-requis hidden>*</span></label>
-              <input class="form-control @error('nom_structure_rib') is-invalid @enderror" id="nom_structure_rib" name="nom_structure_rib" value="{{ $v('nom_structure_rib') }}" maxlength="255" placeholder="Obligatoire si un RIB est chargé">
-              <div class="invalid-feedback">Précisez le nom de la structure titulaire du RIB.</div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -701,7 +719,7 @@
               ['N° de l’acte', 'numero_acte_naissance', null, 'a_acte_naissance:1'], ['Groupe de population', 'groupe_population'],
             ]],
             ['Adresse', 'bi-geo-alt', 1, [
-              ['Région', 'region_id'], ['Province', 'province_id'], ['Commune', 'commune_id'], ['Village / secteur', 'village_id'], ['Quartier / précision', 'quartier'],
+              ['Région', 'region_id'], ['Province', 'province_id'], ['Commune', 'commune_id'], ['Village / ville', 'village_id'], ['Quartier', 'quartier'],
               ['Lieu de provenance', 'lieu_provenance_commune_id', null, 'groupe_population:' . $groupesMobiles],
               ['Précision de la provenance', 'lieu_provenance', null, 'groupe_population:' . $groupesMobiles . '&&lieu_provenance_commune_id:autre'],
             ]],
@@ -731,11 +749,13 @@
               ['Situation scolaire', 'situation_scolaire'], ['Niveau d’étude', 'niveau_etude', null, 'situation_scolaire:scolarise|descolarise'],
               ['Raison', 'raison_non_scolarisation', null, 'situation_scolaire:non_scolarise|descolarise'],
               ['Précision', 'raison_non_scolarisation_precision', null, 'situation_scolaire:non_scolarise|descolarise&&raison_non_scolarisation:autre'],
-              ['Établ. précédent', 'etablissement_precedent', null, 'situation_scolaire!:non_scolarise'],
-              ['Classe précédente', 'classe_precedente', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Moyenne annuelle', 'moyenne_annuelle', 'moyenne', 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Appréciation', 'appreciation', null, 'situation_scolaire!:non_scolarise&&etablissement_precedent:*'],
-              ['Établ. en cours', 'etablissement_actuel', null, 'situation_scolaire:scolarise'], ['Public / privé', 'type_etablissement', null, 'situation_scolaire:scolarise'],
+              ['Établ. précédent', 'ecole_precedente_id', null, 'situation_scolaire!:non_scolarise'],
+              ['Nom de l’établ. précédent', 'etablissement_precedent', null, 'situation_scolaire!:non_scolarise&&ecole_precedente_id:autre'],
+              ['Classe précédente', 'classe_precedente', null, 'situation_scolaire!:non_scolarise&&ecole_precedente_id:*'],
+              ['Moyenne annuelle', 'moyenne_annuelle', 'moyenne', 'situation_scolaire!:non_scolarise&&ecole_precedente_id:*'],
+              ['Appréciation', 'appreciation', null, 'situation_scolaire!:non_scolarise&&ecole_precedente_id:*'],
+              ['Établ. en cours', 'ecole_id', null, 'situation_scolaire:scolarise'],
+              ['Nom de l’établissement', 'etablissement_actuel', null, 'situation_scolaire:scolarise&&ecole_id:autre'],['RIB de l’établissement', 'rib_etablissement', null, 'situation_scolaire:scolarise'], ['Public / privé', 'type_etablissement', null, 'situation_scolaire:scolarise'],
               ['Système éducatif', 'systeme_educatif', null, 'situation_scolaire:scolarise'], ['Classe', 'classe', null, 'situation_scolaire:scolarise'],
               ['Frais de scolarité', 'frais_scolarite', 'fcfa', 'situation_scolaire:scolarise'],
               ['Performances', 'performance_scolaire', null, 'situation_scolaire:scolarise'],
@@ -852,7 +872,6 @@ document.addEventListener('DOMContentLoaded', function () {
   var champNiveau = document.getElementById('niveau_etude');
   var champClasse = document.getElementById('classe');
   var champMoyenne = document.getElementById('moyenne_annuelle');
-  var rappelTuteur = form.querySelector('[data-rappel-tuteur]');
   var classesSur10 = @json($classesSur10);
 
   function majCoherence() {
@@ -879,13 +898,6 @@ document.addEventListener('DOMContentLoaded', function () {
     // Champs obligatoires selon une autre réponse (ex. nom de la mère si elle s'occupe de l'enfant)
     form.querySelectorAll('[data-requis-si]').forEach(function (c) { c.required = conditionRemplie(c.dataset.requisSi); });
 
-    // Rappel du nom du ou des parents qui s'occupent de l'enfant
-    var parentsTuteurs = { mere: ['mere'], pere: ['pere'], parents: ['pere', 'mere'] }[champLien.value] || [];
-    rappelTuteur.textContent = parentsTuteurs.map(function (p) {
-      var nomComplet = (document.getElementById(p + '_nom').value + ' ' + document.getElementById(p + '_prenoms').value).trim();
-      return nomComplet || (p === 'mere' ? 'Nom de la mère à saisir plus haut' : 'Nom du père à saisir plus haut');
-    }).join(' et ') || '—';
-
     // Barème de la moyenne selon la classe de l'année précédente : /10 (maternelle, primaire) ou /20
     var bareme = classesSur10.indexOf(document.getElementById('classe_precedente').value) !== -1 ? 10 : 20;
     champMoyenne.max = bareme;
@@ -900,17 +912,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Classes proposées selon le niveau d'étude, et jamais en dessous de la classe de l'année précédente
     // (ex. 5e l'an dernier : la 6e n'est pas proposée cette année)
-    var niveau = champNiveau.value;
     var champClassePrec = document.getElementById('classe_precedente');
-    var optionPrec = champClassePrec.options[champClassePrec.selectedIndex];
-    var rangPrecedent = conditionRemplie('etablissement_precedent:*') && optionPrec && optionPrec.dataset.rang ? Number(optionPrec.dataset.rang) : null;
+    var optionPrec = champClassePrec.value ? champClassePrec.options[champClassePrec.selectedIndex] : null;
+    var anneePrecedente = conditionRemplie('ecole_precedente_id:*') && optionPrec;
+    var rangPrecedent = anneePrecedente && optionPrec.dataset.rang ? Number(optionPrec.dataset.rang) : null;
+    // Appréciation de l'an dernier (même règle que le serveur) : un redoublant reste dans la même classe, un admis en change
+    var appreciation = anneePrecedente && conditionRemplie('situation_scolaire:scolarise') ? valeursDe('appreciation')[0] : null;
+    var redouble = appreciation === 'redouble', admis = appreciation === 'admis';
+    // Redoublant : son niveau d'étude est celui de sa classe de l'an dernier
+    if (redouble && optionPrec.dataset.niveau && champNiveau.value !== optionPrec.dataset.niveau) {
+      champNiveau.value = optionPrec.dataset.niveau;
+    }
+    var niveau = champNiveau.value;
     Array.prototype.forEach.call(champClasse.options, function (o) {
       if (o.hasAttribute('data-invite')) { o.textContent = niveau ? 'Sélectionner…' : 'Choisissez d’abord le niveau…'; return; }
-      var visible = o.dataset.niveau === niveau && !(rangPrecedent !== null && o.dataset.rang !== '' && Number(o.dataset.rang) < rangPrecedent);
+      var visible = o.dataset.niveau === niveau && !(rangPrecedent !== null && o.dataset.rang !== '' && Number(o.dataset.rang) < rangPrecedent)
+        && !(redouble && o.value !== champClassePrec.value) && !(admis && o.value === champClassePrec.value);
       o.hidden = !visible;
       o.disabled = !visible;
       if (!visible && o.selected) { champClasse.value = ''; }
     });
+    // Redoublant : sa classe est choisie d'office
+    if (redouble) { champClasse.value = champClassePrec.value; }
+    var aideClasse = form.querySelector('[data-aide-classe]');
+    var classePrecTexte = optionPrec ? optionPrec.textContent.trim() : '';
+    aideClasse.textContent = redouble ? 'L’enfant a redoublé : il reste en ' + classePrecTexte + ' (même classe que l’année précédente).'
+      : admis ? 'L’enfant a été admis : sa classe doit être au-dessus de ' + classePrecTexte + '.' : '';
+    aideClasse.hidden = !aideClasse.textContent;
 
     // Bornes des dates liées à la naissance
     var naissance = document.getElementById('date_naissance').value;
@@ -931,6 +959,90 @@ document.addEventListener('DOMContentLoaded', function () {
   // Champs dont la saisie modifie d'autres champs (affichage, barème, rappel du tuteur)
   var champsSuivis = ['etablissement_precedent', 'moyenne_annuelle', 'formation_duree_mois', 'mere_nom', 'mere_prenoms', 'pere_nom', 'pere_prenoms'];
   form.addEventListener('input', function (e) { if (champsSuivis.indexOf(e.target.id) !== -1) { majCoherence(); } });
+
+  /* ----- Écoles (année précédente et en cours) : celles de la commune de l'enfant (Paramètres > Écoles), chargées à la demande ----- */
+  var champCommune = document.getElementById('commune_id');
+  var ecolesParCommune = {};
+  var ecolesConnues = {};
+  // Choix de l'école en cours : public / privé et système éducatif proposés d'après son statut et son type
+  var typeSelonStatut = @json(Ecole::TYPE_ETABLISSEMENT_OEV);
+  var systemeSelonType = @json(Ecole::SYSTEME_EDUCATIF_OEV);
+  function sansAccents(texte) { return texte.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(); }
+
+  // Écoles d'une commune : une seule requête par commune, partagée par les deux listes
+  function ecolesDe(commune) {
+    if (!ecolesParCommune[commune]) {
+      ecolesParCommune[commune] = fetch(form.querySelector('[data-ecoles]').dataset.url.replace('__COMMUNE__', encodeURIComponent(commune)), { headers: { 'Accept': 'application/json' } })
+        .then(function (reponse) { return reponse.ok ? reponse.json() : []; })
+        .catch(function () { return []; })
+        .then(function (ecoles) { ecoles.forEach(function (e) { ecolesConnues[e.id] = e; }); return ecoles; });
+    }
+    return ecolesParCommune[commune];
+  }
+
+  form.querySelectorAll('[data-ecoles]').forEach(function (champ) {
+    var bloc = champ.closest('[data-bloc-ecole]');
+    var filtre = bloc.querySelector('[data-filtre-ecoles]');
+    var aide = bloc.querySelector('[data-aide-ecoles]');
+    var optionAutre = champ.querySelector('option[value="autre"]');
+
+    function remplir(ecoles, valeur) {
+      champ.innerHTML = '';
+      champ.add(new Option(ecoles.length ? champ.dataset.vide
+        : champCommune.value ? 'Aucune école enregistrée pour cette commune : choisissez « Autre »' : 'Choisissez d’abord la commune de l’enfant (étape 1)', ''));
+      // Écoles groupées par CEB
+      var groupes = {};
+      ecoles.forEach(function (e) {
+        var ceb = e.ceb || 'Sans CEB';
+        if (!groupes[ceb]) {
+          groupes[ceb] = document.createElement('optgroup');
+          groupes[ceb].label = 'CEB ' + ceb;
+          champ.appendChild(groupes[ceb]);
+        }
+        groupes[ceb].appendChild(new Option(e.nom, e.id, false, String(e.id) === String(valeur)));
+      });
+      champ.appendChild(optionAutre);
+      optionAutre.selected = valeur === 'autre';
+      filtre.value = '';
+      filtre.hidden = ecoles.length < 15;
+      aide.textContent = ecoles.length ? ecoles.length + ' école(s) dans la commune. Établissement absent de la liste (lycée, autre commune…) : choisissez « Autre ».' : '';
+      majCoherence();
+    }
+    function charger(valeur) {
+      var commune = champCommune.value;
+      if (!commune) { remplir([], valeur); return; }
+      champ.options[0].textContent = 'Chargement des écoles…';
+      ecolesDe(commune).then(function (ecoles) { if (champCommune.value === commune) { remplir(ecoles, valeur); } });
+    }
+
+    charger(champ.dataset.valeur);
+    // Changer de région, de province ou de commune change la liste (« Autre » reste choisi)
+    form.addEventListener('change', function (e) {
+      if (['region_id', 'province_id', 'commune_id'].indexOf(e.target.id) !== -1) { charger(champ.value === 'autre' ? 'autre' : ''); }
+    });
+    // Recherche dans une longue liste (ex. Ouagadougou) : les écoles et CEB qui ne correspondent pas sont masquées
+    filtre.addEventListener('input', function () {
+      var terme = sansAccents(filtre.value.trim());
+      champ.querySelectorAll('optgroup').forEach(function (groupe) {
+        var cebCorrespond = sansAccents(groupe.label).indexOf(terme) !== -1;
+        var visibles = 0;
+        groupe.querySelectorAll('option').forEach(function (o) {
+          o.hidden = !(cebCorrespond || sansAccents(o.text).indexOf(terme) !== -1);
+          if (!o.hidden) { visibles++; }
+        });
+        groupe.hidden = visibles === 0;
+      });
+    });
+    filtre.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); champ.focus(); } });
+  });
+
+  document.getElementById('ecole_id').addEventListener('change', function () {
+    var ecole = ecolesConnues[this.value];
+    if (!ecole) { return; }
+    var radioType = typeSelonStatut[ecole.statut] && document.getElementById('type_etablissement-' + typeSelonStatut[ecole.statut]);
+    if (radioType) { radioType.checked = true; }
+    if (systemeSelonType[ecole.type]) { document.getElementById('systeme_educatif').value = systemeSelonType[ecole.type]; }
+  });
 
   /* ----- Statut OEV déduit des parents (même règle que le serveur) ----- */
   var badgeStatut = form.querySelector('[data-statut-calcule]');
@@ -986,15 +1098,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return octets / 1024;
   }
 
-  /* ----- RIB : nom de structure obligatoire si RIB fourni ----- */
-  var nomStructure = document.getElementById('nom_structure_rib');
-  function majRib() {
-    var carteRib = form.querySelector('[data-piece="rib"]');
-    var ribFourni = document.getElementById('rib').files.length > 0 || carteRib.dataset.existant;
-    nomStructure.required = !!ribFourni;
-    form.querySelector('[data-rib-requis]').hidden = !ribFourni;
-  }
-
   form.querySelectorAll('[data-piece]').forEach(function (carte) {
     var input = carte.querySelector('input[type=file]');
     var etat = carte.querySelector('[data-etat]');
@@ -1026,7 +1129,6 @@ document.addEventListener('DOMContentLoaded', function () {
         etat.textContent = 'Cliquer pour choisir un fichier';
         icone.className = 'bi ' + icone.dataset.iconeBase + ' oev-piece-icone';
       }
-      if (carte.dataset.piece === 'rib') { majRib(); }
     });
   });
 
@@ -1118,8 +1220,7 @@ document.addEventListener('DOMContentLoaded', function () {
       liste.appendChild(li);
     });
     var rib = form.querySelector('[data-recap-rib]');
-    rib.textContent = (nomStructure.value.trim() ? 'Structure du RIB : ' + nomStructure.value.trim() + ' — ' : '') +
-      fournies + '/' + demandees + ' pièce(s) demandée(s) : ' + (fournies === demandees ? 'dossier complet.' : 'dossier incomplet (complétable plus tard).');
+    rib.textContent = fournies + '/' + demandees + ' pièce(s) demandée(s) : ' + (fournies === demandees ? 'dossier complet.' : 'dossier incomplet (complétable plus tard).');
   }
 
   /* ----- Navigation ----- */
@@ -1190,7 +1291,6 @@ document.addEventListener('DOMContentLoaded', function () {
   majCoherence();
   majStatut();
   majAge();
-  majRib();
   var initiale = Number(form.dataset.etapeInitiale) || 1;
   atteinte = @json($edition || $errors->any()) ? total : initiale;
   afficher(initiale, true);

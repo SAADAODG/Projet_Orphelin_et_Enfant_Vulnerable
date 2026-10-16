@@ -301,7 +301,7 @@ class PilotageParrainage
             'sexe' => $repartition('sexe', Oev::SEXES),
             'age' => $repartition('age', self::TRANCHES_AGE),
             'cycle' => $repartition('cycle', Oev::NIVEAUX_ETUDE + ['formation' => 'Formation professionnelle', 'non_precise' => 'Non scolarisé ou non précisé']),
-            'vulnerabilites' => collect(Oev::VULNERABILITES)
+            'vulnerabilites' => collect(Oev::vulnerabilites())
                 ->map(fn ($libelle, $code) => ['libelle' => $libelle, 'total' => $total("vulnerabilite_{$code}")])
                 ->filter(fn ($ligne) => $ligne['total'] > 0)
                 ->sortByDesc('total')
@@ -343,7 +343,7 @@ class PilotageParrainage
         $ajouter('cycle_formation', 'formation_professionnelle = ?', [true]);
         $ajouter('cycle_non_precise', "{$horsFormation} and (niveau_etude is null or niveau_etude = '')", [false]);
         // Vulnérabilités : liste JSON lue comme texte (PostgreSQL et SQLite)
-        foreach (array_keys(Oev::VULNERABILITES) as $code) {
+        foreach (array_keys(Oev::vulnerabilites()) as $code) {
             $ajouter("vulnerabilite_{$code}", 'CAST(vulnerabilites AS TEXT) LIKE ?', ['%"' . $code . '"%']);
         }
         $ajouter('handicap_oui', 'handicap = ?', [true]);

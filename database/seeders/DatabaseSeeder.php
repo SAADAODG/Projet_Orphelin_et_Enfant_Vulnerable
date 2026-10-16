@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Province;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -20,11 +21,14 @@ class DatabaseSeeder extends Seeder
             LocaliteSeeder::class,
             CommuneSeeder::class,
             VillageSeeder::class,
+            EcoleSeeder::class,
             SiteSettingSeeder::class,
             QuickLinkSeeder::class,
             ServiceSeeder::class,
-            OevDemoSeeder::class,
         ]);
+
+        // DR et DP rattachés à une localité (sans elle, ils ne voient aucun dossier)
+        $province = Province::orderBy('id')->firstOrFail();
 
         $admin = User::factory()->create([
             'name' => 'Super Admin',
@@ -51,6 +55,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Directeur Régional',
             'email' => 'dr@oev.gov.bf',
             'password' => bcrypt('admin1234'),
+            'region_id' => $province->region_id,
         ]);
         $dr->assignRole('DR');
 
@@ -58,7 +63,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Directeur Provincial',
             'email' => 'dp@oev.gov.bf',
             'password' => bcrypt('admin1234'),
+            'region_id' => $province->region_id,
+            'province_id' => $province->id,
         ]);
         $dp->assignRole('DP');
+
+        // Dossiers OEV de démonstration, après les comptes : auteurs du circuit et part des dossiers dans la province du DP
+        $this->call(OevDemoSeeder::class);
     }
 }

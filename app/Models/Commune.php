@@ -33,9 +33,23 @@ class Commune extends Model
         return $this->hasMany(Village::class);
     }
 
+    /**
+     * Les écoles de cette commune (Paramètres > Écoles).
+     */
+    public function ecoles(): HasMany
+    {
+        return $this->hasMany(Ecole::class);
+    }
+
     /** Une commune qui a des villages ne peut pas être supprimée (clé étrangère en restrictOnDelete). */
     public function aDesVillages(): bool
     {
         return $this->villages()->exists();
+    }
+
+    /** Une commune qui a des écoles ne peut pas être supprimée (clé étrangère en restrictOnDelete). */
+    public function aDesEcoles(): bool
+    {
+        return $this->ecoles()->exists();
     }
 }

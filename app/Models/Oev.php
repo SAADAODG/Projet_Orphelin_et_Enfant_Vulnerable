@@ -13,8 +13,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'code', 'nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif',
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
-    'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation', 'performance_scolaire', 'performance_difficultes',
-    'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
+    'etablissement_precedent', 'ecole_precedente_id', 'classe_precedente', 'moyenne_annuelle', 'appreciation', 'performance_scolaire', 'performance_difficultes',
+    'etablissement_actuel', 'ecole_id', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite',
     'region_id', 'province_id', 'commune_id', 'village_id',
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
@@ -292,6 +292,30 @@ class Oev extends Model
         };
     }
 
+    /*
+     * Listes paramétrables (Paramètres) : code => libellé. $actifs : seulement les choix proposés à la saisie
+     * (formulaire, validation) ; sinon tous, pour afficher les dossiers enregistrés avant une désactivation.
+     */
+    public static function groupesPopulation(bool $actifs = false): array
+    {
+        return ListeReference::options('groupes-population', $actifs);
+    }
+
+    public static function liensTuteur(bool $actifs = false): array
+    {
+        return ListeReference::options('liens-tuteur', $actifs);
+    }
+
+    public static function lieuxDeVie(bool $actifs = false): array
+    {
+        return ListeReference::options('lieux-de-vie', $actifs);
+    }
+
+    public static function vulnerabilites(bool $actifs = false): array
+    {
+        return ListeReference::options('vulnerabilites', $actifs);
+    }
+
     /** Libellés d'un champ à choix multiples (tableau de codes), ex. vulnérabilités. */
     public function libelles(string $champ, array $liste): array
     {
@@ -300,11 +324,12 @@ class Oev extends Model
 
     /** Pièces constituant le dossier d'un OEV. */
     public const DOCUMENTS = [
-        'acte_naissance' => 'Acte de naissance',
+        'acte_naissance' => 'Extrait d’acte de naissance ou jugement supplétif',
         'certificat_scolarite' => 'Certificat de scolarité',
+        'bulletin' => 'Bulletin de fin d’année, diplôme ou attestation de succès',
         'photo' => 'Photo de l’enfant',
-        'cnib_tuteur' => 'CNIB du tuteur',
-        'rib' => 'RIB de la structure',
+        'cnib_tuteur' => 'CNIB du parent / tuteur',
+        'enquete_sociale' => 'Rapport d’enquête sociale sur la famille',
     ];
 
     protected $table = 'oevs';
@@ -383,6 +408,18 @@ class Oev extends Model
     public function village(): BelongsTo
     {
         return $this->belongsTo(Village::class);
+    }
+
+    /** École fréquentée, choisie dans le référentiel (Paramètres > Écoles) ; son nom est aussi dans etablissement_actuel. */
+    public function ecole(): BelongsTo
+    {
+        return $this->belongsTo(Ecole::class);
+    }
+
+    /** École de l'année précédente, choisie dans le référentiel ; son nom est aussi dans etablissement_precedent. */
+    public function ecolePrecedente(): BelongsTo
+    {
+        return $this->belongsTo(Ecole::class, 'ecole_precedente_id');
     }
 
     /** Code OEV attribué à l'intégration, ex. OEV-2026-0001. */
@@ -639,6 +676,7 @@ class Oev extends Model
         return array_filter(self::DOCUMENTS, fn ($type) => self::pieceRequise($type, [
             'a_acte_naissance' => $this->a_acte_naissance,
             'situation_scolaire' => $this->situation_scolaire,
+            'etablissement_precedent' => $this->etablissement_precedent,
             'tuteur_a_cnib' => $this->tuteur_a_cnib,
         ]), ARRAY_FILTER_USE_KEY);
     }
@@ -651,6 +689,8 @@ class Oev extends Model
         return match ($type) {
             'acte_naissance' => ! $faux($reponses['a_acte_naissance'] ?? null),
             'certificat_scolarite' => ($reponses['situation_scolaire'] ?? null) === 'scolarise',
+            // Bulletin, diplôme ou attestation : quand l'enfant a fréquenté un établissement l'année précédente
+            'bulletin' => ($reponses['situation_scolaire'] ?? 'non_scolarise') !== 'non_scolarise' && filled($reponses['etablissement_precedent'] ?? null),
             'cnib_tuteur' => ! $faux($reponses['tuteur_a_cnib'] ?? null),
             default => true,
         };
@@ -681,10 +721,13 @@ class Oev extends Model
 
         return $query
             ->where(fn ($q) => $fournie($q, 'photo'))
-            ->where(fn ($q) => $fournie($q, 'rib'))
+            ->where(fn ($q) => $fournie($q, 'enquete_sociale'))
             ->where(fn ($q) => $q->where('a_acte_naissance', false)->orWhere(fn ($q) => $fournie($q, 'acte_naissance')))
             ->where(fn ($q) => $q->whereNull('situation_scolaire')->orWhere('situation_scolaire', '!=', 'scolarise')
                 ->orWhere(fn ($q) => $fournie($q, 'certificat_scolarite')))
+            ->where(fn ($q) => $q->whereNull('situation_scolaire')->orWhere('situation_scolaire', 'non_scolarise')
+                ->orWhereNull('etablissement_precedent')->orWhere('etablissement_precedent', '')
+                ->orWhere(fn ($q) => $fournie($q, 'bulletin')))
             ->where(fn ($q) => $q->where('tuteur_a_cnib', false)->orWhere(fn ($q) => $fournie($q, 'cnib_tuteur')));
     }
 

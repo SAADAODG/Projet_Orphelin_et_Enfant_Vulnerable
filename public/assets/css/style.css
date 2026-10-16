@@ -2222,3 +2222,38 @@ html[data-theme="dark"] {
   min-height: 0;
   overflow: hidden;
 }
+
+/* Sous-menu de la barre latérale (Paramètres) */
+.sidebar-nav .nav-chevron {
+  margin-left: auto;
+  font-size: 0.8rem;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.sidebar-nav .nav-groupe:not(.collapsed) .nav-chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-nav .nav-sous-menu {
+  padding-left: 0.9rem;
+}
+
+.sidebar-nav .nav-sous-menu .nav-link {
+  min-height: 40px;
+  margin-top: 0.3rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: normal;
+}
+
+.sidebar-nav .nav-sous-menu .nav-icon {
+  width: 26px;
+  height: 26px;
+}
+
+@media (min-width: 992px) {
+  body.sidebar-mini .sidebar-nav .nav-sous-menu {
+    padding-left: 0;
+  }
+}

@@ -249,7 +249,7 @@ class PilotageParrainageController extends Controller
             'provinces' => array_values(array_filter(array_map('intval', (array) $request->input('provinces', [])))),
             'sexe' => $plusieurs('sexe', Oev::SEXES),
             'statut' => $plusieurs('statut', Oev::STATUTS),
-            'vulnerabilite' => $plusieurs('vulnerabilite', Oev::VULNERABILITES),
+            'vulnerabilite' => $plusieurs('vulnerabilite', Oev::vulnerabilites()),
             'niveau_priorite' => $plusieurs('niveau_priorite', Oev::NIVEAUX),
             'niveau_etude' => $plusieurs('niveau_etude', Oev::NIVEAUX_ETUDE),
             'handicap' => $plusieurs('handicap', ['1' => 1, '0' => 1]),

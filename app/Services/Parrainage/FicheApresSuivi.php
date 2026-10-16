@@ -20,16 +20,16 @@ class FicheApresSuivi
 {
     /** Champs de scolarité et de formation de la fiche que le suivi peut modifier. */
     public const CHAMPS = [
-        'situation_scolaire', 'niveau_etude', 'classe', 'systeme_educatif', 'etablissement_actuel', 'type_etablissement',
+        'situation_scolaire', 'niveau_etude', 'classe', 'systeme_educatif', 'etablissement_actuel', 'ecole_id', 'rib_etablissement', 'type_etablissement',
         'frais_scolarite', 'performance_scolaire', 'performance_difficultes',
-        'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation',
+        'etablissement_precedent', 'ecole_precedente_id', 'classe_precedente', 'moyenne_annuelle', 'appreciation',
         'raison_non_scolarisation', 'raison_non_scolarisation_precision',
         'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
         'souhait_avenir', 'souhait_avenir_precision',
     ];
 
     /** Champs de l'école en cours, vidés quand l'enfant ne la fréquente plus. */
-    private const ECOLE_EN_COURS = ['systeme_educatif', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes'];
+    private const ECOLE_EN_COURS = ['systeme_educatif', 'etablissement_actuel', 'ecole_id', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes'];
 
     /** Scolarité de la fiche à conserver avant le premier enregistrement d'un suivi. */
     public static function photographier(Oev $oev): array
@@ -78,6 +78,7 @@ class FicheApresSuivi
         // L'année suivie devient « l'année précédente » de la fiche
         $anneePrecedente = $etaitScolarise ? [
             'etablissement_precedent' => $avant['etablissement_actuel'] ?? $avant['etablissement_precedent'] ?? null,
+            'ecole_precedente_id' => isset($avant['etablissement_actuel']) ? ($avant['ecole_id'] ?? null) : ($avant['ecole_precedente_id'] ?? null),
             'classe_precedente' => $avant['classe'],
             'moyenne_annuelle' => $suivi->moyenne,
             'appreciation' => match ($suivi->resultat) {
@@ -100,6 +101,9 @@ class FicheApresSuivi
                 'raison_non_scolarisation_precision' => null,
                 // Établissement et frais de l'année prochaine, saisis au suivi
                 'etablissement_actuel' => $details['etablissement'] ?? ($avant['etablissement_actuel'] ?? null),
+                // Nouvel établissement saisi au suivi : il n'est plus rattaché à une école du référentiel
+                'ecole_id' => ($changeEcole = filled($details['etablissement'] ?? null) && $details['etablissement'] !== ($avant['etablissement_actuel'] ?? null)) ? null : ($avant['ecole_id'] ?? null),
+                'rib_etablissement' => $changeEcole ? null : ($avant['rib_etablissement'] ?? null),
                 'type_etablissement' => $details['type_etablissement'] ?? ($avant['type_etablissement'] ?? null),
                 'frais_scolarite' => $details['frais'] ?? null,
             ];
