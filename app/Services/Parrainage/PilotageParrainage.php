@@ -184,7 +184,7 @@ class PilotageParrainage
                 fn (Oev $o) => $o->formation_professionnelle ? 'formation' : ($o->niveau_etude ?: 'non_precise'),
                 Oev::NIVEAUX_ETUDE + ['formation' => 'Formation professionnelle', 'non_precise' => 'Non scolarisé ou non précisé'],
             ),
-            'vulnerabilites' => collect(Oev::VULNERABILITES)
+            'vulnerabilites' => collect(Oev::vulnerabilites())
                 ->map(fn ($libelle, $code) => ['libelle' => $libelle, 'total' => $oevs->filter(fn (Oev $o) => in_array($code, $o->vulnerabilites ?? [], true))->count()])
                 ->filter(fn ($ligne) => $ligne['total'] > 0)
                 ->sortByDesc('total')

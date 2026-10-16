@@ -24,7 +24,6 @@
     </div>
   </div>
 
-  @include('parametres._onglets')
 
   <section class="panel mt-3 collapse {{ $errors->has('fichier') ? 'show' : '' }}" id="import-ecoles">
     <div class="panel-header">

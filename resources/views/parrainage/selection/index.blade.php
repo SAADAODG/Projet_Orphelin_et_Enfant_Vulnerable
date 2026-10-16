@@ -220,10 +220,10 @@
             <input class="form-control form-control-sm" id="s-age_max" name="age_max" type="number" min="0" max="25" value="{{ $f['age_max'] }}">
           </div>
           <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'statut', 'label' => 'Statut OEV', 'options' => Oev::STATUTS, 'valeurs' => $f['statut']])</div>
-          <div class="col-sm-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
+          <div class="col-sm-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::vulnerabilites(), 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
           <div class="col-6 col-lg-1">@include('parrainage.selection._filtre-multiple', ['nom' => 'handicap', 'label' => 'Handicap', 'options' => $ouiNon, 'valeurs' => $f['handicap']])</div>
           <div class="col-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_etude', 'label' => 'Niveau d’étude', 'options' => Oev::NIVEAUX_ETUDE, 'valeurs' => $f['niveau_etude']])</div>
-          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::GROUPES_POPULATION, 'valeurs' => $f['groupe_population']])</div>
+          <div class="col-sm-6 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'groupe_population', 'label' => 'Groupe de population', 'options' => Oev::groupesPopulation(), 'valeurs' => $f['groupe_population']])</div>
 
           <div class="col-sm-6 col-lg-4">
             @include('parrainage.selection._filtre-localites', ['localites' => $localites, 'regions' => $f['regions'], 'provinces' => $f['provinces']])
@@ -389,7 +389,7 @@
                       @endif
                     </td>
                     <td><span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', Oev::STATUTS) }}</span></td>
-                    <td class="sel-wrap small">{{ implode(', ', $oev->libelles('vulnerabilites', Oev::VULNERABILITES)) ?: '—' }}</td>
+                    <td class="sel-wrap small">{{ implode(', ', $oev->libelles('vulnerabilites', Oev::vulnerabilites())) ?: '—' }}</td>
                     <td>{{ $oev->niveau_priorite ? Oev::NIVEAUX[$oev->niveau_priorite] : '—' }}</td>
                     <td class="small">{{ $oev->commune?->nom }} <span class="text-muted">· {{ $oev->province?->nom }}</span></td>
                     <td class="small">

@@ -257,12 +257,12 @@ class SelectionParrainageController extends Controller
             'age_min' => $entier('age_min', 25),
             'age_max' => $entier('age_max', 25),
             'statut' => $plusieurs('statut', Oev::STATUTS),
-            'vulnerabilite' => $plusieurs('vulnerabilite', Oev::VULNERABILITES),
+            'vulnerabilite' => $plusieurs('vulnerabilite', Oev::vulnerabilites()),
             'handicap' => $plusieurs('handicap', ['1' => 1, '0' => 1]),
             'niveau_priorite' => $plusieurs('niveau_priorite', Oev::NIVEAUX),
             'scolarite' => $plusieurs('scolarite', SelectionParrainage::SITUATIONS),
             'niveau_etude' => $plusieurs('niveau_etude', Oev::NIVEAUX_ETUDE),
-            'groupe_population' => $plusieurs('groupe_population', Oev::GROUPES_POPULATION),
+            'groupe_population' => $plusieurs('groupe_population', Oev::groupesPopulation()),
             'eligibilite' => $choix('eligibilite', ['oui' => 1, 'non' => 1]),
         ];
     }

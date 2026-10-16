@@ -86,7 +86,8 @@ class OevTest extends TestCase
             'certificat_scolarite' => UploadedFile::fake()->create('certificat.pdf', 100, 'application/pdf'),
             'photo' => UploadedFile::fake()->image('photo.jpg'),
             'cnib_tuteur' => UploadedFile::fake()->create('cnib.pdf', 100, 'application/pdf'),
-            'rib' => UploadedFile::fake()->create('rib.pdf', 100, 'application/pdf'),
+            'bulletin' => UploadedFile::fake()->create('bulletin.pdf', 100, 'application/pdf'),
+            'enquete_sociale' => UploadedFile::fake()->create('enquete.pdf', 100, 'application/pdf'),
         ];
     }
 
@@ -94,7 +95,7 @@ class OevTest extends TestCase
     private function dossierComplet(array $surcharge = []): Oev
     {
         $this->actingAs($this->dp)
-            ->post(route('oevs.store'), $this->donneesOev($surcharge + ['nom_structure_rib' => 'Association Espoir']) + $this->pieces())
+            ->post(route('oevs.store'), $this->donneesOev($surcharge) + $this->pieces())
             ->assertSessionHasNoErrors();
 
         return Oev::latest('id')->firstOrFail();
@@ -136,7 +137,7 @@ class OevTest extends TestCase
         $oev = Oev::firstOrFail();
 
         $this->get(route('oevs.edit', $oev))->assertOk();
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['classe' => '5e', 'nom_structure_rib' => 'ONG Avenir']) + $this->pieces())
+        $this->put(route('oevs.update', $oev), $this->donneesOev(['classe' => '5e']) + $this->pieces())
             ->assertSessionHasNoErrors();
 
         $oev->refresh();
@@ -146,11 +147,23 @@ class OevTest extends TestCase
 
     // ---------- Validation du formulaire ----------
 
-    public function test_le_rib_exige_le_nom_de_la_structure(): void
+    public function test_le_rib_de_l_etablissement_est_saisi_dans_la_scolarite(): void
     {
-        $this->actingAs($this->dp)
-            ->post(route('oevs.store'), $this->donneesOev() + ['rib' => UploadedFile::fake()->create('rib.pdf', 50, 'application/pdf')])
-            ->assertSessionHasErrors('nom_structure_rib');
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['rib_etablissement' => 'BF042 01001 012345678901 23']))->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame('BF042 01001 012345678901 23', $oev->rib_etablissement);
+        $this->get(route('oevs.show', $oev))->assertSee('RIB de l’établissement', false)->assertSee('BF042 01001 012345678901 23');
+    }
+
+    public function test_le_bulletin_n_est_demande_qu_avec_une_annee_precedente(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev())->assertSessionHasNoErrors();
+        $this->assertArrayHasKey('bulletin', Oev::firstOrFail()->piecesRequises());
+
+        $donnees = $this->donneesOev(['nom' => 'KABORE']);
+        unset($donnees['etablissement_precedent'], $donnees['classe_precedente'], $donnees['moyenne_annuelle'], $donnees['appreciation']);
+        $this->post(route('oevs.store'), $donnees)->assertSessionHasNoErrors();
+        $this->assertArrayNotHasKey('bulletin', Oev::where('nom', 'KABORE')->firstOrFail()->piecesRequises());
     }
 
     public function test_le_type_de_handicap_est_exige_si_handicap(): void
@@ -276,7 +289,7 @@ class OevTest extends TestCase
         unset($pieces['acte_naissance']);
 
         // Enregistré et soumis sans acte : le dossier est complet quand même
-        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0', 'nom_structure_rib' => 'ONG Avenir'])
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0'])
             + $pieces + ['soumettre' => '1'])->assertSessionHasNoErrors();
 
         $oev = Oev::firstOrFail();
@@ -288,7 +301,7 @@ class OevTest extends TestCase
 
     public function test_une_piece_non_demandee_envoyee_quand_meme_est_ignoree(): void
     {
-        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0', 'nom_structure_rib' => 'ONG'])
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['a_acte_naissance' => '0'])
             + $this->pieces())->assertSessionHasNoErrors();
 
         $this->assertFalse(Oev::firstOrFail()->documents()->where('type', 'acte_naissance')->exists());
@@ -296,14 +309,14 @@ class OevTest extends TestCase
 
     public function test_enfant_non_scolarise_et_tuteur_sans_cnib_moins_de_pieces(): void
     {
-        $donnees = $this->donneesOev(['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'souhait_avenir' => 'formation', 'tuteur_a_cnib' => '0', 'nom_structure_rib' => 'ONG']);
+        $donnees = $this->donneesOev(['situation_scolaire' => 'non_scolarise', 'raison_non_scolarisation' => 'insecurite', 'souhait_avenir' => 'formation', 'tuteur_a_cnib' => '0']);
         unset($donnees['etablissement_actuel'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['type_etablissement'], $donnees['systeme_educatif']);
-        $pieces = array_intersect_key($this->pieces(), array_flip(['acte_naissance', 'photo', 'rib']));
+        $pieces = array_intersect_key($this->pieces(), array_flip(['acte_naissance', 'photo', 'enquete_sociale']));
 
         $this->actingAs($this->dp)->post(route('oevs.store'), $donnees + $pieces + ['soumettre' => '1'])->assertSessionHasNoErrors();
 
         $oev = Oev::firstOrFail();
-        $this->assertSame(['acte_naissance', 'photo', 'rib'], array_keys($oev->piecesRequises()));
+        $this->assertSame(['acte_naissance', 'photo', 'enquete_sociale'], array_keys($oev->piecesRequises()));
         $this->assertNull($oev->tuteur_cnib, 'Pas de numéro de CNIB si le tuteur n’en a pas');
         $this->assertSame(Oev::ETAT_SOUMIS, $oev->statut_dossier);
         // Les pièces non demandées ne sont ni affichées ni décrites
@@ -721,7 +734,7 @@ class OevTest extends TestCase
         $this->actingAs($this->dp)->get(route('oevs.create'))->assertSee('Enregistrer et soumettre au DR');
 
         // Dossier complet : enregistré puis directement soumis, visible du DR
-        $this->post(route('oevs.store'), $this->donneesOev(['nom_structure_rib' => 'Association Espoir']) + $this->pieces() + ['soumettre' => '1'])
+        $this->post(route('oevs.store'), $this->donneesOev([]) + $this->pieces() + ['soumettre' => '1'])
             ->assertSessionHasNoErrors();
         $complet = Oev::firstOrFail();
         $this->assertSame(Oev::ETAT_SOUMIS, $complet->statut_dossier);
@@ -765,7 +778,7 @@ class OevTest extends TestCase
 
         // Le DP voit le motif, corrige et soumet à nouveau
         $this->actingAs($this->dp)->get(route('oevs.show', $oev))->assertSee('Acte de naissance illisible')->assertSee('Soumettre au DR');
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['nom_structure_rib' => 'Association Espoir'])
+        $this->put(route('oevs.update', $oev), $this->donneesOev([])
             + ['acte_naissance' => UploadedFile::fake()->create('acte-lisible.pdf', 100, 'application/pdf')])->assertSessionHasNoErrors();
         $this->post(route('oevs.soumettre', $oev))->assertSessionHasNoErrors();
         $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
@@ -800,7 +813,7 @@ class OevTest extends TestCase
         $this->get(route('oevs.validation', ['etat' => 'complement']))->assertSee($oev->numero_dossier);
         $this->get(route('oevs.show', $oev))->assertSee('Préciser la classe de l’année en cours')->assertSee('Valider et renvoyer au central');
         $this->get(route('oevs.edit', $oev))->assertOk()->assertSee('Complément demandé par le niveau central');
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'classe_precedente' => 'CM1', 'nom_structure_rib' => 'Association Espoir']))
+        $this->put(route('oevs.update', $oev), $this->donneesOev(['niveau_etude' => 'primaire', 'classe' => 'CM2', 'classe_precedente' => 'CM1']))
             ->assertSessionHasNoErrors();
         $this->assertSame('CM2', $oev->refresh()->classe);
         $this->assertSame(Oev::ETAT_COMPLEMENT, $oev->statut_dossier);
@@ -825,8 +838,8 @@ class OevTest extends TestCase
 
         // Le DP corrige et resoumet : le circuit normal reprend (DR puis central)
         $this->actingAs($this->dp)->get(route('oevs.show', $oev))->assertSee('Le DP doit fournir un RIB à jour');
-        $this->put(route('oevs.update', $oev), $this->donneesOev(['nom_structure_rib' => 'Association Espoir'])
-            + ['rib' => UploadedFile::fake()->create('rib-2026.pdf', 100, 'application/pdf')])->assertSessionHasNoErrors();
+        $this->put(route('oevs.update', $oev), $this->donneesOev([])
+            + ['enquete_sociale' => UploadedFile::fake()->create('enquete-2026.pdf', 100, 'application/pdf')])->assertSessionHasNoErrors();
         $this->post(route('oevs.soumettre', $oev))->assertSessionHasNoErrors();
         $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
     }

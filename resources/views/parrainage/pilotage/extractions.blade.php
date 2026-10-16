@@ -212,7 +212,7 @@
           {{-- Autres critères à choix multiple --}}
           <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'sexe', 'label' => 'Sexe', 'options' => Oev::SEXES, 'valeurs' => $f['sexe']])</div>
           <div class="col-6 col-md-3 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'statut', 'label' => 'Statut OEV', 'options' => Oev::STATUTS, 'valeurs' => $f['statut']])</div>
-          <div class="col-md-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::VULNERABILITES, 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
+          <div class="col-md-6 col-lg-3">@include('parrainage.selection._filtre-multiple', ['nom' => 'vulnerabilite', 'label' => 'Vulnérabilité', 'options' => Oev::vulnerabilites(), 'valeurs' => $f['vulnerabilite'], 'tous' => 'Toutes'])</div>
           <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_priorite', 'label' => 'Priorité', 'options' => Oev::NIVEAUX, 'valeurs' => $f['niveau_priorite'], 'tous' => 'Toutes'])</div>
           <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'niveau_etude', 'label' => 'Niveau d’étude', 'options' => Oev::NIVEAUX_ETUDE, 'valeurs' => $f['niveau_etude']])</div>
           <div class="col-6 col-md-3 col-lg-2">@include('parrainage.selection._filtre-multiple', ['nom' => 'handicap', 'label' => 'Handicap', 'options' => ['1' => 'Oui', '0' => 'Non'], 'valeurs' => $f['handicap']])</div>

@@ -48,7 +48,7 @@ class Ecole extends Model
     /** Une école choisie par un dossier OEV (même supprimé logiquement) ne peut pas être supprimée. */
     public function estUtiliseeParDesDossiers(): bool
     {
-        return Oev::withTrashed()->where('ecole_id', $this->getKey())->exists();
+        return Oev::withTrashed()->where(fn ($q) => $q->where('ecole_id', $this->getKey())->orWhere('ecole_precedente_id', $this->getKey()))->exists();
     }
 
     public function libelleStatut(): ?string

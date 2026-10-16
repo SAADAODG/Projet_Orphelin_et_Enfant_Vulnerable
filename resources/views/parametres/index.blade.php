@@ -15,7 +15,6 @@
     </div>
   </div>
 
-  @include('parametres._onglets')
 
   <section class="row g-3 mt-0">
     <div class="col-12 col-xl-8">

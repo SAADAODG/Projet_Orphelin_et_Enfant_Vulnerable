@@ -10,6 +10,7 @@ use App\Http\Controllers\DesactivationOevController;
 use App\Http\Controllers\EcoleController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ListeReferenceController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\SuiviParrainageController;
 use App\Http\Controllers\SignalementController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VillageController;
+use App\Models\ListeReference;
 use App\Models\Province;
 use Illuminate\Support\Facades\Route;
 
@@ -225,6 +227,13 @@ Route::middleware('auth')->prefix('admin')->group(function () {
         Route::prefix('parametres')->name('parametres.')->group(function () {
             Route::post('/ecoles/import', [EcoleController::class, 'import'])->name('ecoles.import');
             Route::resource('ecoles', EcoleController::class)->except('show');
+            // Listes de choix de la fiche OEV : groupes de population, qui s'occupe de l'enfant, conditions de vie, vulnérabilités
+            Route::prefix('listes/{liste}')->name('listes.')->whereIn('liste', array_keys(ListeReference::listes()))->group(function () {
+                Route::get('/', [ListeReferenceController::class, 'index'])->name('index');
+                Route::post('/', [ListeReferenceController::class, 'store'])->name('store');
+                Route::put('/{element}', [ListeReferenceController::class, 'update'])->name('update');
+                Route::delete('/{element}', [ListeReferenceController::class, 'destroy'])->name('destroy');
+            });
         });
         Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
         Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');

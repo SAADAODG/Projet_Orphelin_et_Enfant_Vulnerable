@@ -265,7 +265,7 @@ class ExtractionsParrainage
             'age' => ['Âge', fn (Oev $o) => $o->age(), false],
             'sexe' => ['Sexe', fn (Oev $o) => Oev::SEXES[$o->sexe] ?? $o->sexe, false],
             'statut' => ['Statut OEV', fn (Oev $o) => Oev::STATUTS[$o->statut] ?? $o->statut, false],
-            'vulnerabilites' => ['Vulnérabilités', fn (Oev $o) => implode(', ', $o->libelles('vulnerabilites', Oev::VULNERABILITES)), false],
+            'vulnerabilites' => ['Vulnérabilités', fn (Oev $o) => implode(', ', $o->libelles('vulnerabilites', Oev::vulnerabilites())), false],
             'handicap' => ['Handicap', fn (Oev $o) => $o->handicap ? 'Oui' : 'Non', false],
             'region' => ['Région', fn (Oev $o) => $o->region?->nom, false],
             'province' => ['Province', fn (Oev $o) => $o->province?->nom, false],

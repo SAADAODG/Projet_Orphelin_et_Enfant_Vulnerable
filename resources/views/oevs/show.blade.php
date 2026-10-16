@@ -92,7 +92,8 @@
     'certificat_scolarite' => 'bi-journal-bookmark',
     'photo' => 'bi-camera',
     'cnib_tuteur' => 'bi-person-badge',
-    'rib' => 'bi-bank',
+    'bulletin' => 'bi-award',
+    'enquete_sociale' => 'bi-clipboard2-check',
   ];
   $info = function (string $label, $valeur) {
       $vide = $valeur === null || $valeur === '';
@@ -293,7 +294,7 @@
             {!! $infoSi('Lieu de naissance', $oev->lieuDeNaissance()) !!}
             {!! $infoSi('Nationalité', $oev->nationalite) !!}
             {!! $infoSi('Acte de naissance', $oev->a_acte_naissance === null ? null : ($oev->a_acte_naissance ? 'Oui' . ($oev->numero_acte_naissance ? ' — n° ' . $oev->numero_acte_naissance : '') : 'Non')) !!}
-            {!! $infoSi('Groupe de population', $oev->groupe_population ? $oev->libelle('groupe_population', Oev::GROUPES_POPULATION) : null) !!}
+            {!! $infoSi('Groupe de population', $oev->groupe_population ? $oev->libelle('groupe_population', Oev::groupesPopulation()) : null) !!}
             {!! $info('Statut OEV', $oev->libelle('statut', Oev::STATUTS)) !!}
           </div>
         </section>
@@ -333,7 +334,7 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-house-heart" aria-hidden="true"></i> Situation de l’enfant</h2>
           <div class="oev-infos">
-            {!! $infoSi('Lieu de vie', $oev->lieu_de_vie ? $oev->libelle('lieu_de_vie', Oev::LIEUX_DE_VIE) . ($oev->lieu_de_vie_precision ? ' — ' . $oev->lieu_de_vie_precision : '') : null) !!}
+            {!! $infoSi('Lieu de vie', $oev->lieu_de_vie ? $oev->libelle('lieu_de_vie', Oev::lieuxDeVie()) . ($oev->lieu_de_vie_precision ? ' — ' . $oev->lieu_de_vie_precision : '') : null) !!}
             {!! $info('Situation de handicap', $oev->handicap ? 'Oui' : 'Non') !!}
             @if ($oev->handicap)
               {!! $infoSi('Type de handicap', implode(', ', $oev->libelles('types_handicap', Oev::TYPES_HANDICAP))) !!}
@@ -351,7 +352,7 @@
             <div class="mt-3">
               <span class="oev-info-label">Situations de vulnérabilité</span>
               <div class="d-flex flex-wrap gap-2 mt-1">
-                @foreach ($oev->libelles('vulnerabilites', Oev::VULNERABILITES) as $vulnerabilite)
+                @foreach ($oev->libelles('vulnerabilites', Oev::vulnerabilites()) as $vulnerabilite)
                   <span class="oev-puce"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i>{{ $vulnerabilite }}</span>
                 @endforeach
                 @if ($oev->vulnerabilite_precision)
@@ -402,6 +403,7 @@
               @if ($oev->situation_scolaire === 'scolarise')
                 <dl>
                   <div><dt>Établissement fréquenté</dt><dd>{{ $oev->etablissement_actuel }} @if ($oev->type_etablissement)<span class="badge rounded-pill text-bg-light border ms-1">{{ $oev->libelle('type_etablissement', Oev::TYPES_ETABLISSEMENT) }}</span>@endif</dd></div>
+                  @if ($oev->rib_etablissement)<div><dt>RIB de l’établissement</dt><dd>{{ $oev->rib_etablissement }}</dd></div>@endif
                   <div><dt>Classe</dt><dd>{{ Oev::toutesLesClasses()[$oev->classe] ?? ($oev->classe ?: '—') }}</dd></div>
                   <div><dt>Frais de scolarité</dt><dd>{{ $oev->frais_scolarite !== null ? number_format($oev->frais_scolarite, 0, ',', ' ') . ' FCFA' : '—' }}</dd></div>
                   <div>
@@ -457,7 +459,7 @@
             $detailsTuteur = array_filter([
               'Sexe' => $oev->tuteur_sexe ? ['M' => 'Homme', 'F' => 'Femme'][$oev->tuteur_sexe] ?? null : null,
               'Qui s’occupe de l’enfant' => $oev->tuteur_lien
-                  ? $oev->libelle('tuteur_lien', Oev::LIENS_TUTEUR) . ($oev->tuteur_lien_precision ? ' (' . $oev->tuteur_lien_precision . ')' : '')
+                  ? $oev->libelle('tuteur_lien', Oev::liensTuteur()) . ($oev->tuteur_lien_precision ? ' (' . $oev->tuteur_lien_precision . ')' : '')
                   : null,
               'CNIB' => $oev->tuteur_a_cnib === null ? null : ($oev->tuteur_a_cnib ? ($oev->tuteur_cnib ?: 'Oui') : 'N’en possède pas'),
               'Prêt à continuer' => $oev->tuteur_pret_continuer === false && $oev->tuteur_raison_arret
@@ -478,7 +480,7 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-geo-alt" aria-hidden="true"></i> Localité</h2>
           <ul class="oev-lieu">
-            @foreach (array_filter(['Région' => $oev->region?->nom, 'Province' => $oev->province?->nom, 'Commune' => $oev->commune?->nom, 'Village / secteur' => $oev->village?->nom, 'Quartier / précision' => $oev->quartier]) as $niveau => $lieu)
+            @foreach (array_filter(['Région' => $oev->region?->nom, 'Province' => $oev->province?->nom, 'Commune' => $oev->commune?->nom, 'Village / ville' => $oev->village?->nom, 'Quartier' => $oev->quartier]) as $niveau => $lieu)
               <li>
                 <span class="oev-lieu-point" aria-hidden="true"></span>
                 <div><small class="text-muted d-block">{{ $niveau }}</small><strong>{{ $lieu ?? '—' }}</strong></div>
@@ -631,9 +633,6 @@
                 </span>
               </div>
               <div class="oev-doc-nom">{{ $libelle }}</div>
-              @if ($type === 'rib' && $oev->nom_structure_rib)
-                <div class="small"><i class="bi bi-building me-1 text-muted" aria-hidden="true"></i>{{ $oev->nom_structure_rib }}</div>
-              @endif
               @if ($document)
                 <div class="oev-doc-fichier">{{ $document->nom_original }} · {{ number_format($document->taille / 1024, 0, ',', ' ') }} Ko<br>Ajouté le {{ $document->created_at->format('d/m/Y') }}</div>
                 <div class="oev-doc-actions">

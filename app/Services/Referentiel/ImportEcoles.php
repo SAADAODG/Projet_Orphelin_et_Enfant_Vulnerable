@@ -13,8 +13,10 @@ use Illuminate\Support\Str;
  * Paramètres > Écoles.
  *
  * Le rattachement se fait par le nom de la commune (sans accents ni ponctuation), la province ne
- * servant qu'à départager des communes homonymes. Une école déjà connue (même commune, CEB et nom)
- * est mise à jour : relancer l'import n'ajoute pas de doublons.
+ * servant qu'à départager des communes homonymes. Toutes les lignes du fichier sont importées, y compris
+ * les écoles de même nom dans la même CEB (le fichier en compte, parfois de statut ou de type différents).
+ * La n-ième ligne « commune + CEB + nom » du fichier correspond à la n-ième école enregistrée de même
+ * commune, CEB et nom : elle est mise à jour (statut, type) et relancer l'import n'ajoute pas de doublons.
  */
 class ImportEcoles
 {
@@ -60,16 +62,16 @@ class ImportEcoles
      */
     public function importer(iterable $lignes): array
     {
-        // École connue (clé normalisée) => [id, statut, type]
+        // Écoles connues (clé normalisée) => liste de [id, statut, type], dans l'ordre d'enregistrement
         $existantes = [];
-        foreach (DB::table('ecoles')->select(['id', 'commune_id', 'ceb', 'nom', 'statut', 'type'])->cursor() as $ecole) {
-            $existantes[$this->cleEcole($ecole->commune_id, $ecole->ceb, $ecole->nom)] = [$ecole->id, $ecole->statut, $ecole->type];
+        foreach (DB::table('ecoles')->select(['id', 'commune_id', 'ceb', 'nom', 'statut', 'type'])->orderBy('id')->cursor() as $ecole) {
+            $existantes[$this->cleEcole($ecole->commune_id, $ecole->ceb, $ecole->nom)][] = [$ecole->id, $ecole->statut, $ecole->type];
         }
 
         $rapport = ['ajoutees' => 0, 'mises_a_jour' => 0, 'ignorees' => 0, 'communes_introuvables' => []];
         $introuvables = [];
         $lot = [];
-        $vues = [];
+        $occurrences = [];
         $maintenant = now();
         // Écoles insérées par lots au fil de la lecture (un fichier national compte plus de 20 000 lignes)
         $inserer = function () use (&$lot): void {
@@ -79,7 +81,7 @@ class ImportEcoles
             }
         };
 
-        DB::transaction(function () use ($lignes, $existantes, &$vues, &$rapport, &$introuvables, &$lot, $inserer, $maintenant) {
+        DB::transaction(function () use ($lignes, $existantes, &$occurrences, &$rapport, &$introuvables, &$lot, $inserer, $maintenant) {
             foreach ($lignes as $cellules) {
                 [, $province, $commune, $ceb, $nom, $statut, $type] = array_pad(array_map(fn ($v) => trim(preg_replace('/\s+/u', ' ', (string) $v)), array_values($cellules)), 7, '');
                 if ($nom === '') {
@@ -98,14 +100,11 @@ class ImportEcoles
                 $type = $type === '' ? null : ($this->types[$this->cle($type)] ?? 'autre');
                 $cle = $this->cleEcole($communeId, $ceb, $nom);
 
-                // Ligne répétée dans le fichier : la première est retenue
-                if (isset($vues[$cle])) {
-                    continue;
-                }
-                $vues[$cle] = true;
+                // Rang de cette école parmi les lignes de même commune, CEB et nom
+                $rang = $occurrences[$cle] = ($occurrences[$cle] ?? -1) + 1;
 
-                if (isset($existantes[$cle])) {
-                    [$id, $statutConnu, $typeConnu] = $existantes[$cle];
+                if (isset($existantes[$cle][$rang])) {
+                    [$id, $statutConnu, $typeConnu] = $existantes[$cle][$rang];
                     if ($statutConnu !== $statut || $typeConnu !== $type) {
                         DB::table('ecoles')->where('id', $id)->update(['statut' => $statut, 'type' => $type, 'updated_at' => $maintenant]);
                         $rapport['mises_a_jour']++;

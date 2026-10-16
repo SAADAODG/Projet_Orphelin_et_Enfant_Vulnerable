@@ -60,7 +60,7 @@ class EcoleTest extends TestCase
     {
         $this->seed(EcoleSeeder::class);
 
-        $this->assertGreaterThan(20000, Ecole::count());
+        $this->assertSame(20895, Ecole::count(), 'Toutes les lignes du fichier (20 896 avec l’en-tête)');
         $this->assertSame(0, Ecole::where('nom', 'like', '%Ã%')->count(), 'Aucun nom mal encodé');
         $this->assertTrue(Commune::where('nom', 'Bagassi')->first()->ecoles()->where('nom', 'BAGASSI A')->exists());
 
@@ -115,15 +115,15 @@ class EcoleTest extends TestCase
             ['X', 'Y', 'COMMUNE INCONNUE', 'Z', 'ECOLE', 'PUBLIC', 'CLASSIQUE'],
         ])])->assertSessionHas('success');
 
-        $this->assertSame(2, Ecole::count(), 'Doublon fusionné, commune inconnue ignorée');
+        $this->assertSame(3, Ecole::count(), 'Les deux lignes KOULOUBA A sont gardées, la commune inconnue est ignorée');
         $this->assertSame('franco_arabe', Ecole::where('nom', 'BANGRIN')->value('type'));
 
-        // Réimport : pas de doublon, le statut est mis à jour
+        // Réimport : pas de doublon, le statut de la première KOULOUBA A est mis à jour
         $this->post(route('parametres.ecoles.import'), ['fichier' => $fichier([
             ['KADIOGO', 'KADIOGO', 'OUAGADOUGOU', 'OUAGA N°1', 'KOULOUBA A', 'PRIVE', 'CLASSIQUE'],
         ])])->assertSessionHas('success');
-        $this->assertSame(2, Ecole::count());
-        $this->assertSame('prive', Ecole::where('nom', 'KOULOUBA A')->value('statut'));
+        $this->assertSame(3, Ecole::count());
+        $this->assertSame(['prive', 'public'], Ecole::where('nom', 'KOULOUBA A')->orderBy('id')->pluck('statut')->all());
     }
 
     public function test_le_formulaire_oev_charge_les_ecoles_de_la_commune(): void
@@ -153,6 +153,22 @@ class EcoleTest extends TestCase
         $ecole = $this->ecole(['commune_id' => Commune::where('nom', 'Saaba')->value('id')]);
 
         $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['ecole_id' => $ecole->id]))->assertSessionHasErrors('ecole_id');
+    }
+
+    public function test_l_ecole_de_l_annee_precedente_est_choisie_dans_la_liste(): void
+    {
+        $ecole = $this->ecole(['nom' => 'École Koulouba B']);
+        $donnees = $this->donneesOev(['ecole_id' => 'autre', 'etablissement_actuel' => 'Lycée Zinda', 'classe_precedente' => 'CE1', 'moyenne_annuelle' => '6', 'appreciation' => 'admis']);
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees + ['ecole_precedente_id' => $ecole->id])->assertSessionHasNoErrors();
+        $oev = Oev::firstOrFail();
+        $this->assertSame([$ecole->id, 'École Koulouba B', 'CE1'], [$oev->ecole_precedente_id, $oev->etablissement_precedent, $oev->classe_precedente]);
+
+        // « Autre » : le nom est à saisir
+        $this->post(route('oevs.store'), $donnees + ['ecole_precedente_id' => 'autre'])->assertSessionHasErrors('etablissement_precedent');
+        // École d'une autre commune : refusée
+        $autre = $this->ecole(['commune_id' => Commune::where('nom', 'Saaba')->value('id'), 'nom' => 'École de Saaba']);
+        $this->post(route('oevs.store'), $donnees + ['ecole_precedente_id' => $autre->id])->assertSessionHasErrors('ecole_precedente_id');
     }
 
     public function test_un_etablissement_hors_liste_est_saisi(): void
