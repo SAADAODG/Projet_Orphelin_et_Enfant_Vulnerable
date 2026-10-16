@@ -59,12 +59,20 @@ trait AppartientALocalite
         return static::query()->dansLePerimetreDe($utilisateur)->whereKey($this->getKey())->exists();
     }
 
-    /** Recherche par nom de région, de province ou de commune (à utiliser dans un orWhere). */
-    /** Région, province ou commune dont le nom contient le terme (« %terme% »), sans tenir compte de la casse. */
+    /**
+     * Région, province ou commune dont le nom contient le terme (« %terme% »), sans tenir compte de la casse
+     * (à utiliser dans un orWhere). Les localités correspondantes sont lues d'abord (petites tables) : la
+     * condition devient « region_id IN (…) », que la base combine avec les index des autres critères de la
+     * recherche (une sous-requête EXISTS l'obligerait à examiner chaque dossier).
+     */
     public function scopeOuLocaliteContient(Builder $query, string $terme): Builder
     {
         foreach (['region', 'province', 'commune'] as $relation) {
-            $query->orWhereHas($relation, fn (Builder $q) => $q->whereLike('nom', $terme));
+            $liaison = $query->getModel()->{$relation}();
+            $ids = $liaison->getRelated()->newQuery()->whereLike('nom', $terme)->pluck($liaison->getOwnerKeyName())->all();
+            if ($ids) {
+                $query->orWhereIn($query->qualifyColumn($liaison->getForeignKeyName()), $ids);
+            }
         }
 
         return $query;

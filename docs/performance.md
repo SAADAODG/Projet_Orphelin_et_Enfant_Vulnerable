@@ -6,12 +6,15 @@ La base de développement n'a jamais servi aux mesures.
 
 ## Ce que l'équipe doit faire
 
-1. **Migrations** : `php artisan migrate` (deux migrations du 15/10/2026). Sans elles, l'enregistrement d'un OEV
+1. **Migrations** : `php artisan migrate` (migrations du 15 et du 16/10/2026). Sans elles, l'enregistrement d'un OEV
    et la sélection échouent (colonne `oevs.score_besoin` absente).
    - `2026_10_15_000001_add_performance_indexes` : index (instantané sur une petite base).
    - `2026_10_15_000002_add_score_besoin_to_oevs_table` : ajoute le score et le calcule pour tous les dossiers
      (≈ 6 min pour 1 000 000 de dossiers). Sur une grosse base, lancer ensuite `VACUUM ANALYZE oevs;`
      (la mise à jour réécrit toutes les lignes).
+   - `2026_10_16_000001_add_trigram_search_indexes` (PostgreSQL seulement) : active l'extension `pg_trgm`
+     (`CREATE EXTENSION`, droit CREATE sur la base requis : sinon, la faire activer par l'administrateur de la
+     base puis relancer la migration) et crée 10 index trigrammes (≈ 23 s et 117 Mo pour 1 000 000 de dossiers).
 2. **Import en SQL direct** de dossiers (hors application) : recalculer les scores avec
    `App\Services\Parrainage\ScoreBesoin::recalculerTout()` (ou `recalculerIds([...])`).
 3. **Traitement en masse par le modèle** (import PHP) : l'envelopper dans `ScoreBesoin::differer(fn () => …)`,
@@ -20,7 +23,8 @@ La base de développement n'a jamais servi aux mesures.
    tous les projets). Chaque requête paie ≈ 350 ms de démarrage, même une redirection. Réglage conseillé dans
    `php.ini` : `opcache.memory_consumption=512`, `opcache.interned_strings_buffer=64`,
    `opcache.max_accelerated_files=32531`, puis redémarrer tous les serveurs PHP. Avec `php artisan serve`,
-   c'est `opcache.enable_cli` qui compte.
+   c'est `opcache.enable_cli` qui compte. Décision : `php.ini` laissé tel quel sur le poste de développement ;
+   à appliquer sur le serveur de production.
 5. Utiliser `http://127.0.0.1:8000` plutôt que `localhost` : le serveur n'écoute qu'en IPv4.
 
 ## Outils (scripts/perf)
@@ -36,6 +40,7 @@ La base de développement n'a jamais servi aux mesures.
 | `expliquer.php URL email N` | `EXPLAIN ANALYZE` des N requêtes les plus lentes d'une page. |
 | `mesurer-http.php URL N` | Temps HTTP réels (connexion avec jeton CSRF, N répétitions, min / moyenne / max). Refuse le port 8000 (base de développement). |
 | `cout-excel.php` | Coût mémoire et durée d'un export Excel par cellule. |
+| `mesurer-recherche.php` | Recherches libres des écrans principaux, terme fréquent et terme rare, deux profils. |
 
 Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 `DB_DATABASE=plateforme_oev_perf php -S 127.0.0.1:8098 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php`
@@ -53,7 +58,9 @@ Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 4. **Exports sans limite** : PhpSpreadsheet garde tout le classeur en mémoire (≈ 0,7 Ko par cellule, mesuré) ;
    lecture par pages (`OFFSET`) retriant toute la sélection à chaque paquet ; ramasse-miettes de PHP reparcourant
    les centaines de milliers de cellules (×4 sur la durée).
-5. **Sous-requêtes « IN (tous les OEV de la zone) »** et listes d'identifiants dans la requête (au-delà de 65 535
+5. **Recherche libre** (`%texte%`) sans index adapté : parcours de tous les dossiers ; avec un terme rare, le
+   planificateur parcourait même l'index de tri dans l'espoir de trouver vite une page de résultats (jusqu'à 57 s).
+6. **Sous-requêtes « IN (tous les OEV de la zone) »** et listes d'identifiants dans la requête (au-delà de 65 535
    paramètres, PostgreSQL refuse la requête).
 
 ## Corrections, fichier par fichier
@@ -72,6 +79,8 @@ Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 | `resources/views/extraction/index.blade.php`, `parrainage/pilotage/extractions.blade.php` | Boutons PDF / Excel désactivés au-delà des limites, avec l'explication (recalculée selon les données cochées). |
 | `app/Http/Controllers/SessionParrainageController.php`, `parrainage/sessions/show.blade.php` | Retenus de la session paginés (50), nombre et montant par la base. |
 | `app/Http/Controllers/DashboardController.php` | Évolution sur 6 mois en une requête ; « à traiter » lu état par état dans l'ordre de l'index. |
+| `database/migrations/2026_10_16_000001_add_trigram_search_indexes.php` | Index trigrammes (`pg_trgm`, GIN) sur les 10 colonnes de la recherche libre des dossiers. |
+| `app/Models/Concerns/AppartientALocalite.php` | Recherche par localité : identifiants des localités lus d'abord (`IN (…)` au lieu de `OR EXISTS`), pour que la base combine les index de la recherche. |
 
 ### Équivalence prouvée (valeurs stockées et calculs réécrits)
 
@@ -80,6 +89,7 @@ Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 | `ScoreBesoinStockeTest` | Score enregistré = ancien calcul PHP = ancienne expression SQL, sur **toutes** les combinaisons des critères (40 320) et tous les sous-ensembles de vulnérabilités graves ; recalcul après chaque type de modification ; absent du journal d'audit ; mode différé. Vérifié aussi sur PostgreSQL : 0 écart sur 1 000 000 de dossiers. |
 | `PilotageEquivalenceTest` | Ancien calcul en mémoire (`tests/Support/PilotageParrainageAvant.php`) = nouveau, 72 combinaisons (niveau × session × type d'appui × sexe), bornes d'âge exactes, listes en mémoire **et** en base ; nombre compté d'avance de la liste pour paiement = nombre réel. |
 | `ListeParrainEquivalenceTest` | Ancienne liste pour un parrain (`tests/Support/ExtractionsParrainageAvant.php`) = nouvelle (mêmes OEV, même ordre, même besoin estimé, même aperçu), 576 combinaisons. |
+| `RechercheLocaliteEquivalenceTest` | Ancienne recherche par localité (`OR EXISTS`) = nouvelle (`IN`), OEV, signalements et plaintes, 15 termes (région, province, commune, partiels, casse, aucun résultat), localités incomplètes. |
 | `EstimationCoutEquivalenceTest` | Ancien parcours PHP = agrégat SQL, 36 combinaisons de session × dossiers couvrant chaque situation et chaque cas de frais. |
 
 ## Avant / après
@@ -104,15 +114,26 @@ Temps de traitement en ms (en processus, base `_perf`). « PLANTE » : mémoire 
 | Export liste parrain Excel, DP | 1 686 | 26 802 | **11 623** — 739 Ko, pic 198 Mo |
 | Export paiement Excel (central, 135 000 bénéficiaires) | PLANTE | PLANTE | refus explicite (0,14 s) ; DR : 4 097, 277 Ko, pic 174 Mo |
 
+Recherche libre, niveau central, 1 000 000 de dossiers (ms) — avant / après les index trigrammes :
+
+| Écran | Terme fréquent (« sank ») | Terme rare (fragment de code) |
+|---|---|---|
+| Liste des OEV | 1 546 → **566** | 22 963 → **138** |
+| Constituer dossier | 1 613 → **472** | 1 627 → **138** |
+| Filtrage et extraction | 9 301 → **861** | 57 326 → **72** |
+| Sélection : éligibles | 2 580 → 1 875 | 2 459 → **533** |
+
+Pour un DP : 60 à 600 ms avant comme après. Journal d'audit (description, non indexée) : 0,2 à 0,5 s.
+
 Détail complet : `storage/perf/*.json` (non versionné), régénérable avec `lancer-profils.php`.
 
 ## Limites connues
 
 - **Exports** : 250 000 cellules (ex. 20 833 lignes × 12 colonnes, 50 000 lignes × 5), PDF 1 000 lignes. Au-delà,
   le bouton est désactivé avec l'explication et le serveur refuse ; ≈ 0,2 à 0,3 ms par ligne et par colonne.
-- **Recherche libre** (`%texte%` sur le nom, le code, le tuteur, les localités) : parcours de toute la zone ;
-  1,5 s pour le niveau central à 1 000 000 de dossiers (0,2 s pour un DR). Un index trigramme (`pg_trgm`)
-  rendrait ces recherches rapides, mais il faut installer une extension PostgreSQL.
+- **Recherche libre** : rapide grâce à `pg_trgm` ; un terme très fréquent (qui trouve des dizaines de milliers
+  de dossiers) ou de moins de 3 lettres profite peu de l'index (0,5 à 1,9 s au niveau central à 1 000 000).
+  Sans l'extension (migration impossible faute de droits), la recherche reste correcte mais lente au niveau central.
 - **Indicateurs nationaux** (pilotage, synthèse du filtrage, estimation de la sélection) : 1 à 3 s à
   1 000 000 de dossiers pour le niveau central, proportionnel au volume. **Non mesuré à 20 000 000** : prévoir
   des compteurs tenus à jour (table d'agrégats alimentée par observateurs, périodes closes figées) avant
@@ -121,6 +142,5 @@ Détail complet : `storage/perf/*.json` (non versionné), régénérable avec `l
 
 ## Reste à faire
 
-- Index trigramme pour la recherche libre (extension `pg_trgm`, à valider).
 - Compteurs pré-agrégés pour les indicateurs nationaux, si le volume dépasse quelques millions de dossiers.
 - Mesure à 20 000 000 (génération ≈ 2 h 30, plusieurs dizaines de Go).
