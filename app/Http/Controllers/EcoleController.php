@@ -34,7 +34,7 @@ class EcoleController extends Controller
         $filtres = $request->only(['region_id', 'province_id', 'commune_id', 'statut', 'type']);
 
         $ecoles = Ecole::with('commune.province.region')
-            ->when($search !== '', fn ($query) => $query->where(fn ($q) => $q->where('nom', 'like', "%{$search}%")->orWhere('ceb', 'like', "%{$search}%")))
+            ->when($search !== '', fn ($query) => $query->where(fn ($q) => $q->whereLike('nom', "%{$search}%")->orWhereLike('ceb', "%{$search}%")))
             ->when($filtres['commune_id'] ?? null, fn ($query, $id) => $query->where('commune_id', $id))
             ->when(! ($filtres['commune_id'] ?? null) && ($filtres['province_id'] ?? null),
                 fn ($query) => $query->whereHas('commune', fn ($q) => $q->where('province_id', $filtres['province_id'])))

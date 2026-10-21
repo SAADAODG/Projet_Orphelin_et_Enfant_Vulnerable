@@ -35,6 +35,9 @@ $session = $id("select max(id) from sessions_parrainage where etat <> 'en_cours'
 $sessionEnCours = $id("select max(id) from sessions_parrainage where etat = 'en_cours'") ?: $session;
 $oev = $id("select max(id) from oevs where statut_dossier = 'integre' and desactivation_etat is null and province_id = coalesce((select province_id from users where email = 'dp@oev.gov.bf'), province_id)");
 $parrain = $id('select min(id) from parrains');
+$brouillon = $id("select max(id) from oevs where statut_dossier = 'brouillon' and province_id = coalesce((select province_id from users where email = 'dp@oev.gov.bf'), province_id)");
+$commune = $id("select commune_id from ecoles group by commune_id order by count(*) desc limit 1");
+$codeRare = substr((string) $pdo->query('select code from oevs where code is not null order by id desc offset 777 limit 1')->fetchColumn(), -8);
 
 $pages = [
     'Tableau de bord' => '/admin/dashboard',
@@ -45,14 +48,27 @@ $pages = [
     'Constituer dossier (intégrés)' => '/admin/oevs?vue=integres',
     'Validation des dossiers' => '/admin/validation-dossiers?etat=tous',
     'Intégration des OEV' => '/admin/integration-oev?etat=tous',
+    'Liste des OEV (recherche rare)' => "/admin/liste-oev?q={$codeRare}",
     'Fiche OEV' => "/admin/oevs/{$oev}",
+    'Modifier un dossier' => "/admin/oevs/{$brouillon}/edit",
     'Nouveau dossier' => '/admin/oevs/create',
     'Filtrage et extraction' => '/admin/filtrage-extraction',
     'Export filtrage (Excel)' => '/admin/filtrage-extraction/export?format=xlsx&colonnes[]=Code%20OEV&colonnes[]=Nom&colonnes[]=Sexe&colonnes[]=R%C3%A9gion',
     'Export filtrage région (Excel)' => '/admin/filtrage-extraction/export?format=xlsx&region_id=' . $id("select region_id from users where email = 'dr@oev.gov.bf'") . '&' . implode('&', array_map(fn ($c) => 'colonnes[]=' . rawurlencode($c), App\Http\Controllers\ExtractionController::COLONNES_PAR_DEFAUT)),
+    'Filtrage (recherche rare)' => "/admin/filtrage-extraction?q={$codeRare}",
     'Signalements' => '/admin/signalements',
     'Plaintes' => '/admin/plaintes',
     'Utilisateurs' => '/admin/users',
+    'Rôles et permissions' => '/admin/roles-permissions',
+    'Paramètres' => '/admin/parametres',
+    'Écoles' => '/admin/parametres/ecoles',
+    'Écoles (recherche)' => '/admin/parametres/ecoles?q=saint',
+    'Liste de référence' => '/admin/parametres/listes/groupes-population',
+    'Écoles d’une commune (formulaire)' => "/admin/localites/communes/{$commune}/ecoles",
+    'Régions' => '/admin/localites/regions',
+    'Provinces' => '/admin/localites/provinces',
+    'Communes' => '/admin/localites/communes',
+    'Villages' => '/admin/localites/villages',
     'Journal d’audit' => '/admin/journal',
     'Export journal (Excel)' => '/admin/journal/export',
     'Export journal 4 mois (Excel)' => '/admin/journal/export?du=' . date('Y-m-d', strtotime('-120 days')),
@@ -60,6 +76,7 @@ $pages = [
     'Fiche de session' => "/admin/parrainage/sessions/{$session}",
     'Sélection : liste' => "/admin/parrainage/sessions/{$session}/selection?onglet=liste",
     'Sélection : éligibles' => "/admin/parrainage/sessions/{$sessionEnCours}/selection?onglet=eligibles",
+    'Sélection : éligibles (recherche)' => "/admin/parrainage/sessions/{$sessionEnCours}/selection?onglet=eligibles&q=sank",
     'Suivi des parrainés' => '/admin/parrainage/suivis',
     'Parrains' => '/admin/parrainage/parrains',
     'Fiche parrain' => "/admin/parrainage/parrains/{$parrain}",
