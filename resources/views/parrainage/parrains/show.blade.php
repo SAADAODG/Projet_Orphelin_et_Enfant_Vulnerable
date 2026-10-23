@@ -51,7 +51,6 @@
           {!! $info('Téléphone', $parrain->telephone) !!}
           {!! $info('E-mail', $parrain->email) !!}
           {!! $info('Adresse', $parrain->adresse) !!}
-          {!! $info('Zone d’intervention', $parrain->libelleZones()) !!}
         </div>
       </section>
     </div>

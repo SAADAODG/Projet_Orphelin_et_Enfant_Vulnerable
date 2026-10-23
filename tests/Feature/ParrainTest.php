@@ -92,42 +92,20 @@ class ParrainTest extends TestCase
         ]);
     }
 
-    public function test_le_niveau_central_enregistre_un_parrain_avec_sa_zone(): void
+    public function test_le_niveau_central_enregistre_un_parrain_sans_zone_d_intervention(): void
     {
-        $region = $this->ouagadougou->province->region;
-        $province = $this->ailleurs->province;
-
         $this->actingAs($this->central)->post(route('parrainage.parrains.store'), [
             'type' => 'entreprise', 'nom' => 'Société Solidaire', 'contact_nom' => 'M. Kaboré', 'telephone' => '+226 70 11 22 33',
             'email' => 'contact@solidaire.bf', 'actif' => '1',
-            'zones' => [
-                ['region_id' => $region->id, 'province_id' => ''],                      // toute la région
-                ['region_id' => $province->region_id, 'province_id' => $province->id],  // une province d'une autre région
-                ['region_id' => $region->id, 'province_id' => $this->ouagadougou->province_id], // redondante : région déjà entière
-                ['region_id' => '', 'province_id' => ''],                               // ligne laissée vide
-            ],
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $parrain = Parrain::where('nom', 'Société Solidaire')->sole();
-        $this->assertCount(2, $parrain->zones);
-        $this->assertSame([$province->id], $parrain->zones->pluck('province_id')->filter()->values()->all());
-        $this->assertEqualsCanonicalizing([$region->id, $province->region_id], $parrain->zones->pluck('region_id')->all());
-        $this->assertSame(1, Parrain::intervenantDans($province->region)->where('id', $parrain->id)->count());
+        $this->assertTrue($parrain->actif);
         $this->assertTrue(JournalActivite::de($parrain)->where('action', 'parrain.creation')->exists());
 
-        $this->actingAs($this->central)->get(route('parrainage.parrains.show', $parrain))->assertOk()->assertSee('M. Kaboré');
-        $this->actingAs($this->central)->get(route('parrainage.parrains.index', ['region_id' => $region->id]))->assertOk()->assertSee('Société Solidaire');
-        $this->actingAs($this->central)->get(route('parrainage.parrains.edit', $parrain))->assertOk()->assertSee('Toute la région');
-    }
-
-    public function test_une_province_doit_appartenir_a_la_region_choisie(): void
-    {
-        $this->actingAs($this->central)->post(route('parrainage.parrains.store'), [
-            'type' => 'ong', 'nom' => 'ONG Mauvaise zone', 'actif' => '1',
-            'zones' => [['region_id' => $this->ouagadougou->province->region_id, 'province_id' => $this->ailleurs->province_id]],
-        ])->assertSessionHasErrors('zones.0.province_id');
-
-        $this->assertDatabaseMissing('parrains', ['nom' => 'ONG Mauvaise zone']);
+        $this->actingAs($this->central)->get(route('parrainage.parrains.show', $parrain))->assertOk()->assertSee('M. Kaboré')->assertDontSee('Zone d’intervention');
+        $this->actingAs($this->central)->get(route('parrainage.parrains.index'))->assertOk()->assertSee('Société Solidaire');
+        $this->actingAs($this->central)->get(route('parrainage.parrains.edit', $parrain))->assertOk()->assertDontSee('Ajouter une zone');
     }
 
     public function test_seul_le_niveau_central_gere_le_repertoire(): void
@@ -230,18 +208,6 @@ class ParrainTest extends TestCase
         $this->assertSame(4, AppuiPartenaire::count());
     }
 
-    public function test_la_nature_autre_exige_une_precision(): void
-    {
-        $oev = $this->oev($this->ouagadougou);
-
-        $this->actingAs($this->dp)->post(route('parrainage.appuis.store'), $this->donneesAppui($oev, ['nature_appui_id' => $this->nature('autre')->id]))
-            ->assertSessionHasErrors('nature_precision');
-        $this->actingAs($this->dp)->post(route('parrainage.appuis.store'), $this->donneesAppui($oev, ['nature_appui_id' => $this->nature('autre')->id, 'nature_precision' => 'Kit d’hygiène']))
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('Autre (Kit d’hygiène)', AppuiPartenaire::sole()->libelleNature());
-    }
-
     public function test_est_deja_appuye_ne_compte_que_la_meme_nature_la_meme_annee(): void
     {
         $service = $this->app->make(ParrainageService::class);
@@ -301,12 +267,12 @@ class ParrainTest extends TestCase
 
         $classeur = new Spreadsheet();
         $classeur->getActiveSheet()->fromArray([
-            ['code_oev', 'parrain_id', 'annee', 'nature', 'nature_precision', 'montant', 'date_debut', 'date_fin', 'observations', 'motif_doublon'],
-            ['Code OEV', 'N° du parrain', 'Année', 'Nature', 'Précision', 'Montant', 'Début', 'Fin', 'Observations', 'Motif'],
-            [$oev->code, $this->parrain->id, '2026-2027', 'scolaire', null, 45000, '01/10/2026', '30/06/2027', 'Frais de scolarité', null],
-            ['OEV-9999-9999', $this->parrain->id, '2026-2027', 'scolaire', null, 10000, null, null, null, null],
-            [$dejaAppuye->code, $this->parrain->id, '2026-2027', 'alimentaire', null, null, null, null, null, null],
-            [$dejaAppuye->code, $this->parrain->id, '2026-2027', 'alimentaire', null, null, null, null, null, 'Période de soudure'],
+            ['code_oev', 'parrain_id', 'annee', 'nature', 'montant', 'date_debut', 'date_fin', 'observations', 'motif_doublon'],
+            ['Code OEV', 'N° du parrain', 'Année', 'Nature', 'Montant', 'Début', 'Fin', 'Observations', 'Motif'],
+            [$oev->code, $this->parrain->id, '2026-2027', 'scolaire', 45000, '01/10/2026', '30/06/2027', 'Frais de scolarité', null],
+            ['OEV-9999-9999', $this->parrain->id, '2026-2027', 'scolaire', 10000, null, null, null, null],
+            [$dejaAppuye->code, $this->parrain->id, '2026-2027', 'alimentaire', null, null, null, null, null],
+            [$dejaAppuye->code, $this->parrain->id, '2026-2027', 'alimentaire', null, null, null, null, 'Période de soudure'],
         ]);
         $chemin = tempnam(sys_get_temp_dir(), 'import') . '.xlsx';
         (new Xlsx($classeur))->save($chemin);

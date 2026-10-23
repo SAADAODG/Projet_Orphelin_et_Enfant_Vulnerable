@@ -203,31 +203,28 @@ class ExtractionsParrainage
     }
 
     /**
-     * Zone et natures proposées par défaut pour un parrain : ses zones d'intervention, les natures de ses engagements.
+     * Natures proposées par défaut pour un parrain : celles de ses engagements.
      *
-     * @return array{zones: Collection, natures: array<int>}
+     * @return array<int> identifiants de natures_appui
      */
-    public function preferencesParrain(Parrain $parrain): array
+    public function naturesParrain(Parrain $parrain): array
     {
-        return [
-            'zones' => $parrain->zones,
-            'natures' => $parrain->engagements->flatMap(fn ($e) => $e->natures_appui ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all(),
-        ];
+        return $parrain->engagements->flatMap(fn ($e) => $e->natures_appui ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /**
      * OEV à proposer à un parrain, par ordre de priorité.
      *
-     * Localité : la zone d'intervention du parrain (si « zone_parrain »), complétée par les régions et
-     * provinces cochées (« regions », « provinces ») quand la zone ne suffit pas. Les autres filtres
-     * acceptent plusieurs valeurs (« l'une ou l'autre »).
+     * Zone d'intervention : les régions et provinces cochées (« regions », « provinces ») ; aucune cochée =
+     * toutes les régions (de la zone de l'utilisateur). Les autres filtres acceptent plusieurs valeurs
+     * (« l'une ou l'autre »).
      *
      * La liste n'est jamais chargée en entier : « nombre » est compté par la base et « oevs » est parcouru
      * par paquets (tri par la base pour les éligibles ; ordre de la liste d'attente sinon). Chaque OEV porte
      * besoin_estime.
      *
      * @param  array  $f  source (« attente » : liste d'attente de la session ; « eligibles » : OEV sans appui de
-     *                    cette nature pour l'année), session, annee, nature, zone_parrain, regions, provinces,
+     *                    cette nature pour l'année), session, annee, nature, regions, provinces,
      *                    sexe, statut, vulnerabilite, niveau_priorite, niveau_etude, handicap, age_min, age_max
      * @return array{nombre: int, oevs: LazyCollection<int, Oev>, apercu: callable(int): array<int, Oev>}
      */
@@ -238,7 +235,7 @@ class ExtractionsParrainage
 
         $requete = Oev::beneficiaires()
             ->dansLePerimetreDe($utilisateur)
-            ->tap(fn ($q) => $this->dansLesLocalites($q, $f['zone_parrain'] ? $parrain : null, $liste('regions'), $liste('provinces')))
+            ->tap(fn ($q) => $this->dansLesLocalites($q, $liste('regions'), $liste('provinces')))
             ->when($liste('sexe'), fn ($q, $v) => $q->whereIn('sexe', $v))
             ->when($liste('statut'), fn ($q, $v) => $q->whereIn('statut', $v))
             ->when($liste('niveau_priorite'), fn ($q, $v) => $q->whereIn('niveau_priorite', $v))
@@ -393,19 +390,14 @@ class ExtractionsParrainage
     }
 
     /**
-     * Localité : zone d'intervention du parrain (régions entières ou provinces), plus les régions et provinces
-     * ajoutées. Une province ajoutée limite sa région ajoutée à cette province. Sans aucun choix : aucun filtre.
+     * Zone d'intervention choisie : régions entières ou certaines de leurs provinces. Une province cochée
+     * limite sa région à cette province. Sans aucun choix (toutes les régions) : aucun filtre.
      */
-    private function dansLesLocalites(Builder $requete, ?Parrain $parrain, array $regions, array $provinces): Builder
+    private function dansLesLocalites(Builder $requete, array $regions, array $provinces): Builder
     {
-        $zones = $parrain?->zones ?? collect();
-        $provincesAjoutees = Province::whereIn('id', $provinces)->get(['id', 'region_id']);
-        $regionsEntieres = $zones->whereNull('province_id')->pluck('region_id')
-            ->merge(array_diff(array_map('intval', $regions), $provincesAjoutees->pluck('region_id')->all()))
-            ->unique()->values()->all();
-        $provincesChoisies = $zones->whereNotNull('province_id')->pluck('province_id')
-            ->merge($provincesAjoutees->pluck('id'))
-            ->unique()->values()->all();
+        $provincesChoisies = Province::whereIn('id', $provinces)->whereIn('region_id', $regions)->get(['id', 'region_id']);
+        $regionsEntieres = array_values(array_diff(array_map('intval', $regions), $provincesChoisies->pluck('region_id')->all()));
+        $provincesChoisies = $provincesChoisies->pluck('id')->all();
 
         if (! $regionsEntieres && ! $provincesChoisies) {
             return $requete;

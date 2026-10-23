@@ -50,12 +50,6 @@
             <option value="{{ $cle }}" @selected($filtres['type'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
-        <select class="form-select" name="region_id" aria-label="Filtrer par zone d’intervention" onchange="this.form.submit()">
-          <option value="">Toutes les zones</option>
-          @foreach ($regions as $id => $nom)
-            <option value="{{ $id }}" @selected($filtres['region_id'] === $id)>{{ $nom }}</option>
-          @endforeach
-        </select>
         <select class="form-select" name="actif" aria-label="Filtrer par statut" onchange="this.form.submit()">
           <option value="">Actifs et inactifs</option>
           <option value="1" @selected($filtres['actif'] === '1')>Actifs</option>
@@ -70,7 +64,6 @@
             <th scope="col">Parrain</th>
             <th scope="col">Type</th>
             <th scope="col">Contact</th>
-            <th scope="col">Zone d’intervention</th>
             <th scope="col" class="text-end">OEV appuyés</th>
             <th scope="col">Statut</th>
             <th scope="col" class="text-end">Action</th>
@@ -90,7 +83,6 @@
                 {{ $parrain->contact_nom ?? '—' }}
                 @if ($parrain->telephone)<span class="d-block small text-muted">{{ $parrain->telephone }}</span>@endif
               </td>
-              <td class="small">{{ $parrain->libelleZones() }}</td>
               <td class="text-end">{{ $parrain->oev_appuyes_count }}</td>
               <td>
                 <span class="badge rounded-pill text-bg-{{ $parrain->actif ? 'success' : 'secondary' }}">{{ $parrain->actif ? 'Actif' : 'Inactif' }}</span>
@@ -106,7 +98,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">Aucun parrain trouvé.</td>
+              <td colspan="6" class="text-center text-muted py-4">Aucun parrain trouvé.</td>
             </tr>
           @endforelse
         </tbody>

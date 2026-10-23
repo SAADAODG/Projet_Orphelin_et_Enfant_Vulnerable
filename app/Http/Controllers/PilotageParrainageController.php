@@ -60,7 +60,7 @@ class PilotageParrainageController extends Controller
     {
         $utilisateur = $request->user();
         $vue = $request->query('vue') === 'paiement' && $this->peutExtrairePaiement($utilisateur) ? 'paiement' : 'parrain';
-        $parrain = Parrain::with(['zones.region', 'zones.province', 'engagements'])->find($request->integer('parrain_id'));
+        $parrain = Parrain::with('engagements')->find($request->integer('parrain_id'));
         $filtresParrain = $parrain ? $this->filtresListeParrain($request, $parrain) : null;
         // Liste comptée par la base ; seuls les 10 premiers OEV sont lus pour l'aperçu
         $liste = $parrain ? $this->extractions->listeParrain($parrain, $utilisateur, $filtresParrain) : ['nombre' => 0, 'apercu' => fn () => []];
@@ -177,7 +177,7 @@ class PilotageParrainageController extends Controller
             return back()->withInput()->withErrors(['confirmation_identite' => 'Confirmez l’extraction des données d’identité des enfants.']);
         }
 
-        $parrain = Parrain::with(['zones', 'engagements'])->findOrFail($request->integer('parrain_id'));
+        $parrain = Parrain::with('engagements')->findOrFail($request->integer('parrain_id'));
         $f = $this->filtresListeParrain($request, $parrain);
         if ($f['source'] === 'attente' && ! $f['session']) {
             return back()->withInput()->withErrors(['session_id' => 'Choisissez la session dont la liste d’attente est extraite.']);
@@ -194,7 +194,6 @@ class PilotageParrainageController extends Controller
             'session' => $f['session']?->reference(),
             'annee' => $f['annee'],
             'nature' => $f['nature']?->code,
-            'zone_parrain' => $f['zone_parrain'],
         ] + collect($f)->only(self::FILTRES_MULTIPLES)->all() + collect($f)->only(['age_min', 'age_max'])->all())
             ->filter(fn ($v) => $v !== null && $v !== '' && $v !== [])->all();
 
@@ -225,13 +224,13 @@ class PilotageParrainageController extends Controller
 
     /**
      * Filtres de la liste pour un parrain. Au premier affichage (pas de « filtre » dans la requête),
-     * la liste est préfiltrée sur la zone du parrain et la première nature de ses engagements.
+     * la liste est préfiltrée sur la première nature de ses engagements, dans toutes les régions.
      */
     private function filtresListeParrain(Request $request, Parrain $parrain): array
     {
-        $preferences = $this->extractions->preferencesParrain($parrain);
+        $naturesParrain = $this->extractions->naturesParrain($parrain);
         $premierAffichage = ! $request->has('filtre');
-        $natureId = $premierAffichage ? ($preferences['natures'][0] ?? null) : ($request->integer('nature_id') ?: null);
+        $natureId = $premierAffichage ? ($naturesParrain[0] ?? null) : ($request->integer('nature_id') ?: null);
         $annee = (string) $request->input('annee', '');
         $plusieurs = fn (string $cle, array $liste) => array_values(array_unique(array_filter(
             array_map('strval', (array) $request->input($cle, [])),
@@ -243,8 +242,7 @@ class PilotageParrainageController extends Controller
             'session' => SessionParrainage::find($request->integer('session_id')),
             'annee' => preg_match('/^\d{4}-\d{4}$/', $annee) ? $annee : SessionParrainageController::anneeScolaireCourante(),
             'nature' => $natureId ? NatureAppui::find($natureId) : null,
-            'zone_parrain' => $premierAffichage || $request->boolean('zone_parrain'),
-            // Localités ajoutées à la zone du parrain, pour compléter la liste
+            // Zone d'intervention : régions et provinces cochées ; aucune = toutes les régions
             'regions' => array_values(array_filter(array_map('intval', (array) $request->input('regions', [])))),
             'provinces' => array_values(array_filter(array_map('intval', (array) $request->input('provinces', [])))),
             'sexe' => $plusieurs('sexe', Oev::SEXES),
@@ -255,7 +253,7 @@ class PilotageParrainageController extends Controller
             'handicap' => $plusieurs('handicap', ['1' => 1, '0' => 1]),
             'age_min' => is_numeric($request->input('age_min')) ? max(0, min(25, (int) $request->input('age_min'))) : null,
             'age_max' => is_numeric($request->input('age_max')) ? max(0, min(25, (int) $request->input('age_max'))) : null,
-            'natures_parrain' => $preferences['natures'],
+            'natures_parrain' => $naturesParrain,
         ];
     }
 

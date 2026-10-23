@@ -213,7 +213,8 @@ class PilotageParrainageAvant
         $natures = NatureAppui::whereIn('id', $parNature->pluck('cle'))->pluck('libelle', 'id');
 
         return [
-            'actifs' => Parrain::actifs()->when($region, fn ($q) => $q->intervenantDans($region))->count(),
+            // Dans une région : parrains actifs qui y ont appuyé des OEV (la zone d'intervention se choisit à l'extraction)
+            'actifs' => Parrain::actifs()->when($region, fn ($q) => $q->whereIn('id', (clone $appuis)->select('parrain_id')))->count(),
             'montant' => (int) (clone $appuis)->sum('montant'),
             'parParrain' => $parParrain->take(10)->map(fn ($l) => ['libelle' => $noms[$l->cle] ?? '—', 'oev' => (int) $l->oev, 'montant' => (int) $l->montant]),
             'parNature' => $parNature->map(fn ($l) => ['libelle' => $natures[$l->cle] ?? '—', 'oev' => (int) $l->oev, 'montant' => (int) $l->montant]),

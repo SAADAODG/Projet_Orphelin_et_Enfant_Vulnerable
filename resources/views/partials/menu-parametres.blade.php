@@ -9,6 +9,7 @@
   foreach (\App\Models\ListeReference::listes() as $cleListe => $configListe) {
     $liensParametres[] = [$configListe['titre'], $configListe['icone'], route('parametres.listes.index', $cleListe), request()->routeIs('parametres.listes.*') && request()->route('liste') === $cleListe];
   }
+  $liensParametres[] = ['Natures d’appui', 'bi-gift', route('parametres.natures-appui.index'), request()->routeIs('parametres.natures-appui.*')];
 @endphp
 <a class="nav-link nav-groupe {{ $ecranParametres ? '' : 'collapsed' }}" href="#menu-parametres" data-bs-toggle="collapse" role="button" aria-expanded="{{ $ecranParametres ? 'true' : 'false' }}" aria-controls="menu-parametres">
   <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>

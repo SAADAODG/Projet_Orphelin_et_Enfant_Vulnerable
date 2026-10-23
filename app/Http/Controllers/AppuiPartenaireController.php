@@ -40,7 +40,6 @@ class AppuiPartenaireController extends Controller
         'parrain_id' => 'N° du parrain (feuille « Parrains »)',
         'annee' => 'Année scolaire (ex : 2026-2027)',
         'nature' => 'Code nature (feuille « Natures »)',
-        'nature_precision' => 'Précision (nature « autre »)',
         'montant' => 'Montant FCFA (vide si en nature)',
         'date_debut' => 'Date de début (jj/mm/aaaa)',
         'date_fin' => 'Date de fin (jj/mm/aaaa)',
@@ -178,9 +177,9 @@ class AppuiPartenaireController extends Controller
         $classeur = new Spreadsheet();
         $feuille = $classeur->getActiveSheet()->setTitle('Appuis');
         $feuille->fromArray([array_keys(self::COLONNES_IMPORT), array_values(self::COLONNES_IMPORT)]);
-        $feuille->getStyle('A1:J1')->getFont()->setBold(true);
-        $feuille->getStyle('A2:J2')->getFont()->setItalic(true)->getColor()->setRGB('6B7280');
-        foreach (range('A', 'J') as $colonne) {
+        $feuille->getStyle('A1:I1')->getFont()->setBold(true);
+        $feuille->getStyle('A2:I2')->getFont()->setItalic(true)->getColor()->setRGB('6B7280');
+        foreach (range('A', 'I') as $colonne) {
             $feuille->getColumnDimension($colonne)->setAutoSize(true);
         }
 
@@ -268,14 +267,13 @@ class AppuiPartenaireController extends Controller
             'parrain_id' => is_numeric($ligne['parrain_id']) ? (int) $ligne['parrain_id'] : $ligne['parrain_id'],
             'annee' => (string) $ligne['annee'],
             'nature_appui_id' => $nature?->id,
-            'nature_precision' => $ligne['nature_precision'] ?: null,
             'montant' => Montant::normaliserSaisie(is_numeric($ligne['montant']) ? (string) (int) $ligne['montant'] : $ligne['montant']),
             'date_debut' => self::dateExcel($ligne['date_debut']),
             'date_fin' => self::dateExcel($ligne['date_fin']),
             'observations' => $ligne['observations'] ?: null,
         ];
 
-        $validateur = Validator::make($donnees, $this->regles($nature), [
+        $validateur = Validator::make($donnees, $this->regles(), [
             'oev_id.required' => $ligne['code_oev']
                 ? "OEV « {$ligne['code_oev']} » introuvable, non intégré, désactivé ou hors de votre zone."
                 : 'Code OEV manquant.',
@@ -314,7 +312,7 @@ class AppuiPartenaireController extends Controller
         $request->merge(['montant' => Montant::normaliserSaisie($request->input('montant'))]);
         $nature = NatureAppui::find($request->integer('nature_appui_id'));
 
-        $regles = $this->regles($nature, $appui);
+        $regles = $this->regles($appui);
         // L'OEV choisi doit être intégré et dans la zone de l'utilisateur
         $regles['oev_id'][] = Rule::in($this->oevsSaisissables($request->user())->whereKey($request->integer('oev_id'))->pluck('id'));
         $regles['motif_doublon'] = ['nullable', 'string', 'max:2000'];
@@ -331,12 +329,11 @@ class AppuiPartenaireController extends Controller
         }
 
         return collect($donnees)->except('motif_doublon')->all() + [
-            'nature_precision' => $nature?->code === NatureAppui::AUTRE ? ($donnees['nature_precision'] ?? null) : null,
             'motif_doublon' => $doublons ? $motif : null,
         ];
     }
 
-    private function regles(?NatureAppui $nature, ?AppuiPartenaire $appui = null): array
+    private function regles(?AppuiPartenaire $appui = null): array
     {
         return [
             'oev_id' => ['required', 'integer'],
@@ -351,7 +348,6 @@ class AppuiPartenaireController extends Controller
                 }
             }],
             'nature_appui_id' => ['required', 'integer', Rule::exists('natures_appui', 'id')->where('actif', true)],
-            'nature_precision' => [Rule::requiredIf($nature?->code === NatureAppui::AUTRE), 'nullable', 'string', 'max:150'],
             'montant' => ['nullable', 'integer', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
@@ -368,7 +364,6 @@ class AppuiPartenaireController extends Controller
             'parrain_id.exists' => 'Parrain inconnu ou désactivé.',
             'annee.regex' => 'L’année scolaire s’écrit sous la forme 2026-2027.',
             'nature_appui_id.required' => 'Choisissez la nature de l’appui.',
-            'nature_precision.required' => 'Précisez la nature de l’appui.',
             'montant.integer' => 'Le montant doit être un nombre entier de FCFA.',
             'date_fin.after_or_equal' => 'La date de fin ne peut pas précéder la date de début.',
         ];

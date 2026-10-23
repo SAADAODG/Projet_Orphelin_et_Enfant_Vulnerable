@@ -1,7 +1,9 @@
 {{--
   Filtre de localité à choix multiple : régions entières, ou seulement certaines de leurs provinces.
   Une région cochée sans province = toute la région ; avec des provinces cochées = ces provinces seulement.
-  Variables : $localites (arborescence de la zone de l'utilisateur), $regions (ids cochés), $provinces (ids cochés)
+  « Toutes les régions » (aucune région cochée) : pas de filtre de localité.
+  Variables : $localites (arborescence de la zone de l'utilisateur), $regions (ids cochés), $provinces (ids cochés),
+  $label (facultatif, « Localité » par défaut)
 --}}
 @php
   $regions = array_map('intval', (array) $regions);
@@ -12,18 +14,22 @@
       return $parProvince->isEmpty() ? $r['nom'] : $r['nom'] . ' (' . $parProvince->implode(', ') . ')';
   });
   $resume = match ($choix->count()) {
-      0 => 'Toutes les localités',
+      0 => 'Toutes les régions',
       1 => $choix->first(),
       default => $choix->count() . ' régions choisies',
   };
 @endphp
-<label class="form-label" for="m-localites">Localité</label>
+<label class="form-label" for="m-localites">{{ $label ?? 'Localité' }}</label>
 <div class="dropdown" data-multi>
   <button class="form-select form-select-sm text-start text-truncate" id="m-localites" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="{{ $choix->implode(' · ') }}">
     {{ $resume }}
   </button>
   <div class="dropdown-menu sel-multi-menu sel-multi-menu--large p-2">
     <p class="small text-muted mb-2">Cochez des régions ; pour n’en garder qu’une partie, cochez ensuite ses provinces.</p>
+    <div class="form-check border-bottom pb-2 mb-2">
+      <input class="form-check-input" type="checkbox" id="m-toutes-regions" @checked($choix->isEmpty()) data-toutes-regions>
+      <label class="form-check-label fw-semibold" for="m-toutes-regions">Toutes les régions</label>
+    </div>
     @foreach ($localites as $region)
       @php($regionCochee = in_array($region['id'], $regions, true))
       <div class="sel-region" data-region>
@@ -44,3 +50,25 @@
     @endforeach
   </div>
 </div>
+
+@once
+@push('scripts')
+<script>
+  // « Toutes les régions » : décoche les régions choisies ; cocher une région la décoche
+  document.addEventListener('change', function (e) {
+    var menu = e.target.closest('[data-multi]');
+    if (!menu || !menu.querySelector('[data-toutes-regions]')) return;
+    var toutes = menu.querySelector('[data-toutes-regions]');
+    if (e.target === toutes) {
+      if (!toutes.checked) { toutes.checked = true; return; }
+      menu.querySelectorAll('[data-region-case]:checked').forEach(function (c) {
+        c.checked = false;
+        c.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    } else if (e.target.matches('[data-region-case]')) {
+      toutes.checked = !menu.querySelector('[data-region-case]:checked');
+    }
+  });
+</script>
+@endpush
+@endonce

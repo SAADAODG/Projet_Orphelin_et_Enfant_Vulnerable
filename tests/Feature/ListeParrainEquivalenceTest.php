@@ -36,7 +36,6 @@ class ListeParrainEquivalenceTest extends TestCase
         $central = User::factory()->create()->assignRole('agent DGFE');
         $dr = User::factory()->create(['region_id' => $ici->province->region_id])->assignRole('DR');
         $parrain = Parrain::create(['type' => 'ong', 'nom' => 'ONG', 'actif' => true]);
-        $parrain->zones()->create(['region_id' => $ici->province->region_id]);
         $session = SessionParrainage::create([
             'description' => 'S1', 'annee' => '2026-2027', 'numero' => 1, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
             'enveloppe' => 1_000_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
@@ -86,20 +85,20 @@ class ListeParrainEquivalenceTest extends TestCase
         $combinaisons = 0;
         foreach (['eligibles', 'attente'] as $origine) {
             foreach ([null, $scolaire, $sante] as $nature) {
-                foreach ([true, false] as $zoneParrain) {
+                foreach ([[], [$ici->province->region_id]] as $regions) {
                     foreach ([[], ['F'], ['M', 'F']] as $sexe) {
                         foreach ([[], ['1'], ['0'], ['1', '0']] as $handicap) {
                             foreach ([[], ['eleve', 'faible']] as $priorite) {
                                 foreach (['central' => $central, 'dr' => $dr] as $niveau => $utilisateur) {
                                     $f = [
-                                        'source' => $origine, 'session' => $session, 'annee' => '2026-2027', 'nature' => $nature, 'zone_parrain' => $zoneParrain,
-                                        'regions' => [], 'provinces' => [], 'sexe' => $sexe, 'statut' => [], 'vulnerabilite' => [],
+                                        'source' => $origine, 'session' => $session, 'annee' => '2026-2027', 'nature' => $nature, 'zone_parrain' => false,
+                                        'regions' => $regions, 'provinces' => [], 'sexe' => $sexe, 'statut' => [], 'vulnerabilite' => [],
                                         'niveau_priorite' => $priorite, 'niveau_etude' => [], 'handicap' => $handicap, 'age_min' => null, 'age_max' => null,
                                     ];
                                     $attendu = $ancien->listeParrain($parrain, $utilisateur, $f)->map(fn (Oev $o) => [$o->id, $o->besoin_estime])->all();
                                     $liste = $nouveau->listeParrain($parrain, $utilisateur, $f);
                                     $obtenu = $liste['oevs']->map(fn (Oev $o) => [$o->id, $o->besoin_estime])->values()->all();
-                                    $contexte = "{$origine}, nature " . ($nature?->code ?? 'aucune') . ', zone ' . (int) $zoneParrain
+                                    $contexte = "{$origine}, nature " . ($nature?->code ?? 'aucune') . ', zone ' . ($regions ? 'région' : 'toutes')
                                         . ', sexe ' . implode('+', $sexe) . ', handicap ' . implode('+', $handicap) . ', priorité ' . implode('+', $priorite) . ", {$niveau}";
                                     $this->assertSame($attendu, $obtenu, "Écart pour {$contexte}");
                                     $this->assertSame(count($attendu), $liste['nombre'], "Nombre faux pour {$contexte}");

@@ -238,7 +238,6 @@ class PilotageParrainageTest extends TestCase
     public function test_la_liste_pour_un_parrain_est_anonymisee_et_exclut_les_oev_deja_appuyes(): void
     {
         $scolaire = NatureAppui::where('code', 'scolaire')->firstOrFail();
-        $this->parrain->zones()->create(['region_id' => $this->ouagadougou->province->region_id]);
         $this->parrain->engagements()->create(['date_engagement' => '2026-09-01', 'natures_appui' => [$scolaire->id]]);
 
         $propose = $this->oev($this->ouagadougou, ['nom' => 'KABORE', 'prenom' => 'Alice', 'niveau_priorite' => 'eleve']);
@@ -247,7 +246,7 @@ class PilotageParrainageTest extends TestCase
         $this->oev($this->ouagadougou, ['nom' => 'DESACTIVE', 'desactivation_etat' => Oev::DESACTIVE]);
         AppuiPartenaire::create(['oev_id' => $dejaAppuye->id, 'parrain_id' => $this->parrain->id, 'annee' => '2026-2027', 'nature_appui_id' => $scolaire->id]);
 
-        // Aperçu : préfiltré sur la zone et la nature du parrain
+        // Aperçu : préfiltré sur la nature du parrain, dans toutes les régions (de la zone du DP)
         $this->actingAs($this->dp)->get(route('parrainage.pilotage.extractions', ['parrain_id' => $this->parrain->id, 'annee' => '2026-2027']))
             ->assertOk()
             ->assertViewHas('nombreListe', 1)
@@ -255,7 +254,7 @@ class PilotageParrainageTest extends TestCase
 
         $reponse = $this->actingAs($this->dp)->get(route('parrainage.pilotage.liste-parrain', [
             'parrain_id' => $this->parrain->id, 'format' => 'xlsx', 'filtre' => 1, 'source' => 'eligibles',
-            'annee' => '2026-2027', 'nature_id' => $scolaire->id, 'zone_parrain' => 1,
+            'annee' => '2026-2027', 'nature_id' => $scolaire->id,
         ]));
         $contenu = $this->contenu($this->feuilles($reponse), 'OEV proposés');
         $this->assertStringContainsString('Initiales', $contenu);
@@ -308,21 +307,24 @@ class PilotageParrainageTest extends TestCase
         $this->assertStringNotContainsString('Date de naissance', $nominatif);
     }
 
-    public function test_la_liste_pour_un_parrain_se_complete_avec_d_autres_regions_et_filtres_multiples(): void
+    public function test_la_zone_d_intervention_se_choisit_a_l_extraction(): void
     {
-        $this->parrain->zones()->create(['region_id' => $this->ouagadougou->province->region_id]);
         $this->oev($this->ouagadougou, ['nom' => 'DANS_LA_ZONE', 'sexe' => 'F']);
         $this->oev($this->ailleurs, ['nom' => 'AJOUTEE_F', 'sexe' => 'F']);
         $this->oev($this->ailleurs, ['nom' => 'AJOUTEE_M', 'sexe' => 'M']);
-        $filtres = ['parrain_id' => $this->parrain->id, 'filtre' => 1, 'zone_parrain' => 1, 'annee' => '2026-2027'];
+        $filtres = ['parrain_id' => $this->parrain->id, 'filtre' => 1, 'annee' => '2026-2027', 'regions' => [$this->ouagadougou->province->region_id]];
 
         $noms = fn (array $plus) => collect($this->actingAs($this->central)
-            ->get(route('parrainage.pilotage.extractions', $filtres + $plus))->viewData('apercu'))->pluck('nom')->sort()->values()->all();
+            ->get(route('parrainage.pilotage.extractions', $plus + $filtres))->viewData('apercu'))->pluck('nom')->sort()->values()->all();
 
         $this->assertSame(['DANS_LA_ZONE'], $noms([]));
-        // Zone du parrain + une région ajoutée pour compléter la liste
-        $this->assertSame(['AJOUTEE_F', 'AJOUTEE_M', 'DANS_LA_ZONE'], $noms(['regions' => [$this->ailleurs->province->region_id]]));
-        $this->assertSame(['AJOUTEE_F', 'DANS_LA_ZONE'], $noms(['regions' => [$this->ailleurs->province->region_id], 'sexe' => ['F']]));
+        // Deux régions cochées, puis toutes les régions (aucune cochée)
+        $deux = ['regions' => [$this->ouagadougou->province->region_id, $this->ailleurs->province->region_id]];
+        $this->assertSame(['AJOUTEE_F', 'AJOUTEE_M', 'DANS_LA_ZONE'], $noms($deux));
+        $this->assertSame(['AJOUTEE_F', 'DANS_LA_ZONE'], $noms($deux + ['sexe' => ['F']]));
+        $this->assertSame(['AJOUTEE_F', 'AJOUTEE_M', 'DANS_LA_ZONE'], $noms(['regions' => []]));
+        // Une province cochée limite sa région à cette province
+        $this->assertSame(['AJOUTEE_F', 'AJOUTEE_M'], $noms(['regions' => [$this->ailleurs->province->region_id], 'provinces' => [$this->ailleurs->province_id]]));
 
         // Aperçu à l'écran : l'enfant est nommé ; le fichier anonymisé ne contient que les données cochées
         $this->get(route('parrainage.pilotage.extractions', $filtres))->assertOk()->assertSee('DANS_LA_ZONE')->assertSee('Initiales');

@@ -235,7 +235,7 @@
       <section class="oev-carte h-100">
         <h2 class="oev-carte-titre"><i class="bi bi-people" aria-hidden="true"></i> Partenaires</h2>
         <p class="mb-3">
-          <strong>{{ $pa['actifs'] }}</strong> parrain(s) actif(s) dans la zone ·
+          <strong>{{ $pa['actifs'] }}</strong> parrain(s) actif(s){{ $f['perimetre']->region ? ' ayant appuyé des OEV de la zone' : '' }} ·
           <strong>{{ $c['partenaires'] }}</strong> OEV appuyé(s) · <strong>{{ Montant::fcfa($pa['montant']) }}</strong>
         </p>
         @if ($pa['parParrain']->isEmpty())

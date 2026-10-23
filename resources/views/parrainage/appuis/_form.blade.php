@@ -2,12 +2,10 @@
   Champs d'un appui. Variables : $appui, $parrains, $natures, $oevChoisi
   Si l'OEV a déjà un appui de même nature cette année (session « doublons »), l'agent confirme avec un motif.
 --}}
-@use('App\Models\NatureAppui')
 @use('App\Support\Montant')
 @php
   $doublons = session('doublons', []);
   $montant = old('montant', $appui->montant);
-  $codeAutre = $natures->firstWhere('code', NatureAppui::AUTRE)?->id;
 @endphp
 
 @if ($doublons)
@@ -57,18 +55,13 @@
 
   <div class="col-sm-6">
     <label class="form-label" for="nature_appui_id">Nature de l’appui <span class="text-danger">*</span></label>
-    <select class="form-select @error('nature_appui_id') is-invalid @enderror" id="nature_appui_id" name="nature_appui_id" required data-nature data-code-autre="{{ $codeAutre }}">
+    <select class="form-select @error('nature_appui_id') is-invalid @enderror" id="nature_appui_id" name="nature_appui_id" required>
       <option value="">Choisir…</option>
       @foreach ($natures as $nature)
         <option value="{{ $nature->id }}" @selected((string) old('nature_appui_id', $appui->nature_appui_id) === (string) $nature->id)>{{ $nature->libelle }}</option>
       @endforeach
     </select>
     @error('nature_appui_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-  </div>
-  <div class="col-sm-6" data-precision @if ((string) old('nature_appui_id', $appui->nature_appui_id) !== (string) $codeAutre) hidden @endif>
-    <label class="form-label" for="nature_precision">Précisez <span class="text-danger">*</span></label>
-    <input class="form-control @error('nature_precision') is-invalid @enderror" id="nature_precision" name="nature_precision" type="text" maxlength="150" value="{{ old('nature_precision', $appui->nature_precision) }}">
-    @error('nature_precision')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
 
   <div class="col-sm-4">
@@ -98,13 +91,6 @@
 @push('scripts')
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    // Précision demandée seulement pour la nature « Autre »
-    var nature = document.querySelector('[data-nature]');
-    var precision = document.querySelector('[data-precision]');
-    if (nature && precision) {
-      nature.addEventListener('change', function () { precision.hidden = nature.value !== nature.dataset.codeAutre; });
-    }
-
     // Recherche d'un OEV : propositions sous le champ, le choix remplit oev_id
     var bloc = document.querySelector('[data-recherche-oev]');
     if (!bloc) return;

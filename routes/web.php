@@ -11,6 +11,7 @@ use App\Http\Controllers\EcoleController;
 use App\Http\Controllers\ExtractionController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\ListeReferenceController;
+use App\Http\Controllers\NatureAppuiController;
 use App\Http\Controllers\OevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
@@ -234,6 +235,9 @@ Route::middleware('auth')->prefix('admin')->group(function () {
                 Route::put('/{element}', [ListeReferenceController::class, 'update'])->name('update');
                 Route::delete('/{element}', [ListeReferenceController::class, 'destroy'])->name('destroy');
             });
+            // Natures d'appui du parrainage (appuis des partenaires, engagements, extractions)
+            Route::resource('natures-appui', NatureAppuiController::class)->only(['index', 'store', 'update', 'destroy'])
+                ->parameters(['natures-appui' => 'nature']);
         });
         Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
         Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');

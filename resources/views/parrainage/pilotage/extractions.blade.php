@@ -159,9 +159,6 @@
               <option value="{{ $p->id }}" @selected($parrain?->id === $p->id)>{{ $p->nom }}</option>
             @endforeach
           </select>
-          @if ($parrain)
-            <div class="form-text">Zone d’intervention : {{ $parrain->libelleZones() }}</div>
-          @endif
         </div>
 
         @if ($parrain)
@@ -169,46 +166,39 @@
             <span class="form-label d-block">Source</span>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="source" id="source-eligibles" value="eligibles" @checked($f['source'] === 'eligibles')>
-              <label class="form-check-label" for="source-eligibles">OEV éligibles sans appui de cette nature pour l’année</label>
+              <label class="form-check-label" for="source-eligibles">OEV éligibles, sans appui de la nature choisie pour l’année</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="source" id="source-attente" value="attente" @checked($f['source'] === 'attente')>
               <label class="form-check-label" for="source-attente">Liste d’attente d’une session</label>
             </div>
           </div>
-          <div class="col-sm-4 col-lg-2">
+          <div class="col-sm-4 col-lg-2" data-source-eligibles>
             <label class="form-label" for="annee">Année scolaire</label>
             <input class="form-control" id="annee" name="annee" value="{{ $f['annee'] }}" pattern="\d{4}-\d{4}">
           </div>
-          <div class="col-sm-8 col-lg-4">
+          <div class="col-sm-8 col-lg-4" data-source-eligibles>
             <label class="form-label" for="nature_id">Nature d’appui</label>
             <select class="form-select" id="nature_id" name="nature_id">
-              <option value="">Toutes</option>
+              <option value="">Toutes (aucun OEV exclu)</option>
               @foreach ($natures->sortBy(fn ($n) => in_array($n->id, $f['natures_parrain'], true) ? 0 : 1) as $nature)
                 <option value="{{ $nature->id }}" @selected($f['nature']?->id === $nature->id)>{{ $nature->libelle }}@if (in_array($nature->id, $f['natures_parrain'], true)) (proposée par le parrain)@endif</option>
               @endforeach
             </select>
           </div>
-          <div class="col-sm-6 col-lg-3">
-            <label class="form-label" for="session_liste">Session <span class="text-muted small">(liste d’attente)</span></label>
+          <div class="col-sm-6 col-lg-3" data-source-attente>
+            <label class="form-label" for="session_liste">Session <span class="text-danger">*</span></label>
             <select class="form-select" id="session_liste" name="session_id">
-              <option value="">—</option>
+              <option value="">Choisir une session…</option>
               @foreach ($sessions as $session)
-                <option value="{{ $session->id }}" @selected($f['session']?->id === $session->id)>{{ $session->reference() }}</option>
+                <option value="{{ $session->id }}" @selected($f['session']?->id === $session->id)>{{ $session->reference() }} — {{ $session->description }}</option>
               @endforeach
             </select>
           </div>
 
-          {{-- Localité : zone du parrain, complétée par d'autres régions / provinces --}}
-          <div class="col-md-6 col-lg-3 d-flex align-items-end">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="zone_parrain" name="zone_parrain" value="1" @checked($f['zone_parrain'])>
-              <label class="form-check-label" for="zone_parrain">Zone d’intervention du parrain</label>
-            </div>
-          </div>
+          {{-- Zone d'intervention : choisie à l'extraction (toutes les régions par défaut) --}}
           <div class="col-md-6 col-lg-4">
-            @include('parrainage.selection._filtre-localites', ['localites' => $localites, 'regions' => $f['regions'], 'provinces' => $f['provinces']])
-            <div class="form-text">Ajoutez des régions ou provinces si la zone du parrain ne suffit pas.</div>
+            @include('parrainage.selection._filtre-localites', ['localites' => $localites, 'regions' => $f['regions'], 'provinces' => $f['provinces'], 'label' => 'Zone d’intervention'])
           </div>
 
           {{-- Autres critères à choix multiple --}}
@@ -324,6 +314,16 @@
         provinces.querySelectorAll('input').forEach(function (c) { c.disabled = !region.checked; if (!region.checked) { c.checked = false; } });
       });
     });
+
+    // Source : année et nature pour les éligibles, session pour la liste d'attente
+    var majSource = function () {
+      var attente = formulaire.querySelector('#source-attente');
+      if (!attente) return;
+      formulaire.querySelectorAll('[data-source-eligibles]').forEach(function (b) { b.hidden = attente.checked; });
+      formulaire.querySelectorAll('[data-source-attente]').forEach(function (b) { b.hidden = !attente.checked; });
+    };
+    formulaire.querySelectorAll('input[name="source"]').forEach(function (r) { r.addEventListener('change', majSource); });
+    majSource();
 
     // Confirmation demandée dès qu'une donnée d'identité est cochée
     var confirmation = formulaire.querySelector('[data-confirmation-identite]');

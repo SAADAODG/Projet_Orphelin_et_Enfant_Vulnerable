@@ -33,11 +33,6 @@ class Parrain extends Model
         return $this->belongsToMany(SessionParrainage::class, 'contributions_session')->withPivot('montant')->withTimestamps();
     }
 
-    public function zones(): HasMany
-    {
-        return $this->hasMany(ParrainZone::class);
-    }
-
     public function engagements(): HasMany
     {
         return $this->hasMany(EngagementParrain::class)->latest('date_engagement');
@@ -58,21 +53,9 @@ class Parrain extends Model
         return $query->where('actif', true);
     }
 
-    /** Parrains qui interviennent dans la région (la région entière ou l'une de ses provinces). */
-    public function scopeIntervenantDans(Builder $query, Region $region): Builder
-    {
-        // Une zone « province » porte aussi sa région : la région suffit à les trouver toutes
-        return $query->whereHas('zones', fn ($q) => $q->where('region_id', $region->id));
-    }
-
     public function libelleType(): string
     {
         return self::TYPES[$this->type] ?? $this->type;
-    }
-
-    public function libelleZones(): string
-    {
-        return $this->zones->map->libelle()->sort()->implode(', ') ?: 'Non précisée';
     }
 
     /** Un parrain qui a des appuis ou des contributions se désactive, il ne se supprime pas. */

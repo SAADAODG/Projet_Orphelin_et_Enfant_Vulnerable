@@ -8,8 +8,6 @@ use App\Models\EngagementParrain;
 use App\Models\JournalActivite;
 use App\Models\NatureAppui;
 use App\Models\Parrain;
-use App\Models\Province;
-use App\Models\Region;
 use App\Support\Montant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,7 +19,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Module « Parrains », vue « Répertoire des parrains » : le niveau central gère le répertoire
- * (identité, zone d'intervention, engagements) ; les autres le consultent.
+ * (identité, engagements) ; les autres le consultent. La zone d'intervention se choisit à l'extraction
+ * de la liste d'OEV proposée au parrain (Pilotage > Extractions).
  */
 class ParrainController extends Controller
 {
@@ -32,18 +31,14 @@ class ParrainController extends Controller
         $filtres = [
             'q' => trim((string) $request->query('q', '')),
             'type' => (string) $request->query('type', ''),
-            'region_id' => $request->integer('region_id') ?: null,
             'actif' => (string) $request->query('actif', ''),
         ];
-        $region = $filtres['region_id'] ? Region::find($filtres['region_id']) : null;
 
-        $parrains = Parrain::with(['zones.region', 'zones.province'])
-            ->withCount(['appuis as oev_appuyes_count' => fn ($q) => $q->select(DB::raw('count(distinct oev_id)'))])
+        $parrains = Parrain::withCount(['appuis as oev_appuyes_count' => fn ($q) => $q->select(DB::raw('count(distinct oev_id)'))])
             ->when($filtres['q'] !== '', fn ($q) => $q->where(fn ($q) => $q
                 ->whereLike('nom', "%{$filtres['q']}%")
                 ->orWhereLike('contact_nom', "%{$filtres['q']}%")))
             ->when(array_key_exists($filtres['type'], Parrain::TYPES), fn ($q) => $q->where('type', $filtres['type']))
-            ->when($region, fn ($q) => $q->intervenantDans($region))
             ->when(in_array($filtres['actif'], ['1', '0'], true), fn ($q) => $q->where('actif', $filtres['actif'] === '1'))
             ->orderByDesc('actif')
             ->orderBy('nom')
@@ -53,7 +48,6 @@ class ParrainController extends Controller
         return view('parrainage.parrains.index', [
             'parrains' => $parrains,
             'filtres' => $filtres,
-            'regions' => Region::orderBy('nom')->pluck('nom', 'id'),
             // Fenêtre « Nouveau parrain »
             'formulaire' => $request->user()->can('gérer parrains') ? $this->donneesFormulaire(new Parrain(['actif' => true])) : null,
         ]);
@@ -70,8 +64,7 @@ class ParrainController extends Controller
         $donnees = $this->valider($request);
 
         $parrain = DB::transaction(function () use ($request, $donnees) {
-            $parrain = Parrain::create($donnees['parrain'] + ['created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
-            $this->enregistrerZones($parrain, $donnees);
+            $parrain = Parrain::create($donnees + ['created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
             JournalActivite::consigner('parrain.creation', $parrain, "Création du parrain {$parrain->nom}");
 
             return $parrain;
@@ -82,7 +75,7 @@ class ParrainController extends Controller
 
     public function show(Request $request, Parrain $parrain): View
     {
-        $parrain->load(['zones.region', 'zones.province', 'engagements']);
+        $parrain->load('engagements');
         // Statistiques limitées aux OEV de la zone de l'utilisateur
         $appuis = $this->cloisonner(AppuiPartenaire::where('parrain_id', $parrain->id), 'oev');
 
@@ -100,7 +93,7 @@ class ParrainController extends Controller
 
     public function edit(Parrain $parrain): View
     {
-        return view('parrainage.parrains.edit', $this->donneesFormulaire($parrain->load('zones')));
+        return view('parrainage.parrains.edit', $this->donneesFormulaire($parrain));
     }
 
     public function update(Request $request, Parrain $parrain): RedirectResponse
@@ -109,8 +102,7 @@ class ParrainController extends Controller
 
         DB::transaction(function () use ($request, $parrain, $donnees) {
             $etaitActif = $parrain->actif;
-            $parrain->update($donnees['parrain'] + ['updated_by' => $request->user()->id]);
-            $this->enregistrerZones($parrain, $donnees);
+            $parrain->update($donnees + ['updated_by' => $request->user()->id]);
 
             $description = match (true) {
                 $etaitActif && ! $parrain->actif => "Désactivation du parrain {$parrain->nom}",
@@ -197,25 +189,11 @@ class ParrainController extends Controller
 
     private function donneesFormulaire(Parrain $parrain): array
     {
-        return [
-            'parrain' => $parrain,
-            // Région > provinces, pour les listes déroulantes en cascade de la zone d'intervention
-            'regions' => Region::with(['provinces' => fn ($q) => $q->orderBy('nom')->select(['id', 'nom', 'region_id'])])->orderBy('nom')->get(['id', 'nom']),
-            'zones' => $parrain->zones->map(fn ($zone) => ['region_id' => $zone->region_id, 'province_id' => $zone->province_id])->values()->all(),
-        ];
+        return ['parrain' => $parrain];
     }
 
-    /**
-     * Zone d'intervention : des lignes « région + province facultative » (zones[n][region_id], zones[n][province_id]).
-     * Sans province, toute la région est couverte.
-     *
-     * @return array{parrain: array, regions: array<int>, provinces: array<int>}
-     */
     private function valider(Request $request): array
     {
-        // Lignes laissées vides (aucune région choisie) ignorées
-        $request->merge(['zones' => array_values(array_filter((array) $request->input('zones', []), fn ($zone) => ! empty($zone['region_id'])))]);
-
         $donnees = $request->validate([
             'type' => ['required', Rule::in(array_keys(Parrain::TYPES))],
             'nom' => ['required', 'string', 'max:200'],
@@ -223,40 +201,11 @@ class ParrainController extends Controller
             'telephone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
             'adresse' => ['nullable', 'string', 'max:255'],
-            'zones' => ['array'],
-            'zones.*.region_id' => ['required', 'integer', Rule::exists('regions', 'id')],
-            'zones.*.province_id' => ['nullable', 'integer', function (string $attribut, $valeur, \Closure $echec) use ($request) {
-                $regionId = data_get($request->input(), str_replace('province_id', 'region_id', $attribut));
-                if (! Province::whereKey($valeur)->where('region_id', $regionId)->exists()) {
-                    $echec('La province choisie n’appartient pas à la région.');
-                }
-            }],
         ], [
             'nom.required' => 'Indiquez le nom ou la raison sociale du parrain.',
-            'zones.*.region_id.exists' => 'Région inconnue.',
         ]);
 
-        $zones = collect($donnees['zones'] ?? []);
-
-        return [
-            'parrain' => collect($donnees)->only(['type', 'nom', 'contact_nom', 'telephone', 'email', 'adresse'])->all()
-                + ['actif' => $request->boolean('actif')],
-            'regions' => $zones->whereNull('province_id')->pluck('region_id')->map(fn ($id) => (int) $id)->all(),
-            'provinces' => $zones->whereNotNull('province_id')->pluck('province_id')->map(fn ($id) => (int) $id)->all(),
-        ];
-    }
-
-    private function enregistrerZones(Parrain $parrain, array $donnees): void
-    {
-        $parrain->zones()->delete();
-        foreach (array_unique($donnees['regions']) as $regionId) {
-            $parrain->zones()->create(['region_id' => $regionId]);
-        }
-        // Une province dont toute la région est déjà choisie est redondante
-        $provinces = Province::whereIn('id', array_unique($donnees['provinces']))->whereNotIn('region_id', $donnees['regions'])->get(['id', 'region_id']);
-        foreach ($provinces as $province) {
-            $parrain->zones()->create(['region_id' => $province->region_id, 'province_id' => $province->id]);
-        }
+        return $donnees + ['actif' => $request->boolean('actif')];
     }
 
     private function supprimerConvention(EngagementParrain $engagement): void
