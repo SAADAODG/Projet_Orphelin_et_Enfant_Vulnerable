@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Commune;
 use App\Models\Oev;
+use App\Models\ParametreOev;
 use App\Models\User;
 use App\Models\Village;
 use Database\Seeders\CommuneSeeder;
@@ -225,6 +226,59 @@ class OevTest extends TestCase
         $this->assertSame('financieres', $oev->raison_non_scolarisation);
         $this->assertNull($oev->etablissement_actuel);
         $this->get(route('oevs.show', $oev))->assertOk()->assertSee('Contraintes financières')->assertSee('n’est pas scolarisé', false);
+    }
+
+    public function test_l_age_de_sortie_est_parametrable_et_plus_long_en_situation_de_handicap(): void
+    {
+        $admin = User::factory()->create()->assignRole('administrateur');
+        $this->actingAs($this->dp)->get(route('parametres.age-oev.edit'))->assertAccesRefuse();
+        $this->actingAs($admin)->get(route('parametres.age-oev.edit'))->assertOk()->assertSee('Âge des OEV');
+        // L'âge en situation de handicap ne peut pas être inférieur à l'âge général
+        $this->put(route('parametres.age-oev.update'), ['age_limite' => 18, 'age_limite_handicap' => 16])->assertSessionHasErrors('age_limite_handicap');
+        $this->put(route('parametres.age-oev.update'), ['age_limite' => 16, 'age_limite_handicap' => 21])->assertSessionHasNoErrors();
+        $this->assertSame(16, ParametreOev::ageLimite());
+        $this->assertSame(21, ParametreOev::ageLimite(true));
+
+        $dixSeptAns = now()->subYears(17)->subMonth()->toDateString();
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $dixSeptAns]))
+            ->assertSessionHasErrors(['date_naissance' => 'L’enfant doit avoir moins de 16 ans pour avoir le statut d’OEV (21 ans en situation de handicap).']);
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => $dixSeptAns, 'handicap' => '1', 'types_handicap' => ['moteur']]))
+            ->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['date_naissance' => now()->subYears(21)->toDateString(), 'handicap' => '1', 'types_handicap' => ['moteur']]))
+            ->assertSessionHasErrors('date_naissance');
+    }
+
+    public function test_un_oev_qui_a_atteint_l_age_de_sortie_n_est_plus_beneficiaire(): void
+    {
+        $this->actingAs($this->dp)->post(route('oevs.store'), $this->donneesOev(['date_naissance' => now()->subYears(17)->toDateString()]))->assertSessionHasNoErrors();
+        $this->post(route('oevs.store'), $this->donneesOev(['nom' => 'HANDICAP', 'date_naissance' => now()->subYears(17)->toDateString(), 'handicap' => '1', 'types_handicap' => ['visuel']]))
+            ->assertSessionHasNoErrors();
+        Oev::query()->update(['statut_dossier' => Oev::ETAT_INTEGRE]);
+        $this->assertSame(2, Oev::beneficiaires()->count());
+
+        // L'âge général passe à 17 ans : seul l'enfant en situation de handicap reste bénéficiaire
+        ParametreOev::enregistrer(ParametreOev::AGE_LIMITE, 17);
+        $this->assertSame(['HANDICAP'], Oev::beneficiaires()->pluck('nom')->all());
+        $this->assertSame(['OUEDRAOGO'], Oev::sortisParAge()->pluck('nom')->all());
+        $sorti = Oev::where('nom', 'OUEDRAOGO')->sole();
+        $this->assertTrue($sorti->ageLimiteAtteint());
+        $this->actingAs($this->central)->get(route('oevs.show', $sorti))->assertOk()->assertSee('Âge de sortie atteint');
+    }
+
+    public function test_un_enfant_exclu_ne_peut_plus_pretendre_retourner_a_l_ecole(): void
+    {
+        $donnees = $this->donneesOev([
+            'situation_scolaire' => 'descolarise', 'raison_non_scolarisation' => 'financieres', 'niveau_etude' => 'primaire',
+            'classe_precedente' => 'CM1', 'moyenne_annuelle' => '3', 'appreciation' => 'exclu',
+        ]);
+        unset($donnees['etablissement_actuel'], $donnees['type_etablissement'], $donnees['classe'], $donnees['frais_scolarite'], $donnees['systeme_educatif']);
+
+        $this->actingAs($this->dp)->post(route('oevs.store'), $donnees + ['souhait_avenir' => 'ecole'])
+            ->assertSessionHasErrors(['souhait_avenir' => 'L’enfant a été exclu l’année précédente : il ne peut plus prétendre retourner à l’école. Choisissez une formation professionnelle ou une autre réponse.']);
+        $this->assertSame(0, Oev::count());
+
+        $this->post(route('oevs.store'), $donnees + ['souhait_avenir' => 'formation'])->assertSessionHasNoErrors();
+        $this->assertSame('formation', Oev::sole()->souhait_avenir);
     }
 
     public function test_un_enfant_scolarise_doit_avoir_son_etablissement(): void

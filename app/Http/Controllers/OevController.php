@@ -8,6 +8,7 @@ use App\Services\Parrainage\ParcoursScolaire;
 use App\Models\Commune;
 use App\Models\Ecole;
 use App\Models\Oev;
+use App\Models\ParametreOev;
 use App\Models\OevDocument;
 use App\Models\Region;
 use App\Models\User;
@@ -605,7 +606,11 @@ class OevController extends Controller implements HasMiddleware
         $aEteScolarise = in_array($situation, ['scolarise', 'descolarise'], true);
         $nonScolarise = in_array($situation, ['non_scolarise', 'descolarise'], true);
         $vulnerabilitesSaisies = (array) $entree('vulnerabilites');
+        $ageLimite = ParametreOev::ageLimite($entree('handicap') === '1');
         $sansActivite = Oev::sansScolariteNiFormation($situation, $entree('formation_professionnelle'), $entree('formation_etat'));
+        // Exclu l'année précédente : il ne peut plus prétendre retourner à l'école (formation, ou rien pour le moment)
+        $exclu = $situation !== 'non_scolarise' && (filled($entree('ecole_precedente_id')) || filled($entree('etablissement_precedent')))
+            && $entree('appreciation') === 'exclu';
         $scolariseRequis = Rule::requiredIf($estScolarise);
         // École de l'année en cours : choisie parmi celles de la commune de l'enfant (Paramètres > Écoles),
         // ou « autre » pour un établissement hors liste, alors saisi
@@ -709,7 +714,8 @@ class OevController extends Controller implements HasMiddleware
             'nom' => ['required', 'string', 'max:100'],
             'prenom' => ['required', 'string', 'max:150'],
             'sexe' => ['required', Rule::in(array_keys(Oev::SEXES))],
-            'date_naissance' => ['required', 'date', 'before_or_equal:today', 'after:' . now()->subYears(25)->toDateString()],
+            // Âge de sortie (Paramètres > Âge des OEV) : plus élevé pour un enfant en situation de handicap
+            'date_naissance' => ['required', 'date', 'before_or_equal:today', 'after:' . now()->subYears($ageLimite)->toDateString()],
             'date_naissance_estimee' => ['nullable', 'boolean'],
             'lieu_naissance' => ['nullable', 'string', 'max:150'],
             'nationalite' => ['nullable', 'string', 'max:100'],
@@ -811,7 +817,8 @@ class OevController extends Controller implements HasMiddleware
             // Formation achevée : la durée reçue est la durée totale (non demandée)
             'formation_duree_recue_mois' => ['nullable', Rule::requiredIf($entree('formation_professionnelle') === '1' && $entree('formation_etat') === 'en_cours'), 'integer', 'min:0', $dureeRecueCoherente],
             // Ni scolarisé ni en formation : son souhait (école, formation…) oriente un futur parrainage
-            'souhait_avenir' => ['nullable', Rule::requiredIf($sansActivite), Rule::in(array_keys(Oev::SOUHAITS_AVENIR))],
+            'souhait_avenir' => ['nullable', Rule::requiredIf($sansActivite), Rule::in(array_keys(Oev::SOUHAITS_AVENIR)),
+                Rule::when($exclu, [Rule::notIn(['ecole'])])],
             'souhait_avenir_precision' => ['nullable', 'string', 'max:150'],
 
         ];
@@ -864,8 +871,12 @@ class OevController extends Controller implements HasMiddleware
             'formation_duree_mois.required_if' => 'Indiquez la durée de la formation (en mois).',
             'formation_duree_recue_mois.required' => 'Indiquez la durée de formation déjà reçue (en mois).',
             'souhait_avenir.required' => 'L’enfant n’est ni à l’école ni en formation : indiquez ce qu’il souhaite (école, formation…).',
+            'souhait_avenir.not_in' => 'L’enfant a été exclu l’année précédente : il ne peut plus prétendre retourner à l’école. Choisissez une formation professionnelle ou une autre réponse.',
             'date_naissance.before_or_equal' => 'La date de naissance ne peut pas être dans le futur.',
-            'date_naissance.after' => 'L’enfant doit avoir moins de 25 ans.',
+            'date_naissance.after' => $entree('handicap') === '1'
+                ? "Un enfant en situation de handicap doit avoir moins de {$ageLimite} ans pour avoir le statut d’OEV."
+                : "L’enfant doit avoir moins de {$ageLimite} ans pour avoir le statut d’OEV"
+                    . ($ageLimite < ParametreOev::ageLimite(true) ? ' (' . ParametreOev::ageLimite(true) . ' ans en situation de handicap).' : '.'),
             'contact_tuteur.regex' => 'Le numéro de téléphone doit comporter 8 chiffres (ex : 70 12 34 56).',
             'gestionnaire_contact.regex' => 'Le téléphone du gestionnaire du cas doit comporter 8 chiffres (ex : 70 12 34 56).',
             'lieu_provenance.required' => 'Précisez le lieu de provenance (ville, pays) s’il n’est pas dans la liste.',

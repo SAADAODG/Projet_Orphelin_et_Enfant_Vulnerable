@@ -16,7 +16,7 @@
   </div>
 
   <section class="row g-3 mt-0">
-    <div class="col-12 col-xl-9">
+    <div class="col-12">
       <div class="panel">
         <div class="panel-header">
           <div>

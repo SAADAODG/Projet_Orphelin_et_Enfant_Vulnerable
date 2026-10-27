@@ -181,7 +181,7 @@ class SelectionParrainageTest extends TestCase
         $premiere = $this->nouvelleSession();
         $deja = $this->oev('DEJA_RETENU');
         // Non scolarisé et au-delà de l'âge scolaire (6 à 16 ans) : pas concerné par l'appui scolaire
-        $this->oev('NON_SCOLARISE', ['situation_scolaire' => 'non_scolarise', 'date_naissance' => now()->subYears(18)->toDateString()]);
+        $this->oev('NON_SCOLARISE', ['situation_scolaire' => 'non_scolarise', 'date_naissance' => now()->subYears(17)->toDateString()]);
         $this->oev('ELIGIBLE');
         $this->oev('NON_INTEGRE', ['statut_dossier' => Oev::ETAT_VALIDE, 'code' => null]);
         $selection = app(SelectionParrainage::class);

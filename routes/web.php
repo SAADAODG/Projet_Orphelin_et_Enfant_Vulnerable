@@ -13,6 +13,7 @@ use App\Http\Controllers\JournalController;
 use App\Http\Controllers\ListeReferenceController;
 use App\Http\Controllers\NatureAppuiController;
 use App\Http\Controllers\OevController;
+use App\Http\Controllers\AgeOevController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
 use App\Http\Controllers\PasswordResetController;
@@ -235,6 +236,9 @@ Route::middleware('auth')->prefix('admin')->group(function () {
                 Route::put('/{element}', [ListeReferenceController::class, 'update'])->name('update');
                 Route::delete('/{element}', [ListeReferenceController::class, 'destroy'])->name('destroy');
             });
+            // Âge de sortie des OEV (cas général, enfant en situation de handicap)
+            Route::get('/age-oev', [AgeOevController::class, 'edit'])->name('age-oev.edit');
+            Route::put('/age-oev', [AgeOevController::class, 'update'])->name('age-oev.update');
             // Natures d'appui du parrainage (appuis des partenaires, engagements, extractions)
             Route::resource('natures-appui', NatureAppuiController::class)->only(['index', 'store', 'update', 'destroy'])
                 ->parameters(['natures-appui' => 'nature']);

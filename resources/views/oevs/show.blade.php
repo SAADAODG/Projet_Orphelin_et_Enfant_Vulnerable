@@ -132,6 +132,9 @@
           <span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', Oev::STATUTS) }}</span>
           <span class="oev-puce"><i class="bi {{ $oev->sexe === 'F' ? 'bi-gender-female' : 'bi-gender-male' }}" aria-hidden="true"></i>{{ $oev->libelle('sexe', Oev::SEXES) }}</span>
           <span class="oev-puce"><i class="bi bi-cake2" aria-hidden="true"></i>{{ $oev->age() }} ans</span>
+          @if ($oev->ageLimiteAtteint())
+            <span class="badge rounded-pill text-bg-danger" title="Âge de sortie : {{ $oev->ageLimite() }} ans (Paramètres > Âge des OEV)"><i class="bi bi-hourglass-bottom" aria-hidden="true"></i> Âge de sortie atteint</span>
+          @endif
           @if ($oev->handicap)
             <span class="oev-puce"><i class="bi bi-universal-access" aria-hidden="true"></i>{{ $oev->nature_handicap }}</span>
           @endif

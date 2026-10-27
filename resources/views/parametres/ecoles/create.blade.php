@@ -20,7 +20,7 @@
 
 
   <section class="row g-3 mt-0">
-    <div class="col-12 col-xl-8">
+    <div class="col-12">
       <form class="panel" method="POST" action="{{ route('parametres.ecoles.store') }}">
         @csrf
         <div class="panel-header">
