@@ -234,8 +234,8 @@
                 <div class="col-md-5">@include('oevs.champs._texte', ['nom' => 'prenom', 'label' => 'Prénom(s) de l’enfant', 'valeur' => $v('prenom'), 'max' => 150, 'requis' => true, 'erreur' => 'Le(s) prénom(s) sont obligatoires.'])</div>
                 <div class="col-md-3">
                   @include('oevs.champs._texte', ['nom' => 'date_naissance', 'label' => 'Date de naissance', 'valeur' => $vDate('date_naissance'), 'type' => 'date', 'requis' => true,
-                    'attributs' => 'min="' . now()->subYears(25)->addDay()->toDateString() . '" max="' . now()->toDateString() . '"',
-                    'erreur' => 'Date valide requise (moins de 25 ans, pas de date future).'])
+                    'attributs' => 'min="' . now()->subYears(App\Models\ParametreOev::ageLimite(true))->addDay()->toDateString() . '" max="' . now()->toDateString() . '"',
+                    'erreur' => 'Date valide requise (moins de ' . App\Models\ParametreOev::ageLimite() . ' ans, ' . App\Models\ParametreOev::ageLimite(true) . ' en situation de handicap ; pas de date future).'])
                   <div class="form-check mt-1">
                     <input type="hidden" name="date_naissance_estimee" value="0">
                     <input class="form-check-input" type="checkbox" id="date_naissance_estimee" name="date_naissance_estimee" value="1" @checked($vBool('date_naissance_estimee') === '1')>
@@ -668,6 +668,7 @@
                     @endforeach
                   </div>
                   <div class="form-text">Sa réponse oriente un futur parrainage : inscription à l’école ou formation professionnelle.</div>
+                  <div class="form-text text-warning-emphasis" data-aide-exclu hidden><i class="bi bi-info-circle" aria-hidden="true"></i> Exclu l’année précédente : l’enfant ne peut plus prétendre retourner à l’école.</div>
                   <div class="text-danger small mt-1" data-erreur-groupe="souhait_avenir" hidden>Ce choix est obligatoire.</div>
                   @error('souhait_avenir')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                 </div>
@@ -889,6 +890,13 @@ document.addEventListener('DOMContentLoaded', function () {
     form.querySelectorAll('[data-auto]').forEach(function (c) { c.checked = conditionRemplie(c.dataset.auto); });
     // Blocs affichés selon les réponses (le calcul peut dépendre d'une case automatique)
     form.querySelectorAll('[data-si]').forEach(function (bloc) { bloc.hidden = !conditionRemplie(bloc.dataset.si); });
+    // Exclu l'année précédente : « Aller à l'école » n'est plus proposé comme souhait (même règle que le serveur)
+    var exclu = conditionRemplie('situation_scolaire!:non_scolarise&&ecole_precedente_id:*&&appreciation:exclu');
+    var souhaitEcole = document.getElementById('souhait_avenir-ecole');
+    souhaitEcole.disabled = exclu;
+    souhaitEcole.nextElementSibling.hidden = exclu;
+    if (exclu) { souhaitEcole.checked = false; }
+    form.querySelector('[data-aide-exclu]').hidden = !exclu;
     // Une option masquée (ex. « Grossesse » pour un garçon) est décochée
     form.querySelectorAll('.oev-case[hidden] input:checked').forEach(function (c) { c.checked = false; });
 

@@ -20,7 +20,7 @@
 
 
   <section class="row g-3">
-    <div class="col-12 col-xl-8">
+    <div class="col-12">
       <form class="panel" method="POST" action="{{ route('localites.regions.update', $region) }}">
         @csrf
         @method('PUT')

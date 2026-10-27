@@ -4,6 +4,7 @@
   $liensParametres = [
     ['Paramètres généraux', 'bi-gear', route('parametres.edit'), request()->routeIs('parametres.edit')],
     ['Écoles et centres', 'bi-building', route('parametres.ecoles.index'), request()->routeIs('parametres.ecoles.*')],
+    ['Âge des OEV', 'bi-hourglass-split', route('parametres.age-oev.edit'), request()->routeIs('parametres.age-oev.*')],
     ['Localités', 'bi-geo-alt', route('localites.regions.index'), request()->routeIs('localites.regions.*', 'localites.provinces.*', 'localites.communes.*', 'localites.villages.*')],
   ];
   foreach (\App\Models\ListeReference::listes() as $cleListe => $configListe) {

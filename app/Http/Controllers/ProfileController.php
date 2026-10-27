@@ -7,9 +7,9 @@ use Illuminate\Support\Facades\Hash;
 
 class ProfileController extends Controller
 {
-    public function show()
+    public function show(Request $request)
     {
-        return view('profile', ['user' => auth()->user()]);
+        return view('profile', ['user' => $request->user()]);
     }
 
     public function update(Request $request)
