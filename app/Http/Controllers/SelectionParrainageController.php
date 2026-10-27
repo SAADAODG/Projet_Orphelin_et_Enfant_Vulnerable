@@ -50,7 +50,7 @@ class SelectionParrainageController extends Controller
         };
         $filtres = $this->lireFiltres($request);
 
-        // Liste de la session et liste d'attente : comptées par la base, affichées page par page
+        // Liste de la session : comptée par la base, affichée page par page
         // (seules PAR_PAGE lignes sont chargées, quelle que soit la taille de la liste)
         $rechercheListe = trim((string) $request->query('recherche')) ?: null;
         $lignes = fn () => $session->beneficiaires()
@@ -63,18 +63,11 @@ class SelectionParrainageController extends Controller
             ->get()
             ->keyBy('statut');
         $nbRetenus = (int) ($totaux[BeneficiaireSession::RETENU]->nombre ?? 0);
-        $nbAttente = (int) ($totaux[BeneficiaireSession::ATTENTE]->nombre ?? 0);
         $retenus = $onglet === 'liste'
             ? $lignes()->retenus()->with(['oev.region', 'oev.province', 'oev.commune', 'region'])
                 ->orderByDesc('score')->orderBy('id')
                 ->paginate(self::PAR_PAGE, ['*'], 'page_retenus')->withQueryString()
             : null;
-        $attente = $onglet === 'liste'
-            ? $lignes()->enAttente()->with(['oev.region', 'oev.province', 'oev.commune', 'region'])
-                ->orderBy('rang')->orderBy('id')
-                ->paginate(self::PAR_PAGE, ['*'], 'page_attente')->withQueryString()->fragment('liste-attente')
-            : null;
-
         // Tous les OEV intégrés de la zone sont listés ; les non éligibles le sont avec leur motif, sans pouvoir être ajoutés
         $eligibles = $onglet === 'eligibles'
             ? $this->selection->candidats($session, $filtres)
@@ -102,11 +95,8 @@ class SelectionParrainageController extends Controller
             'gere' => $gere,
             'modifiable' => $modifiable,
             'retenus' => $retenus,
-            'attente' => $attente,
             'nbRetenus' => $nbRetenus,
-            'nbAttente' => $nbAttente,
             'montantRetenus' => (int) ($totaux[BeneficiaireSession::RETENU]->montant ?? 0),
-            'montantAttente' => (int) ($totaux[BeneficiaireSession::ATTENTE]->montant ?? 0),
             'rechercheListe' => $rechercheListe,
             'eligibles' => $eligibles,
             'motifs' => $motifs,
@@ -143,28 +133,23 @@ class SelectionParrainageController extends Controller
         if (! $ids) {
             return back()->with('error', 'Cochez au moins un OEV à ajouter.');
         }
-
+        // Tout ou rien : un ajout qui dépasserait l'enveloppe ou un quota est refusé en entier
         $compte = $this->selection->ajouter($session, $ids, $request->user());
+        if ($compte['refus']) {
+            return back()->with('error', 'Aucun OEV ajouté : ' . $compte['refus']);
+        }
 
-        return redirect()->route('parrainage.sessions.selection', $session)->with('success', match (true) {
-            $compte['retenus'] + $compte['attente'] === 0 => 'Aucun OEV ajouté : ils ne sont plus éligibles à cette session.',
-            $compte['attente'] === 0 => "{$compte['retenus']} OEV retenu(s) sur la liste de la session.",
-            default => "{$compte['retenus']} OEV retenu(s) ; {$compte['attente']} placé(s) en liste d’attente (enveloppe ou quota atteint).",
-        });
+        return redirect()->route('parrainage.sessions.selection', $session)->with('success', $compte['retenus'] === 0
+            ? 'Aucun OEV ajouté : ils ne sont plus éligibles à cette session.'
+            : "{$compte['retenus']} OEV retenu(s) sur la liste de la session.");
     }
 
-    /** Liste d'attente → liste de la session, ou correction des frais réels. */
+    /** Correction des frais réels d'un OEV de la liste. */
     public function modifier(Request $request, SessionParrainage $session, BeneficiaireSession $ligne): RedirectResponse
     {
         abort_unless((int) $ligne->session_parrainage_id === (int) $session->id, 404);
         if ($refus = $this->refuserSiFigee($session)) {
             return $refus;
-        }
-
-        if ($request->input('action') === 'retenir') {
-            $erreur = $this->selection->retenir($session, $ligne, $request->user());
-
-            return back()->with($erreur ? 'error' : 'success', $erreur ? 'Impossible : ' . $erreur : 'OEV retenu sur la liste de la session.');
         }
 
         $request->merge(['frais_reels' => Montant::normaliserSaisie($request->input('frais_reels'))]);

@@ -428,6 +428,7 @@
               {!! $info('Formation professionnelle', 'Oui' . ($oev->formation_etat ? ' — ' . mb_strtolower($oev->libelle('formation_etat', Oev::ETATS_FORMATION)) : '')) !!}
               {!! $infoSi('Filière', $oev->formation_filiere) !!}
               {!! $infoSi('Type de centre', $oev->formation_type_centre ? $oev->libelle('formation_type_centre', Oev::TYPES_ETABLISSEMENT) : null) !!}
+              {!! $infoSi('Centre de formation', $oev->centreFormation?->nom) !!}
               {!! $infoSi('Durée de la formation', $oev->formation_duree_mois ? $oev->formation_duree_mois . ' mois' : null) !!}
               {!! $infoSi('Durée déjà reçue', $oev->formation_duree_recue_mois !== null ? $oev->formation_duree_recue_mois . ' mois' : null) !!}
               {!! $infoSi('Frais de formation', $oev->frais_formation !== null ? number_format($oev->frais_formation, 0, ',', ' ') . ' FCFA' : null) !!}

@@ -32,14 +32,14 @@ class ParrainageService
      *     numero: int,
      *     etat: string,
      *     type_appui: string,
-     *     enveloppe: int,
+     *     enveloppe: int|null,
      *     plafond_beneficiaire: int|null,
-     *     bloquer_depassement_enveloppe: bool,
      *     quotas_actifs: bool,
      *     quotas: array<int, int>,
      *     exclure_deja_appuyes: bool,
      * }
      *   type_appui : scolaire, formation_professionnelle ou les_deux (SessionParrainage::TYPES_APPUI) ;
+     *   enveloppe : null tant qu'elle n'est pas renseignée ; quand elle l'est, elle n'est jamais dépassée ;
      *   etat : en_cours, validee, paiement_en_cours ou cloturee (SessionParrainage::ETATS) ;
      *   quotas : region_id => montant en FCFA, vide quand quotas_actifs est faux ;
      *   exclure_deja_appuyes : à combiner avec getOevAppuyesParPartenaire().
@@ -58,7 +58,6 @@ class ParrainageService
             'type_appui' => $session->type_appui,
             'enveloppe' => $session->enveloppe,
             'plafond_beneficiaire' => $session->plafond_beneficiaire,
-            'bloquer_depassement_enveloppe' => $session->bloquer_depassement_enveloppe,
             'quotas_actifs' => $session->quotas_actifs,
             'quotas' => $session->quotas_actifs ? $session->quotas->pluck('montant', 'region_id')->map(fn ($m) => (int) $m)->all() : [],
             'exclure_deja_appuyes' => $session->exclure_deja_appuyes,
@@ -221,7 +220,7 @@ class ParrainageService
         $regions = Region::orderBy('nom')->pluck('id');
         $total = array_sum(array_intersect_key($eligibles, $regions->flip()->all()));
 
-        if ($total === 0) {
+        if ($total === 0 || ! $session->aUneEnveloppe()) {
             return $regions->mapWithKeys(fn ($id) => [$id => 0])->all();
         }
 

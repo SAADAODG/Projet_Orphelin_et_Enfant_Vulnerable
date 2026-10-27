@@ -42,7 +42,7 @@ class SelectionParrainageTest extends TestCase
         return SessionParrainage::create($surcharge + [
             'description' => 'Session principale', 'annee' => '2026-2027', 'numero' => 1,
             'type_appui' => SessionParrainage::TYPE_SCOLAIRE, 'enveloppe' => 1_000_000, 'plafond_beneficiaire' => 100_000,
-            'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
+            'date_ouverture' => '2026-10-01',
             'etat' => SessionParrainage::ETAT_EN_COURS,
         ]);
     }
@@ -288,32 +288,53 @@ class SelectionParrainageTest extends TestCase
         $this->assertSame(['LIBRE'], $this->eligibles($this->nouvelleSession(['numero' => 2, 'exclure_deja_appuyes' => true])));
     }
 
-    public function test_l_ajout_respecte_l_enveloppe_et_place_le_reste_en_liste_d_attente(): void
+    public function test_un_ajout_qui_depasse_l_enveloppe_est_refuse_en_entier(): void
     {
-        // Enveloppe de 150 000, plafond 100 000 : frais 40 000 → 40 000 ; frais inconnus → plafond (100 000)
-        $session = $this->nouvelleSession(['enveloppe' => 150_000, 'bloquer_depassement_enveloppe' => true]);
+        // Enveloppe de 150 000, plafond 100 000 : frais 40 000 → 40 000 ; frais inconnus → plafond (100 000) ; 30 000
+        $session = $this->nouvelleSession(['enveloppe' => 150_000]);
         $a = $this->oev('A', ['niveau_priorite' => 'eleve', 'frais_scolarite' => 40_000]);
         $b = $this->oev('B', ['niveau_priorite' => 'moyen', 'frais_scolarite' => null]);
         $c = $this->oev('C', ['niveau_priorite' => 'faible', 'frais_scolarite' => 30_000]);
 
+        // 170 000 > 150 000 : rien n'est ajouté, pas de liste d'attente
         $this->actingAs($this->central)->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$a->id, $b->id, $c->id]])
-            ->assertRedirect(route('parrainage.sessions.selection', $session))
-            ->assertSessionHas('success', '2 OEV retenu(s) ; 1 placé(s) en liste d’attente (enveloppe ou quota atteint).');
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'Aucun OEV ajouté') && str_contains($m, "20\u{00A0}000\u{00A0}FCFA"));
+        $this->assertSame(0, $session->beneficiaires()->count());
+        // « Tout ajouter » : même règle
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['tous' => '1'])->assertSessionHas('error');
+        $this->assertSame(0, $session->beneficiaires()->count());
 
+        // 140 000 ≤ 150 000 : tous retenus
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$a->id, $b->id]])
+            ->assertRedirect(route('parrainage.sessions.selection', $session))
+            ->assertSessionHas('success', '2 OEV retenu(s) sur la liste de la session.');
         $lignes = $session->beneficiaires()->get()->keyBy('oev_id');
         $this->assertSame([BeneficiaireSession::RETENU, 40_000], [$lignes[$a->id]->statut, $lignes[$a->id]->montant_retenu]);
         $this->assertSame([BeneficiaireSession::RETENU, 100_000, null], [$lignes[$b->id]->statut, $lignes[$b->id]->montant_retenu, $lignes[$b->id]->frais_reels]);
-        $this->assertSame([BeneficiaireSession::ATTENTE, 1], [$lignes[$c->id]->statut, $lignes[$c->id]->rang]);
 
-        // Frais réels de B saisis (60 000) : 50 000 se libèrent… mais C (30 000) tient alors dans l'enveloppe
+        // Reste 10 000 : C (30 000) est refusé ; les frais réels de B (60 000) libèrent 40 000, C passe alors
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$c->id]])->assertSessionHas('error');
         $this->patch(route('parrainage.sessions.selection.modifier', [$session, $lignes[$b->id]]), ['frais_reels' => '60 000'])->assertSessionHas('success');
         $this->assertSame(60_000, $lignes[$b->id]->refresh()->montant_retenu);
-        $this->patch(route('parrainage.sessions.selection.modifier', [$session, $lignes[$c->id]]), ['action' => 'retenir'])->assertSessionHas('success');
-        $this->assertSame(BeneficiaireSession::RETENU, $lignes[$c->id]->refresh()->statut);
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$c->id]])->assertSessionHas('success');
 
         // Plus de place : remonter les frais de C au-delà du reste est refusé
-        $this->patch(route('parrainage.sessions.selection.modifier', [$session, $lignes[$c->id]]), ['frais_reels' => '90 000'])->assertSessionHas('error');
-        $this->assertSame(30_000, $lignes[$c->id]->refresh()->montant_retenu);
+        $ligneC = $session->beneficiaires()->where('oev_id', $c->id)->sole();
+        $this->patch(route('parrainage.sessions.selection.modifier', [$session, $ligneC]), ['frais_reels' => '90 000'])->assertSessionHas('error');
+        $this->assertSame(30_000, $ligneC->refresh()->montant_retenu);
+        $this->assertSame(0, $session->beneficiaires()->where('statut', '!=', BeneficiaireSession::RETENU)->count());
+    }
+
+    public function test_sans_enveloppe_tous_les_oev_sont_retenus_et_le_total_est_affiche(): void
+    {
+        $session = $this->nouvelleSession(['enveloppe' => null]);
+        $this->oev('A', ['frais_scolarite' => 40_000]);
+        $this->oev('B', ['frais_scolarite' => 70_000]);
+
+        $this->actingAs($this->central)->get(route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'eligibles']))
+            ->assertOk()->assertSee('Non renseignée')->assertSee('Total des retenus après ajout');
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['tous' => '1'])->assertSessionHas('success', '2 OEV retenu(s) sur la liste de la session.');
+        $this->assertSame(110_000, (int) $session->beneficiaires()->sum('montant_retenu'));
     }
 
     public function test_les_quotas_regionaux_limitent_les_retenus(): void
@@ -324,12 +345,14 @@ class SelectionParrainageTest extends TestCase
         $deuxieme = $this->oev('DEUXIEME_ICI', ['niveau_priorite' => 'faible']);
         $ailleurs = $this->oev('SANS_QUOTA', [], $this->autreRegion);
 
-        $this->actingAs($this->central)->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$ici->id, $deuxieme->id, $ailleurs->id]]);
+        // Quota de la région dépassé (2 × 40 000 > 50 000), ou région sans quota : ajout refusé en entier
+        $this->actingAs($this->central)->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$ici->id, $deuxieme->id]])
+            ->assertSessionHas('error', fn ($m) => str_contains($m, $this->region->nom));
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$ailleurs->id]])->assertSessionHas('error');
+        $this->assertSame(0, $session->beneficiaires()->count());
 
-        $statuts = $session->beneficiaires()->pluck('statut', 'oev_id');
-        $this->assertSame(BeneficiaireSession::RETENU, $statuts[$ici->id]);
-        $this->assertSame(BeneficiaireSession::ATTENTE, $statuts[$deuxieme->id], 'Quota de la région atteint');
-        $this->assertSame(BeneficiaireSession::ATTENTE, $statuts[$ailleurs->id], 'Région sans quota');
+        $this->post(route('parrainage.sessions.selection.ajouter', $session), ['oev_ids' => [$ici->id]])->assertSessionHas('success');
+        $this->assertSame([$ici->id], $session->beneficiaires()->pluck('oev_id')->all());
     }
 
     public function test_tout_ajouter_prend_les_eligibles_filtres(): void

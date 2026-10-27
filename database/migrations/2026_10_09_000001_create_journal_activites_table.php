@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('journal_activites', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('user_id')->nullable()->index()->constrained('users')->nullOnDelete();
             $table->string('action', 80)->index()->comment('Ex : session_parrainage.creation');
             $table->nullableMorphs('sujet');
             $table->string('description', 500);

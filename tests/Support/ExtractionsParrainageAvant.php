@@ -218,17 +218,6 @@ class ExtractionsParrainageAvant
             ->when(isset($f['age_min']), fn ($q) => $q->whereDate('date_naissance', '<=', now()->subYears((int) $f['age_min'])))
             ->when(isset($f['age_max']), fn ($q) => $q->whereDate('date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)));
 
-        if ($f['source'] === 'attente') {
-            $attente = $f['session'] ? $this->source->listeAttente($f['session'])->sortBy('rang')->values() : collect();
-            $rangs = $attente->pluck('rang', 'oev_id');
-            $besoins = $attente->pluck('besoin_estime', 'oev_id');
-
-            return $requete->whereIn('id', $rangs->keys())->get()
-                ->each(fn (Oev $oev) => $oev->setAttribute('besoin_estime', $besoins[$oev->id] ?? $oev->frais_scolarite))
-                ->sortBy(fn (Oev $oev) => $rangs[$oev->id])
-                ->values();
-        }
-
         if ($f['nature']) {
             $requete->whereNotIn('id', AppuiPartenaire::where('annee', $f['annee'])->where('nature_appui_id', $f['nature']->id)->select('oev_id'));
             // Nature financée par l'État : les bénéficiaires des sessions de l'année sont aussi exclus

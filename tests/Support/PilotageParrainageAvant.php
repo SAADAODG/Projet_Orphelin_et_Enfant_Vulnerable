@@ -71,13 +71,10 @@ class PilotageParrainageAvant
         $base = $this->oevs($f);
         $ids = array_flip((clone $base)->pluck('id')->all());
 
-        // État : liste définitive et liste d'attente des sessions, limitées aux OEV de la zone
+        // État : liste définitive des sessions, limitée aux OEV de la zone (liste d'attente supprimée le 23/10/2026)
         $definitive = $this->source->disponible()
             ? $sessions->flatMap(fn (SessionParrainage $s) => $this->source->listeDefinitive($s))
                 ->filter(fn (array $b) => isset($ids[$b['oev_id']]) && $this->typeConvient($b['type_appui'] ?? null, $f['type_appui']))
-            : null;
-        $attente = $this->source->disponible()
-            ? $sessions->flatMap(fn (SessionParrainage $s) => $this->source->listeAttente($s))->filter(fn (array $b) => isset($ids[$b['oev_id']]))
             : null;
 
         $appuis = $this->appuis($f, $base);
@@ -92,7 +89,6 @@ class PilotageParrainageAvant
                 'eligibles' => $eligibles,
                 'etat' => $definitive === null ? null : $oevEtat->count(),
                 'partenaires' => $oevPartenaires->count(),
-                'attente' => $attente?->pluck('oev_id')->unique()->count(),
                 'appuyes' => $appuyes->count(),
                 'taux' => $eligibles ? round($appuyes->count() / $eligibles * 100, 1) : null,
             ],

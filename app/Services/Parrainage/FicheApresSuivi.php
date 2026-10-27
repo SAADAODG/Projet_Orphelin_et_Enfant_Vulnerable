@@ -24,7 +24,7 @@ class FicheApresSuivi
         'frais_scolarite', 'performance_scolaire', 'performance_difficultes',
         'etablissement_precedent', 'ecole_precedente_id', 'classe_precedente', 'moyenne_annuelle', 'appreciation',
         'raison_non_scolarisation', 'raison_non_scolarisation_precision',
-        'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
+        'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'centre_formation_id', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation',
         'souhait_avenir', 'souhait_avenir_precision',
     ];
 
@@ -145,7 +145,7 @@ class FicheApresSuivi
                 'formation_duree_recue_mois' => $avant['formation_duree_mois'] ?? $avant['formation_duree_recue_mois'] ?? null,
             ],
             // Abandon : l'OEV n'est plus en formation (l'historique reste dans le suivi et le parcours)
-            'abandon' => array_fill_keys(['formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation'], null)
+            'abandon' => array_fill_keys(['formation_etat', 'formation_filiere', 'formation_type_centre', 'centre_formation_id', 'formation_duree_mois', 'formation_duree_recue_mois', 'frais_formation'], null)
                 + ['formation_professionnelle' => false],
             // Poursuit : la fiche reste « en formation », avec les frais de l'année prochaine
             default => [

@@ -41,17 +41,10 @@ interface SourceSelection
     public function listeDefinitive(SessionParrainage $session): Collection;
 
     /**
-     * Liste d'attente de la session, par rang.
+     * Établissements payés (écoles, centres de formation) et leurs coordonnées bancaires, indexés par
+     * identifiant. rib est null quand il n'est pas renseigné (signalé « RIB manquant »).
      *
-     * @return Collection<int, array{oev_id: int, rang: int, besoin_estime: int}>
-     */
-    public function listeAttente(SessionParrainage $session): Collection;
-
-    /**
-     * Établissements et coordonnées bancaires (RIB), indexés par identifiant.
-     * Les champs bancaires sont null quand le RIB n'est pas renseigné (signalé « RIB manquant »).
-     *
-     * @return Collection<int, array{id: int, nom: string, type: string|null, region_id: int|null, province_id: int|null, commune_id: int|null, banque: string|null, code_banque: string|null, code_guichet: string|null, numero_compte: string|null, cle_rib: string|null, titulaire: string|null}>
+     * @return Collection<int, array{id: int, nom: string, type: string|null, region_id: int|null, province_id: int|null, commune_id: int|null, banque: string|null, rib: string|null}>
      */
     public function etablissements(): Collection;
 

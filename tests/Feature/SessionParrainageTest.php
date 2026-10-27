@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\BeneficiaireSession;
 use App\Models\JournalActivite;
 use App\Models\Oev;
-use App\Models\Parrain;
 use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\User;
@@ -47,9 +46,7 @@ class SessionParrainageTest extends TestCase
             'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
             'enveloppe' => '10 000 000',
             'plafond_beneficiaire' => '75 000',
-            'source_financement' => SessionParrainage::SOURCE_ETAT,
             'date_ouverture' => '2026-10-01',
-            'bloquer_depassement_enveloppe' => '1',
             'quotas_actifs' => '1',
             'exclure_deja_appuyes' => '0',
         ];
@@ -64,7 +61,6 @@ class SessionParrainageTest extends TestCase
             'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
             'enveloppe' => 1_000_000,
             'plafond_beneficiaire' => 50_000,
-            'source_financement' => SessionParrainage::SOURCE_ETAT,
             'date_ouverture' => '2026-10-01',
             'quotas_actifs' => true,
             'etat' => SessionParrainage::ETAT_EN_COURS,
@@ -123,82 +119,53 @@ class SessionParrainageTest extends TestCase
 
     public function test_les_ecrans_de_la_session_s_affichent(): void
     {
-        $parrain = Parrain::create(['type' => 'entreprise', 'nom' => 'Société Solidaire']);
-        $session = $this->nouvelleSession(['source_financement' => SessionParrainage::SOURCE_MIXTE]);
-        $session->parrains()->attach($parrain, ['montant' => 300_000]);
+        $session = $this->nouvelleSession();
 
         $this->actingAs($this->central)->get(route('parrainage.sessions.index'))->assertOk()->assertSee('Nouvelle session');
-        // La création se fait dans une fenêtre de la liste
+        // La création se fait dans une fenêtre de la liste ; plus de source de financement ni de contributions
         $this->actingAs($this->central)->get(route('parrainage.sessions.create'))->assertRedirect(route('parrainage.sessions.index', ['nouveau' => 1]));
         $this->actingAs($this->central)->get(route('parrainage.sessions.index', ['nouveau' => 1]))
-            ->assertOk()->assertSee('nouvelleSessionModal')->assertSee('Société Solidaire');
+            ->assertOk()->assertSee('nouvelleSessionModal')->assertDontSee('Source de financement')->assertDontSee('Bloquer le dépassement');
         $this->actingAs($this->central)->get(route('parrainage.sessions.edit', $session))->assertOk();
         $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))
             ->assertOk()
             // La validation passe par la liste de l'onglet « Sélection »
             ->assertSee('Sélectionner les OEV et valider la liste')
-            ->assertSee("1\u{00A0}000\u{00A0}000\u{00A0}FCFA", false)
-            ->assertSee('Société Solidaire');
-        $this->actingAs($this->central)->get(route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']))
-            ->assertOk()->assertSee('Reste à répartir');
-    }
-
-    public function test_le_numero_est_attribue_automatiquement_pour_chaque_annee(): void
-    {
-        $this->nouvelleSession();
-
-        // Numéro saisi ignoré : la session prend le numéro suivant de son année
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['numero' => 1]))->assertSessionHasNoErrors();
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['annee' => '2027-2028']))->assertSessionHasNoErrors();
-
-        $this->assertSame([1, 2], SessionParrainage::where('annee', '2026-2027')->orderBy('numero')->pluck('numero')->all());
-        $autreAnnee = SessionParrainage::where('annee', '2027-2028')->sole();
-        $this->assertSame(1, $autreAnnee->numero);
-
-        // Changement d'année d'une session en cours : numéro suivant de la nouvelle année
-        $this->actingAs($this->central)->put(route('parrainage.sessions.update', $autreAnnee), $this->donnees(['quotas_actifs' => '0']))->assertSessionHasNoErrors();
-        $this->assertSame(['2026-2027', 3], [$autreAnnee->refresh()->annee, $autreAnnee->numero]);
-    }
-
-    public function test_le_plafond_est_facultatif(): void
-    {
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['plafond_beneficiaire' => '']))->assertSessionHasNoErrors();
-
-        $session = SessionParrainage::sole();
-        $this->assertNull($session->plafond_beneficiaire);
-        $this->assertSame('Sans plafond', $session->libellePlafond());
-        $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))->assertOk()->assertSee('Sans plafond');
-
-        // Sans plafond, le montant retenu est égal aux frais réels
-        $this->assertSame(120_000, \App\Models\BeneficiaireSession::montantPour(120_000, null));
-        $this->assertSame(50_000, \App\Models\BeneficiaireSession::montantPour(120_000, 50_000));
-    }
-
-    public function test_le_plafond_ne_depasse_pas_l_enveloppe_et_l_enveloppe_est_positive(): void
-    {
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['plafond_beneficiaire' => '20 000 000']))
-            ->assertSessionHasErrors('plafond_beneficiaire');
+            ->assertSee("1\u{00A0}000\u{00A0}000\u{00A0}FCFA", false);
         $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['enveloppe' => '0']))
             ->assertSessionHasErrors('enveloppe');
         $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['annee' => '2026-2028']))
             ->assertSessionHasErrors('annee');
 
-        $this->assertDatabaseCount('sessions_parrainage', 0);
+        $this->assertDatabaseCount('sessions_parrainage', 1);
     }
 
-    public function test_un_financement_partenaire_exige_au_moins_une_contribution(): void
+    public function test_l_enveloppe_est_facultative_et_se_renseigne_plus_tard(): void
     {
-        $parrain = Parrain::create(['type' => 'ong', 'nom' => 'ONG Espoir']);
+        // Sans enveloppe : session enregistrée, mais pas de quotas par région (ils répartissent l'enveloppe)
+        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['enveloppe' => '', 'quotas_actifs' => '1']))
+            ->assertSessionHasErrors('enveloppe');
+        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['enveloppe' => '', 'quotas_actifs' => '0']))
+            ->assertSessionHasNoErrors();
+        $session = SessionParrainage::sole();
+        $this->assertNull($session->enveloppe);
+        $this->assertFalse($session->aUneEnveloppe());
+        $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))->assertOk()->assertSee('Non renseignée');
 
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees(['source_financement' => SessionParrainage::SOURCE_PARTENAIRE]))
-            ->assertSessionHasErrors('contributions');
-
-        $this->actingAs($this->central)->post(route('parrainage.sessions.store'), $this->donnees([
-            'source_financement' => SessionParrainage::SOURCE_MIXTE,
-            'contributions' => [$parrain->id => '2 500 000'],
-        ]))->assertSessionHasNoErrors();
-
-        $this->assertSame(2_500_000, SessionParrainage::sole()->parrains->sole()->pivot->montant);
+        // Liste validée : l'enveloppe se renseigne encore, sans descendre sous le montant engagé
+        $oev = Oev::create([
+            'nom' => 'ENFANT', 'prenom' => 'Test', 'sexe' => 'F', 'date_naissance' => '2015-01-01', 'statut' => 'vulnerable',
+            'handicap' => false, 'nom_tuteur' => 'TUTEUR', 'prenom_tuteur' => 'Issa', 'contact_tuteur' => '+226 70 00 00 00',
+            'systeme_educatif' => 'classique', 'statut_dossier' => Oev::ETAT_INTEGRE, 'numero_dossier' => Oev::genererNumeroDossier(),
+        ]);
+        $session->beneficiaires()->create(['oev_id' => $oev->id, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE, 'statut' => BeneficiaireSession::RETENU,
+            'score' => 10, 'frais_reels' => 60_000, 'frais_estimes' => false, 'montant_retenu' => 60_000]);
+        $session->update(['etat' => SessionParrainage::ETAT_VALIDEE]);
+        $this->actingAs($this->central)->put(route('parrainage.sessions.update', $session), ['description' => $session->description, 'enveloppe' => '50 000'])
+            ->assertSessionHasErrors('enveloppe');
+        $this->actingAs($this->central)->put(route('parrainage.sessions.update', $session), ['description' => $session->description, 'enveloppe' => '80 000'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(80_000, $session->fresh()->enveloppe);
     }
 
     public function test_les_dr_et_dp_consultent_sans_pouvoir_creer_ni_modifier(): void
@@ -357,7 +324,9 @@ class SessionParrainageTest extends TestCase
             ->assertSessionHasNoErrors();
         $session->refresh();
         $this->assertSame('Nouvelle description', $session->description);
-        $this->assertSame(1_000_000, $session->enveloppe);
+        // L'enveloppe peut encore être renseignée ou corrigée ; le plafond et les options restent figés
+        $this->assertSame(99_000_000, $session->enveloppe);
+        $this->assertSame(50_000, $session->plafond_beneficiaire);
 
         $this->actingAs($this->central)->put(route('parrainage.sessions.quotas', $session), ['quotas' => [Region::value('id') => '1 000']])
             ->assertSessionHas('error');

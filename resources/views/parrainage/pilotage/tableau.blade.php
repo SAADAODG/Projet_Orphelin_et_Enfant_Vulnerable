@@ -40,7 +40,7 @@
   $pa = $indicateurs['partenaires'];
   $nd = 'Données non disponibles';
   $cartes = [
-      ['libelle' => 'Enveloppe', 'valeur' => Montant::fcfa($b['enveloppe']), 'aide' => $b['sessions'] . ' session(s) en ' . $f['annee'], 'icone' => 'bi-wallet2', 'couleur' => 'primary'],
+      ['libelle' => 'Enveloppe', 'valeur' => $b['enveloppe'] === null ? 'Non renseignée' : Montant::fcfa($b['enveloppe']), 'aide' => $b['sessions'] . ' session(s) en ' . $f['annee'], 'icone' => 'bi-wallet2', 'couleur' => 'primary'],
       ['libelle' => 'Montant engagé', 'valeur' => $b['engage'] === null ? null : Montant::fcfa($b['engage']), 'aide' => $b['taux'] === null ? 'Liste définitive' : "{$b['taux']} % de l’enveloppe", 'icone' => 'bi-cash-stack', 'couleur' => 'warning'],
       ['libelle' => 'OEV éligibles', 'valeur' => Montant::nombre($c['eligibles']), 'aide' => 'Intégrés et actifs', 'icone' => 'bi-people', 'couleur' => 'success'],
       ['libelle' => 'OEV appuyés', 'valeur' => Montant::nombre($c['appuyes']), 'aide' => $c['taux'] === null ? 'État et partenaires' : "Couverture : {$c['taux']} %", 'icone' => 'bi-heart', 'couleur' => 'danger'],
@@ -110,7 +110,7 @@
   @unless ($disponible)
     <div class="alert alert-info small mt-3 mb-0">
       <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
-      Les chiffres de l’État (liste définitive, liste d’attente, montant engagé, résultats scolaires) s’afficheront quand les modules Sélection et Suivi scolaire seront branchés.
+      Les chiffres de l’État (liste définitive, montant engagé, résultats scolaires) s’afficheront quand les modules Sélection et Suivi scolaire seront branchés.
       Les appuis des partenaires sont déjà comptés.
     </div>
   @endunless
@@ -136,10 +136,10 @@
       <section class="oev-carte h-100">
         <h2 class="oev-carte-titre"><i class="bi bi-wallet2" aria-hidden="true"></i> Budget</h2>
         <div class="oev-infos">
-          <div class="oev-info"><span class="oev-info-label">Enveloppe</span><span class="oev-info-valeur">{{ Montant::fcfa($b['enveloppe']) }}</span></div>
+          <div class="oev-info"><span class="oev-info-label">Enveloppe</span><span class="oev-info-valeur">{{ $b['enveloppe'] === null ? 'Non renseignée' : Montant::fcfa($b['enveloppe']) }}</span></div>
           <div class="oev-info"><span class="oev-info-label">Montant engagé (liste définitive)</span><span class="oev-info-valeur">{{ $b['engage'] === null ? $nd : Montant::fcfa($b['engage']) }}</span></div>
-          <div class="oev-info"><span class="oev-info-label">Reste</span><span class="oev-info-valeur">{{ $b['reste'] === null ? $nd : Montant::fcfa($b['reste']) }}</span></div>
-          <div class="oev-info"><span class="oev-info-label">Taux de consommation</span><span class="oev-info-valeur">{{ $b['taux'] === null ? $nd : $b['taux'] . ' %' }}</span></div>
+          <div class="oev-info"><span class="oev-info-label">Reste</span><span class="oev-info-valeur">{{ $b['reste'] === null ? ($b['enveloppe'] === null ? '—' : $nd) : Montant::fcfa($b['reste']) }}</span></div>
+          <div class="oev-info"><span class="oev-info-label">Taux de consommation</span><span class="oev-info-valeur">{{ $b['taux'] === null ? ($b['enveloppe'] === null ? '—' : $nd) : $b['taux'] . ' %' }}</span></div>
         </div>
         @if ($b['quotas'])
           <h3 class="h6 mt-3">Par région (quotas)</h3>
@@ -172,12 +172,11 @@
             ['libelle' => 'OEV éligibles', 'total' => $c['eligibles']],
             ['libelle' => 'Bénéficiaires de l’État', 'total' => $c['etat'] ?? 0],
             ['libelle' => 'Appuyés par un partenaire', 'total' => $c['partenaires']],
-            ['libelle' => 'Liste d’attente', 'total' => $c['attente'] ?? 0],
         ], 'vide' => 'Aucun OEV éligible dans cette zone.'])
         <p class="small text-muted mt-3 mb-0">
           Taux de couverture : <strong>{{ $c['taux'] === null ? '—' : $c['taux'] . ' %' }}</strong>
           ({{ $c['appuyes'] }} OEV appuyé(s) par l’État ou un partenaire sur {{ $c['eligibles'] }}).
-          @if ($c['etat'] === null) Bénéficiaires de l’État et liste d’attente : {{ mb_strtolower($nd) }}. @endif
+          @if ($c['etat'] === null) Bénéficiaires de l’État : {{ mb_strtolower($nd) }}. @endif
         </p>
       </section>
     </div>

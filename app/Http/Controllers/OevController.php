@@ -139,6 +139,7 @@ class OevController extends Controller implements HasMiddleware
         'formation_etat' => 'état de la formation',
         'formation_filiere' => 'filière de formation',
         'formation_type_centre' => 'type de centre de formation',
+        'centre_formation_id' => 'centre de formation',
     ];
 
     /** DP — « Constituer dossier enfant » : tous les dossiers, quel que soit leur état. */
@@ -807,6 +808,8 @@ class OevController extends Controller implements HasMiddleware
             'formation_etat' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::ETATS_FORMATION))],
             'formation_filiere' => ['nullable', 'required_if:formation_professionnelle,1', 'string', 'max:150'],
             'formation_type_centre' => ['nullable', 'required_if:formation_professionnelle,1', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            // Centre du référentiel (son RIB sert au paiement d'un parrainage en formation) ; facultatif
+            'centre_formation_id' => ['nullable', 'integer', Rule::exists('ecoles', 'id')->where('nature', Ecole::NATURE_CENTRE)],
             'formation_duree_mois' => ['nullable', 'required_if:formation_professionnelle,1', 'integer', 'min:1', 'max:120'],
             // Formation achevée : la durée reçue est la durée totale (non demandée)
             'formation_duree_recue_mois' => ['nullable', Rule::requiredIf($entree('formation_professionnelle') === '1' && $entree('formation_etat') === 'en_cours'), 'integer', 'min:0', $dureeRecueCoherente],
@@ -903,7 +906,7 @@ class OevController extends Controller implements HasMiddleware
         $effacer(blank($validated['etablissement_precedent'] ?? null), ['classe_precedente', 'moyenne_annuelle', 'appreciation']);
         $effacer(! in_array($validated['situation_scolaire'], ['non_scolarise', 'descolarise'], true), ['raison_non_scolarisation', 'raison_non_scolarisation_precision']);
         $effacer(($validated['raison_non_scolarisation'] ?? null) !== 'autre', ['raison_non_scolarisation_precision']);
-        $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois']);
+        $effacer(! ($validated['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre', 'centre_formation_id', 'formation_duree_mois', 'formation_duree_recue_mois']);
         // Souhait seulement pour un enfant ni scolarisé ni en formation ; la formation souhaitée seulement s'il choisit la formation
         $effacer(! $sansActivite, ['souhait_avenir', 'souhait_avenir_precision']);
         $effacer(($validated['souhait_avenir'] ?? null) !== 'formation', ['souhait_avenir_precision']);

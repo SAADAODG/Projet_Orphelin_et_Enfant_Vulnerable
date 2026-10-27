@@ -29,7 +29,8 @@
 
 @php
   $f = $filtres;
-  $reste = $session->enveloppe - $budget['engage'];
+  // Sans enveloppe : pas de reste, le total des OEV retenus (et filtrés) est affiché
+  $reste = $session->aUneEnveloppe() ? $session->enveloppe - $budget['engage'] : null;
   $lesDeux = $session->type_appui === SessionParrainage::TYPE_LES_DEUX;
   $couvreScolaire = in_array(SessionParrainage::TYPE_SCOLAIRE, $session->naturesCouvertes(), true);
   $couvreFormation = in_array(SessionParrainage::TYPE_FORMATION, $session->naturesCouvertes(), true);
@@ -65,7 +66,7 @@
       <a class="btn btn-outline-secondary btn-sm" href="{{ route('parrainage.sessions.index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Sessions</a>
       @if ($modifiable)
         <form method="POST" action="{{ route('parrainage.sessions.selection.valider', $session) }}"
-              data-confirm="Valider la liste définitive ? {{ $nbRetenus }} OEV retenu(s) pour {{ Montant::fcfa($budget['engage']) }}. La liste, l’enveloppe et les quotas seront figés.">
+              data-confirm="Valider la liste définitive ? {{ $nbRetenus }} OEV retenu(s) pour {{ Montant::fcfa($budget['engage']) }}. La liste et les quotas seront figés.">
           @csrf
           <button class="btn btn-success btn-sm" type="submit" @disabled($nbRetenus === 0)><i class="bi bi-patch-check" aria-hidden="true"></i> Valider la liste définitive</button>
         </form>
@@ -80,14 +81,13 @@
   @endunless
 
   {{-- Budget --}}
-  {{-- Budget ; les cartes « retenus » et « liste d'attente » ouvrent la liste de la session --}}
+  {{-- Budget ; la carte « retenus » ouvre la liste de la session --}}
   <section class="row g-3 mt-1 oev-stats--compact" aria-label="Budget de la session">
     @foreach ([
-      ['bi-wallet2', 'Enveloppe', Montant::fcfa($session->enveloppe), '', null],
-      ['bi-cash-coin', 'Engagé (retenus)', Montant::fcfa($budget['engage']), '', null],
-      ['bi-piggy-bank', 'Reste disponible', Montant::fcfa($reste), $reste < 0 ? 'oev-stat--danger' : 'oev-stat--success', null],
+      ['bi-wallet2', 'Enveloppe', $session->aUneEnveloppe() ? Montant::fcfa($session->enveloppe) : 'Non renseignée', '', null],
+      ['bi-cash-coin', $session->aUneEnveloppe() ? 'Engagé (retenus)' : 'Total des retenus', Montant::fcfa($budget['engage']), '', null],
+      ['bi-piggy-bank', 'Reste disponible', $reste === null ? '—' : Montant::fcfa($reste), $reste === null ? '' : ($reste < 0 ? 'oev-stat--danger' : 'oev-stat--success'), null],
       ['bi-person-check', 'OEV retenus', $nbRetenus, 'oev-stat--info', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste'])],
-      ['bi-hourglass-split', 'En liste d’attente', $nbAttente, 'oev-stat--warning', route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) . '#liste-attente'],
     ] as [$icone, $libelle, $valeur, $style, $url])
       <div class="col-6 col-md-4 col-xl">
         <{{ $url ? 'a' : 'div' }} class="oev-stat {{ $style }} {{ $url && $onglet === 'liste' ? 'is-active' : '' }}" @if ($url) href="{{ $url }}" @endif>
@@ -130,7 +130,7 @@
   <ul class="nav nav-pills mt-3 gap-2">
     <li class="nav-item">
       <a class="nav-link {{ $onglet === 'liste' ? 'active' : '' }}" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}">
-        <i class="bi bi-list-check" aria-hidden="true"></i> Liste de la session <span class="badge rounded-pill text-bg-light border ms-1">{{ $nbRetenus + $nbAttente }}</span>
+        <i class="bi bi-list-check" aria-hidden="true"></i> Liste de la session <span class="badge rounded-pill text-bg-light border ms-1">{{ $nbRetenus }}</span>
       </a>
     </li>
     @if ($session->parametresModifiables())
@@ -144,7 +144,7 @@
 
   @if ($onglet === 'liste')
     {{-- ================= Liste de la session : page par page, recherche par code, nom ou prénom ================= --}}
-    @if ($nbRetenus + $nbAttente > 0)
+    @if ($nbRetenus > 0)
       <form class="d-flex flex-wrap gap-2 mt-3" method="GET" action="{{ route('parrainage.sessions.selection', $session) }}" role="search">
         <input type="hidden" name="onglet" value="liste">
         <input class="form-control form-control-sm w-auto" type="search" name="recherche" value="{{ $rechercheListe }}" placeholder="Code OEV, nom ou prénom" aria-label="Rechercher dans la liste de la session">
@@ -172,27 +172,10 @@
       @elseif ($retenus->isEmpty())
         <p class="text-muted mb-0">Aucun OEV retenu ne correspond à « {{ $rechercheListe }} ».</p>
       @else
-        @include('parrainage.selection._lignes', ['lignes' => $retenus, 'statut' => BeneficiaireSession::RETENU, 'total' => $rechercheListe ? null : $montantRetenus])
+        @include('parrainage.selection._lignes', ['lignes' => $retenus, 'total' => $rechercheListe ? null : $montantRetenus])
         @include('parrainage.selection._pagination', ['liste' => $retenus])
       @endif
     </section>
-
-    @if ($nbAttente > 0)
-      <section class="panel mt-3" id="liste-attente">
-        <div class="panel-header">
-          <div>
-            <h2 class="h5 mb-1">Liste d’attente <span class="badge rounded-pill text-bg-light border ms-1">{{ $rechercheListe ? $attente->total() . ' / ' : '' }}{{ $nbAttente }}</span></h2>
-            <p class="text-muted mb-0 small">OEV hors enveloppe ou hors quota, par rang. Ils pourront être retenus si des fonds se libèrent (retrait d’un OEV, session de rattrapage, parrain).</p>
-          </div>
-        </div>
-        @if ($attente->isEmpty())
-          <p class="text-muted mb-0">Aucun OEV en attente ne correspond à « {{ $rechercheListe }} ».</p>
-        @else
-          @include('parrainage.selection._lignes', ['lignes' => $attente, 'statut' => BeneficiaireSession::ATTENTE, 'total' => $rechercheListe ? null : $montantAttente])
-          @include('parrainage.selection._pagination', ['liste' => $attente])
-        @endif
-      </section>
-    @endif
   @else
     {{-- ================= Recherche des éligibles ================= --}}
     <section class="panel mt-3">
@@ -310,10 +293,17 @@
                   <td class="text-end">{{ Montant::fcfa($estimation['frais']) }}</td>
                   <td class="text-end">{{ Montant::fcfa($estimation['pris_en_charge']) }}</td>
                 </tr>
-                <tr>
-                  <td colspan="3" class="text-end small">Reste disponible de l’enveloppe ({{ Montant::fcfa($reste) }}) après ajout de tous ces OEV</td>
-                  <td class="text-end fw-semibold {{ $reste - $estimation['pris_en_charge'] < 0 ? 'text-danger' : 'text-success' }}">{{ Montant::fcfa($reste - $estimation['pris_en_charge']) }}</td>
-                </tr>
+                @if ($reste !== null)
+                  <tr>
+                    <td colspan="3" class="text-end small">Reste disponible de l’enveloppe ({{ Montant::fcfa($reste) }}) après ajout de tous ces OEV</td>
+                    <td class="text-end fw-semibold {{ $reste - $estimation['pris_en_charge'] < 0 ? 'text-danger' : 'text-success' }}">{{ Montant::fcfa($reste - $estimation['pris_en_charge']) }}</td>
+                  </tr>
+                @else
+                  <tr>
+                    <td colspan="3" class="text-end small">Total des retenus après ajout de tous ces OEV (aucune enveloppe renseignée)</td>
+                    <td class="text-end fw-semibold">{{ Montant::fcfa($budget['engage'] + $estimation['pris_en_charge']) }}</td>
+                  </tr>
+                @endif
               </tfoot>
             </table>
           </div>
@@ -326,7 +316,7 @@
         </p>
         @if ($modifiable && $nbAjoutables)
           <form method="POST" action="{{ route('parrainage.sessions.selection.ajouter', $session) }}"
-                data-confirm="Ajouter les {{ $nbAjoutables }} OEV éligibles correspondant aux filtres (coût estimé : {{ Montant::fcfa($estimation['pris_en_charge']) }}) ? Ils seront retenus du besoin le plus urgent au moins urgent tant que l’enveloppe et les quotas le permettent, les autres iront en liste d’attente.">
+                data-confirm="Ajouter les {{ $nbAjoutables }} OEV éligibles correspondant aux filtres (coût estimé : {{ Montant::fcfa($estimation['pris_en_charge']) }}) ? {{ $session->aUneEnveloppe() || $session->quotas_actifs ? 'Ils seront tous retenus, ou aucun si le total dépasse l’enveloppe ou un quota.' : 'Ils seront tous retenus (aucune enveloppe renseignée).' }}">
             @csrf
             <input type="hidden" name="tous" value="1">
             {{-- Mêmes filtres que la recherche, y compris les choix multiples --}}
@@ -432,10 +422,17 @@
           <div class="mt-3">{{ $eligibles->links() }}</div>
           @if ($modifiable)
             {{-- Coût des OEV cochés, recalculé à chaque case --}}
-            <div class="sel-coche d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2" data-reste="{{ $reste }}">
+            {{-- Enveloppe renseignée : la somme des OEV cochés ne peut pas la dépasser (bouton désactivé au-delà) --}}
+            <div class="sel-coche d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2"
+                 @if ($reste !== null) data-reste="{{ $reste }}" @else data-engage="{{ $budget['engage'] }}" @endif>
               <span class="small">
                 <strong data-nb-coches-texte>0</strong> OEV coché(s) · coût <strong data-cout-coches>0 FCFA</strong>
-                · reste après ajout <strong data-reste-coches>{{ Montant::fcfa($reste) }}</strong>
+                @if ($reste !== null)
+                  · reste après ajout <strong data-reste-coches>{{ Montant::fcfa($reste) }}</strong>
+                  <span class="d-block text-danger" data-depassement hidden>Le total coché dépasse le reste de l’enveloppe : décochez des OEV.</span>
+                @else
+                  · total des retenus après ajout <strong data-total-coches>{{ Montant::fcfa($budget['engage']) }}</strong>
+                @endif
               </span>
               <button class="btn btn-primary" type="submit" data-bouton-ajout disabled><i class="bi bi-person-plus" aria-hidden="true"></i> Ajouter à la session <span data-nb-coches>(0)</span></button>
             </div>
@@ -455,21 +452,29 @@
     if (formulaire) {
       var cases = formulaire.querySelectorAll('[data-case-oev]');
       var bouton = formulaire.querySelector('[data-bouton-ajout]');
-      var barre = formulaire.querySelector('[data-reste]');
+      var barre = formulaire.querySelector('.sel-coche');
       var format = function (n) { return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n).replace(/ | /g, ' ') + ' FCFA'; };
       var maj = function () {
         var cochees = formulaire.querySelectorAll('[data-case-oev]:checked');
         var cout = 0;
         cochees.forEach(function (c) { cout += Number(c.dataset.montant) || 0; });
-        if (bouton) { bouton.disabled = cochees.length === 0; bouton.querySelector('[data-nb-coches]').textContent = '(' + cochees.length + ')'; }
+        var depasse = false;
         if (barre) {
-          var reste = Number(barre.dataset.reste) - cout;
           barre.querySelector('[data-nb-coches-texte]').textContent = cochees.length;
           barre.querySelector('[data-cout-coches]').textContent = format(cout);
-          var champReste = barre.querySelector('[data-reste-coches]');
-          champReste.textContent = format(reste);
-          champReste.classList.toggle('text-danger', reste < 0);
+          if (barre.dataset.reste !== undefined) {
+            // Enveloppe : pas de sélection au-delà du reste disponible
+            var reste = Number(barre.dataset.reste) - cout;
+            depasse = reste < 0;
+            var champReste = barre.querySelector('[data-reste-coches]');
+            champReste.textContent = format(reste);
+            champReste.classList.toggle('text-danger', depasse);
+            barre.querySelector('[data-depassement]').hidden = !depasse;
+          } else {
+            barre.querySelector('[data-total-coches]').textContent = format(Number(barre.dataset.engage) + cout);
+          }
         }
+        if (bouton) { bouton.disabled = cochees.length === 0 || depasse; bouton.querySelector('[data-nb-coches]').textContent = '(' + cochees.length + ')'; }
       };
       var tout = formulaire.querySelector('[data-tout-cocher]');
       if (tout) { tout.addEventListener('change', function () { cases.forEach(function (c) { c.checked = tout.checked; }); maj(); }); }

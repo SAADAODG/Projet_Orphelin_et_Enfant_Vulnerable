@@ -5,10 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** Parrain : partenaire qui finance une session ou appuie directement des OEV. */
+/** Parrain : partenaire qui appuie directement des OEV (les sessions de parrainage sont financées par l'État). */
 class Parrain extends Model
 {
     public const TYPES = [
@@ -26,11 +25,6 @@ class Parrain extends Model
     protected function casts(): array
     {
         return ['actif' => 'boolean'];
-    }
-
-    public function sessions(): BelongsToMany
-    {
-        return $this->belongsToMany(SessionParrainage::class, 'contributions_session')->withPivot('montant')->withTimestamps();
     }
 
     public function engagements(): HasMany
@@ -58,9 +52,9 @@ class Parrain extends Model
         return self::TYPES[$this->type] ?? $this->type;
     }
 
-    /** Un parrain qui a des appuis ou des contributions se désactive, il ne se supprime pas. */
+    /** Un parrain qui a des appuis se désactive, il ne se supprime pas. */
     public function estSupprimable(): bool
     {
-        return ! $this->appuis()->exists() && ! $this->sessions()->exists();
+        return ! $this->appuis()->exists();
     }
 }

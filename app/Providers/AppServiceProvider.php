@@ -12,6 +12,7 @@ use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
 use App\Listeners\JournalAudit;
 use App\Observers\AuditObserver;
+use App\Observers\EtablissementOevObserver;
 use App\Observers\ScoreBesoinObserver;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\Failed;
@@ -54,6 +55,8 @@ class AppServiceProvider extends ServiceProvider
         }
         // Score d'urgence enregistré sur la fiche, recalculé en SQL direct (hors journal d'audit)
         Oev::observe(ScoreBesoinObserver::class);
+        // Établissement payé par les sessions de parrainage : suit l'école ou le centre de la fiche tant qu'il n'est pas payé
+        Oev::observe(EtablissementOevObserver::class);
         config(['permission.events_enabled' => true]);
         Event::listen(Login::class, [JournalAudit::class, 'connexion']);
         Event::listen(Logout::class, [JournalAudit::class, 'deconnexion']);

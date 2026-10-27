@@ -8,7 +8,7 @@
  * Rejouable : chaque exécution AJOUTE des lignes (identifiants et numéros dérivés des séquences).
  * Répartition réaliste : toutes les communes, tous les états du circuit (≈ 70 % intégrés), ≈ 3 % de
  * désactivations, vulnérabilités variées ; et, proportionnellement : appuis de partenaires (8 % des
- * intégrés), une session par lot avec 15 % de retenus et 5 % en liste d'attente, suivis des retenus,
+ * intégrés), une session par lot avec 15 % de retenus, suivis des retenus,
  * journal d'audit (1 entrée par dossier), signalements (1/10) et plaintes (1/20).
  */
 
@@ -111,20 +111,19 @@ if ((bool) $pdo->query("select 1 from information_schema.columns where table_nam
 
 // Appuis des partenaires : 8 % des OEV intégrés du lot
 $etape('appuis_partenaires', "insert into appuis_partenaires (oev_id, parrain_id, annee, nature_appui_id, montant, created_by, created_at, updated_at)
-    select o.id, (select min(id) from parrains) + o.id % 50, '2026-2027', (select min(id) from natures_appui) + o.id % 8,
+    select o.id, (select min(id) from parrains) + o.id % 50, '2026-2027', (select id from natures_appui order by id offset (o.id % (select count(*) from natures_appui)) limit 1),
         case when o.id % 3 = 0 then null else 10000 + (o.id % 10) * 5000 end, {$dp}, now(), now()
     from oevs o where {$plage} and o.statut_dossier = 'integre' and o.id % 100 < 8");
 
-// Une session par lot : 15 % des intégrés retenus, 5 % en attente
-$pdo->exec("insert into sessions_parrainage (description, annee, numero, type_appui, enveloppe, plafond_beneficiaire, source_financement,
-    date_ouverture, quotas_actifs, bloquer_depassement_enveloppe, exclure_deja_appuyes, etat, created_by, created_at, updated_at)
-    values ('Session perf {$lot}', '2026-2027', {$lot}, 'scolaire', 9000000000, 75000, 'etat', current_date, false, true, false, 'validee', {$central}, now(), now())");
+// Une session par lot : 15 % des intégrés retenus
+$pdo->exec("insert into sessions_parrainage (description, annee, numero, type_appui, enveloppe, plafond_beneficiaire,
+    date_ouverture, quotas_actifs, exclure_deja_appuyes, etat, created_by, created_at, updated_at)
+    values ('Session perf {$lot}', '2026-2027', {$lot}, 'scolaire', 9000000000, 75000, current_date, false, false, 'validee', {$central}, now(), now())");
 $session = (int) $pdo->query('select max(id) from sessions_parrainage')->fetchColumn();
-$etape('beneficiaires_session', "insert into beneficiaires_session (session_parrainage_id, oev_id, type_appui, statut, rang, score, region_id, frais_reels, frais_estimes, montant_retenu, created_by, created_at, updated_at)
-    select {$session}, o.id, 'scolaire', case when o.id % 100 < 15 then 'retenu' else 'attente' end,
-        case when o.id % 100 >= 15 then row_number() over (order by o.id) end,
+$etape('beneficiaires_session', "insert into beneficiaires_session (session_parrainage_id, oev_id, type_appui, statut, score, region_id, frais_reels, frais_estimes, montant_retenu, created_by, created_at, updated_at)
+    select {$session}, o.id, 'scolaire', 'retenu',
         (o.id % 90), o.region_id, o.frais_scolarite, false, least(coalesce(o.frais_scolarite, 75000), 75000), {$central}, now(), now()
-    from oevs o where {$plage} and o.statut_dossier = 'integre' and o.desactivation_etat is null and o.id % 100 < 20");
+    from oevs o where {$plage} and o.statut_dossier = 'integre' and o.desactivation_etat is null and o.id % 100 < 15");
 $etape('suivis_parrainage', "insert into suivis_parrainage (beneficiaire_session_id, oev_id, annee, type_appui, resultat, moyenne, a_reconduire, renseigne_par, created_at, updated_at)
     select b.id, b.oev_id, '2026-2027', 'scolaire', (array['admis','redouble','abandon'])[1 + b.id % 3], 8 + (b.id % 10) * 0.9, b.id % 3 <> 2, {$dp}, now(), now()
     from beneficiaires_session b where b.session_parrainage_id = {$session} and b.statut = 'retenu' and b.id % 2 = 0");

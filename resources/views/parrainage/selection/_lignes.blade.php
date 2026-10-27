@@ -1,15 +1,11 @@
 {{--
-  Lignes de la sélection d'une session (retenus ou liste d'attente).
-  Variables : $lignes (BeneficiaireSession, une page), $statut, $session, $modifiable, $total (montant de toute la liste)
+  Lignes de la liste d'une session (OEV retenus).
+  Variables : $lignes (BeneficiaireSession, une page), $session, $modifiable, $total (montant de toute la liste)
 --}}
-@php
-  $estAttente = $statut === App\Models\BeneficiaireSession::ATTENTE;
-@endphp
 <div class="table-responsive">
   <table class="table align-middle mb-0 sel-table oev-liste">
     <thead>
       <tr>
-        @if ($estAttente)<th>Rang</th>@endif
         <th>OEV</th><th>Statut</th><th>Localité</th><th>Appui</th>
         <th>Frais réels</th><th class="text-end">Montant retenu</th>
         @if ($modifiable)<th class="text-end"><span class="visually-hidden">Actions</span></th>@endif
@@ -21,7 +17,6 @@
           $oev = $ligne->oev;
         @endphp
         <tr>
-          @if ($estAttente)<td class="fw-bold">{{ $ligne->rang }}</td>@endif
           <td>@include('parrainage._oev', ['oev' => $oev, 'detail' => '· ' . $oev->age() . ' ans'])</td>
           <td><span class="oev-statut oev-statut--{{ $oev->statut }}">{{ $oev->libelle('statut', App\Models\Oev::STATUTS) }}</span></td>
           <td class="small">{{ $oev->province?->nom }} <span class="text-muted">· {{ $ligne->region?->nom }}</span></td>
@@ -44,14 +39,6 @@
           @if ($modifiable)
             <td class="text-end">
               <div class="d-inline-flex gap-1">
-                @if ($estAttente)
-                  <form method="POST" action="{{ route('parrainage.sessions.selection.modifier', [$session, $ligne]) }}">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="action" value="retenir">
-                    <button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Retenir</button>
-                  </form>
-                @endif
                 <form method="POST" action="{{ route('parrainage.sessions.selection.retirer', [$session, $ligne]) }}" data-confirm="Retirer {{ $oev->nomComplet() }} de la sélection ?" data-confirm-danger>
                   @csrf
                   @method('DELETE')
@@ -66,7 +53,7 @@
     <tfoot>
       <tr class="fw-semibold">
         {{-- Total de toute la liste (calculé par la base), pas seulement de la page affichée --}}
-        <td colspan="{{ $estAttente ? 6 : 5 }}" class="text-end">{{ isset($total) ? 'Total de la liste' : 'Total de la page' }}</td>
+        <td colspan="5" class="text-end">{{ isset($total) ? 'Total de la liste' : 'Total de la page' }}</td>
         <td class="text-end">{{ App\Support\Montant::fcfa($total ?? $lignes->sum('montant_retenu')) }}</td>
         @if ($modifiable)<td></td>@endif
       </tr>

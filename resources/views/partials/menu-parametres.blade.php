@@ -3,7 +3,7 @@
   $ecranParametres = request()->routeIs('parametres.*', 'localites.regions.*', 'localites.provinces.*', 'localites.communes.*', 'localites.villages.*');
   $liensParametres = [
     ['Paramètres généraux', 'bi-gear', route('parametres.edit'), request()->routeIs('parametres.edit')],
-    ['Écoles', 'bi-building', route('parametres.ecoles.index'), request()->routeIs('parametres.ecoles.*')],
+    ['Écoles et centres', 'bi-building', route('parametres.ecoles.index'), request()->routeIs('parametres.ecoles.*')],
     ['Localités', 'bi-geo-alt', route('localites.regions.index'), request()->routeIs('localites.regions.*', 'localites.provinces.*', 'localites.communes.*', 'localites.villages.*')],
   ];
   foreach (\App\Models\ListeReference::listes() as $cleListe => $configListe) {

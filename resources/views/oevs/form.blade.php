@@ -49,7 +49,7 @@
           'gestionnaire_nom', 'gestionnaire_fonction', 'gestionnaire_contact'],
     4 => ['situation_scolaire', 'systeme_educatif', 'niveau_etude', 'raison_non_scolarisation', 'raison_non_scolarisation_precision', 'ecole_precedente_id', 'etablissement_precedent', 'classe_precedente', 'moyenne_annuelle',
           'appreciation', 'performance_scolaire', 'performance_difficultes', 'ecole_id', 'etablissement_actuel', 'type_etablissement', 'classe', 'frais_scolarite',
-          'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'formation_duree_mois', 'formation_duree_recue_mois',
+          'formation_professionnelle', 'formation_etat', 'formation_filiere', 'formation_type_centre', 'centre_formation_id', 'formation_duree_mois', 'formation_duree_recue_mois',
           'souhait_avenir', 'souhait_avenir_precision'],
     5 => array_keys(Oev::DOCUMENTS),
   ];
@@ -608,6 +608,16 @@
                     <div class="col-sm-4">@include('oevs.champs._choix', ['nom' => 'formation_etat', 'label' => 'État', 'options' => Oev::ETATS_FORMATION, 'valeur' => $v('formation_etat'), 'requis' => true])</div>
                     <div class="col-sm-4">@include('oevs.champs._texte', ['nom' => 'formation_filiere', 'label' => 'Filière de formation', 'valeur' => $v('formation_filiere'), 'max' => 150, 'requis' => true, 'placeholder' => 'ex : couture, mécanique…', 'erreur' => 'Indiquez la filière.'])</div>
                     <div class="col-sm-4">@include('oevs.champs._choix', ['nom' => 'formation_type_centre', 'label' => 'Type de centre', 'options' => Oev::TYPES_ETABLISSEMENT, 'valeur' => $v('formation_type_centre'), 'requis' => true])</div>
+                    {{-- Centre du référentiel (Paramètres > Écoles et centres) : son RIB sert au paiement d'un parrainage en formation --}}
+                    <div class="col-sm-8">
+                      <label class="form-label" for="centre_formation_id">Centre de formation</label>
+                      <select class="form-select @error('centre_formation_id') is-invalid @enderror" id="centre_formation_id" name="centre_formation_id" data-centres
+                              data-url="{{ route('localites.ecoles-commune', ['commune' => '__COMMUNE__', 'nature' => App\Models\Ecole::NATURE_CENTRE]) }}" data-valeur="{{ old('centre_formation_id', $oev->centre_formation_id) }}">
+                        <option value="">Choisissez d’abord la commune de l’enfant (étape 1)</option>
+                      </select>
+                      @error('centre_formation_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                      <div class="form-text">Centres enregistrés pour la commune de l’enfant. Absent de la liste : à ajouter dans Paramètres &gt; Écoles et centres.</div>
+                    </div>
                     <div class="col-sm-4">
                       <label class="form-label" for="formation_duree_mois">Durée de la formation <span class="text-danger">*</span></label>
                       <div class="input-group">
@@ -1043,6 +1053,31 @@ document.addEventListener('DOMContentLoaded', function () {
     if (radioType) { radioType.checked = true; }
     if (systemeSelonType[ecole.type]) { document.getElementById('systeme_educatif').value = systemeSelonType[ecole.type]; }
   });
+
+  // Centre de formation : centres de la commune de l'enfant, chargés à la demande (une requête par commune)
+  var champCentre = form.querySelector('[data-centres]');
+  if (champCentre) {
+    var centresParCommune = {};
+    var chargerCentres = function (valeur) {
+      var commune = champCommune.value;
+      var remplir = function (centres) {
+        champCentre.innerHTML = '';
+        champCentre.add(new Option(centres.length ? 'Non répertorié' : (commune ? 'Aucun centre enregistré pour cette commune' : 'Choisissez d’abord la commune de l’enfant (étape 1)'), ''));
+        centres.forEach(function (c) { champCentre.add(new Option(c.nom, c.id, false, String(c.id) === String(valeur))); });
+      };
+      if (!commune) { remplir([]); return; }
+      if (!centresParCommune[commune]) {
+        centresParCommune[commune] = fetch(champCentre.dataset.url.replace('__COMMUNE__', encodeURIComponent(commune)), { headers: { 'Accept': 'application/json' } })
+          .then(function (reponse) { return reponse.ok ? reponse.json() : []; })
+          .catch(function () { return []; });
+      }
+      centresParCommune[commune].then(function (centres) { if (champCommune.value === commune) { remplir(centres); } });
+    };
+    chargerCentres(champCentre.dataset.valeur);
+    form.addEventListener('change', function (e) {
+      if (['region_id', 'province_id', 'commune_id'].indexOf(e.target.id) !== -1) { chargerCentres(''); }
+    });
+  }
 
   /* ----- Statut OEV déduit des parents (même règle que le serveur) ----- */
   var badgeStatut = form.querySelector('[data-statut-calcule]');

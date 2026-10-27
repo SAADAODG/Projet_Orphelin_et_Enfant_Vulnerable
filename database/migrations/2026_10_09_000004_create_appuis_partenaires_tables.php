@@ -34,7 +34,6 @@ return new class extends Migration
             ['vestimentaire', 'Vestimentaire', false],
             ['materiel', 'Matériel', false],
             ['financier', 'Financier', false],
-            ['autre', 'Autre', false],
         ];
         foreach ($natures as $ordre => [$code, $libelle, $scolaire]) {
             DB::table('natures_appui')->insert([
@@ -82,6 +81,8 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['annee', 'nature_appui_id', 'oev_id']);
+            $table->index('oev_id');
+            $table->index('parrain_id');
         });
     }
 

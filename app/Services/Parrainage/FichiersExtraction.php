@@ -113,7 +113,7 @@ class FichiersExtraction
         foreach (ExtractionsParrainage::lignesAvecTotaux($donnees['etablissements']) as $l) {
             $ligne++;
             if ($l['niveau'] === 'etablissement') {
-                $valeurs = array_map(fn ($cle) => $cle === 'rib' ? ($l['rib_manquant'] ? 'RIB manquant' : 'Complet') : $l[$cle], array_keys($colonnesEtablissement));
+                $valeurs = array_map(fn ($cle) => $cle === 'rib' ? ($l['rib_manquant'] ? 'RIB manquant' : $l['rib']) : $l[$cle], array_keys($colonnesEtablissement));
                 $feuille->fromArray($valeurs, null, "A{$ligne}", true);
                 if ($l['rib_manquant']) {
                     $cellule = isset($colonnesEtablissement['rib']) ? $lettre($colonnesEtablissement, 'rib') : 'A';
@@ -198,6 +198,53 @@ class FichiersExtraction
             ->setPaper('a4', count($colonnes) > 8 ? 'landscape' : 'portrait')
             ->setOption('isFontSubsettingEnabled', true)
             ->download($nomFichier);
+    }
+
+    /**
+     * Classeur de plusieurs feuilles, chacune un tableau avec ses lignes de sous-total et de total.
+     *
+     * @param  array<int, array{titre: string, colonnes: array<string, string>, lignes: iterable<array>, montants?: array<int, string>, alerte?: string}>  $feuilles
+     *   colonnes : clé => libellé ; lignes : clé => valeur, plus « niveau » (null, « sous_total » ou « total »)
+     *   et, pour un total, « libelle » (écrit dans la première colonne) ;
+     *   montants : clés des colonnes de montants (séparateur de milliers) ; alerte : clé d'un booléen de la ligne
+     *   (ex. RIB manquant) qui colore la première colonne en rouge.
+     */
+    public function classeurExcel(array $feuilles, array $entete, string $nomFichier): StreamedResponse
+    {
+        self::prevoirGrosFichier();
+        $classeur = new Spreadsheet();
+        $classeur->removeSheetByIndex(0);
+
+        foreach ($feuilles as $definition) {
+            // Nom d'onglet Excel : 31 caractères au plus, sans : \ / ? * [ ]
+            $feuille = $classeur->createSheet()->setTitle(mb_substr(str_replace([':', '\\', '/', '?', '*', '[', ']'], ' ', $definition['titre']), 0, 31));
+            $ligne = $this->ecrireEntete($feuille, $entete);
+            $debut = $ligne;
+            $cles = array_keys($definition['colonnes']);
+            $derniere = Coordinate::stringFromColumnIndex(count($cles));
+            $feuille->fromArray(array_values($definition['colonnes']), null, "A{$ligne}");
+            foreach ($definition['lignes'] as $l) {
+                $ligne++;
+                $valeurs = array_map(fn ($cle) => $l[$cle] ?? null, $cles);
+                // Sous-total ou total : son libellé dans la première colonne, quelle qu'elle soit
+                if (($l['niveau'] ?? null) !== null) {
+                    $valeurs[0] = $l['libelle'] ?? $valeurs[0];
+                }
+                $feuille->fromArray($valeurs, null, "A{$ligne}", true);
+                if (($l['niveau'] ?? null) !== null) {
+                    $feuille->getStyle("A{$ligne}:{$derniere}{$ligne}")->getFont()->setBold(true);
+                    $this->colorer($feuille, "A{$ligne}:{$derniere}{$ligne}", $l['niveau'] === 'total' ? 'D9EAD3' : 'F2F4F3');
+                } elseif (isset($definition['alerte']) && ! empty($l[$definition['alerte']])) {
+                    $this->colorer($feuille, "A{$ligne}", 'FDE2E1', 'B42318');
+                }
+            }
+            $montants = array_map(fn ($cle) => Coordinate::stringFromColumnIndex(array_search($cle, $cles, true) + 1),
+                array_values(array_intersect($definition['montants'] ?? [], $cles)));
+            $this->finaliserTableau($feuille, $debut, $ligne, $derniere, $montants);
+        }
+        $classeur->setActiveSheetIndex(0);
+
+        return $this->telecharger($classeur, $nomFichier);
     }
 
     /** Titre et lignes d'en-tête ; renvoie le numéro de la ligne où commence le tableau. */

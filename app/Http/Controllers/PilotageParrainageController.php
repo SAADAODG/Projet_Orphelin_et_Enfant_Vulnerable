@@ -59,21 +59,15 @@ class PilotageParrainageController extends Controller
     public function extractions(Request $request): View
     {
         $utilisateur = $request->user();
-        $vue = $request->query('vue') === 'paiement' && $this->peutExtrairePaiement($utilisateur) ? 'paiement' : 'parrain';
         $parrain = Parrain::with('engagements')->find($request->integer('parrain_id'));
         $filtresParrain = $parrain ? $this->filtresListeParrain($request, $parrain) : null;
         // Liste comptée par la base ; seuls les 10 premiers OEV sont lus pour l'aperçu
         $liste = $parrain ? $this->extractions->listeParrain($parrain, $utilisateur, $filtresParrain) : ['nombre' => 0, 'apercu' => fn () => []];
 
         return view('parrainage.pilotage.extractions', [
-            'vue' => $vue,
-            'peutPaiement' => $this->peutExtrairePaiement($utilisateur),
             'central' => $utilisateur->niveau() === User::NIVEAU_CENTRAL,
             'disponible' => $this->source->disponible(),
             'localites' => Perimetre::pour($utilisateur)->filtrerArborescence(Region::arborescence()),
-            'sessionsPaiement' => SessionParrainage::whereIn('etat', self::ETATS_PAIEMENT)->orderByDesc('annee')->orderBy('numero')->get(),
-            'sessions' => SessionParrainage::orderByDesc('annee')->orderBy('numero')->get(),
-            'etablissements' => $this->source->etablissements(),
             'parrains' => Parrain::actifs()->orderBy('nom')->get(['id', 'nom']),
             'parrain' => $parrain,
             'f' => $filtresParrain,
@@ -84,8 +78,6 @@ class PilotageParrainageController extends Controller
             'colonnesApercu' => ExtractionsParrainage::colonnesListeParrain(ExtractionsParrainage::DONNEES_APERCU),
             'donneesParrain' => ExtractionsParrainage::donneesListeParrain(),
             'donneesParrainChoisies' => (array) $request->input('donnees', ExtractionsParrainage::DONNEES_PARRAIN_PAR_DEFAUT),
-            'colonnesEtablissement' => ExtractionsParrainage::COLONNES_ETABLISSEMENT,
-            'colonnesNominatif' => ExtractionsParrainage::COLONNES_NOMINATIF,
         ]);
     }
 
@@ -179,9 +171,6 @@ class PilotageParrainageController extends Controller
 
         $parrain = Parrain::with('engagements')->findOrFail($request->integer('parrain_id'));
         $f = $this->filtresListeParrain($request, $parrain);
-        if ($f['source'] === 'attente' && ! $f['session']) {
-            return back()->withInput()->withErrors(['session_id' => 'Choisissez la session dont la liste d’attente est extraite.']);
-        }
         $liste = $this->extractions->listeParrain($parrain, $utilisateur, $f);
         $format = $request->input('format');
         $colonnes = ExtractionsParrainage::colonnesListeParrain($donnees);
@@ -190,8 +179,6 @@ class PilotageParrainageController extends Controller
         }
 
         $resume = collect([
-            'source' => $f['source'],
-            'session' => $f['session']?->reference(),
             'annee' => $f['annee'],
             'nature' => $f['nature']?->code,
         ] + collect($f)->only(self::FILTRES_MULTIPLES)->all() + collect($f)->only(['age_min', 'age_max'])->all())
@@ -207,12 +194,9 @@ class PilotageParrainageController extends Controller
         $entete = [
             'titre' => "OEV proposés à {$parrain->nom}",
             'lignes' => array_filter([
-                $f['source'] === 'attente'
-                    ? "Source : liste d’attente de la session {$f['session']->reference()}"
-                    : "Source : OEV sans appui « " . ($f['nature']?->libelle ?? 'toutes natures') . " » pour {$f['annee']}",
+                "OEV sans appui « " . ($f['nature']?->libelle ?? 'toutes natures') . " » pour {$f['annee']}",
                 'Extraite le ' . now()->format('d/m/Y à H:i') . " par {$utilisateur->name}",
                 $identiteComplete ? 'Document confidentiel : identité complète des enfants.' : 'Liste anonymisée.',
-                $f['source'] === 'attente' && ! $this->source->disponible() ? 'Données non disponibles : le module Sélection n’est pas encore branché.' : null,
             ]),
         ];
         $nom = 'oev-' . Str::slug($parrain->nom) . '-' . now()->format('Ymd-His') . '.' . $format;
@@ -238,8 +222,6 @@ class PilotageParrainageController extends Controller
         )));
 
         return [
-            'source' => $request->input('source') === 'attente' ? 'attente' : 'eligibles',
-            'session' => SessionParrainage::find($request->integer('session_id')),
             'annee' => preg_match('/^\d{4}-\d{4}$/', $annee) ? $annee : SessionParrainageController::anneeScolaireCourante(),
             'nature' => $natureId ? NatureAppui::find($natureId) : null,
             // Zone d'intervention : régions et provinces cochées ; aucune = toutes les régions

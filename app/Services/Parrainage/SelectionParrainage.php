@@ -4,10 +4,12 @@ namespace App\Services\Parrainage;
 
 use App\Models\AppuiPartenaire;
 use App\Models\BeneficiaireSession;
+use App\Models\Ecole;
 use App\Models\JournalActivite;
 use App\Models\NatureAppui;
 use App\Models\Oev;
 use App\Models\Province;
+use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\SuiviParrainage;
 use App\Models\User;
@@ -20,7 +22,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Module « Sélection » du parrainage : OEV éligibles à une session, classés du besoin le plus urgent au
  * moins urgent (score calculé, non affiché), ajout à la liste de la session (contrôle de l'enveloppe et
- * des quotas, RG-04), liste d'attente, estimation du coût, validation de la liste définitive.
+ * des quotas, RG-04), estimation du coût, validation de la liste définitive. Pas de liste d'attente : un ajout
+ * qui dépasserait l'enveloppe (ou un quota) est refusé en entier.
  *
  * Appui scolaire : enfants scolarisés (frais de scolarité de la fiche) et enfants d'âge scolaire non
  * scolarisés, à inscrire (montant estimatif de la session). Formation : OEV en formation professionnelle
@@ -443,24 +446,24 @@ class SelectionParrainage implements SourceSelectionEnBase
     /* ---------------------------------------------------------------- Liste de la session */
 
     /**
-     * Ajoute des OEV éligibles à la session, du score le plus élevé au plus faible : retenus tant que
-     * l'enveloppe (si le dépassement est bloqué) et le quota de leur région (si les quotas sont actifs)
-     * le permettent, sinon placés en liste d'attente. Les OEV non éligibles sont ignorés.
+     * Ajoute des OEV éligibles à la session : tous retenus, ou aucun. Avec une enveloppe (ou des quotas par
+     * région), l'ajout est refusé en entier s'il la dépasserait (il n'y a pas de liste d'attente). Les OEV
+     * non éligibles sont ignorés.
      *
      * @param  array<int, int>  $oevIds
-     * @return array{retenus: int, attente: int}
+     * @return array{retenus: int, refus: string|null} refus : raison du refus (rien n'est ajouté)
      */
     public function ajouter(SessionParrainage $session, array $oevIds, User $utilisateur): array
     {
-        $compte = ['retenus' => 0, 'attente' => 0];
         if (! $oevIds) {
-            return $compte;
+            return ['retenus' => 0, 'refus' => null];
         }
 
-        DB::transaction(function () use ($session, $oevIds, $utilisateur, &$compte) {
+        return DB::transaction(function () use ($session, $oevIds, $utilisateur) {
             $budget = $this->budget($session);
-            $rang = (int) $session->beneficiaires()->enAttente()->max('rang');
             $dejaFinance = $this->dejaFinance($session, $oevIds);
+            $lignes = [];
+            $ajout = ['engage' => 0, 'regions' => []];
 
             foreach ($this->eligibles($session)->whereIn('oevs.id', $oevIds)->get() as $oev) {
                 $type = self::typePour($oev, $session);
@@ -468,49 +471,65 @@ class SelectionParrainage implements SourceSelectionEnBase
                 // Complément : seul le reste à payer est financé
                 $frais = self::fraisRestants($frais, $dejaFinance[$oev->id] ?? 0);
                 $montant = BeneficiaireSession::montantPour($frais, $session->plafond_beneficiaire);
-                $retenu = $this->tientDansLeBudget($session, $budget, $oev->region_id, $montant);
-
-                $session->beneficiaires()->create([
+                $lignes[] = [
                     'oev_id' => $oev->id,
                     'type_appui' => $type,
-                    'statut' => $retenu ? BeneficiaireSession::RETENU : BeneficiaireSession::ATTENTE,
-                    'rang' => $retenu ? null : ++$rang,
+                    'statut' => BeneficiaireSession::RETENU,
                     'score' => (int) $oev->score,
                     'region_id' => $oev->region_id,
+                    // École ou centre à payer (suit la fiche jusqu'au paiement)
+                    'etablissement_id' => PaiementsParrainage::etablissementDe($oev, $type),
                     'frais_reels' => $frais,
                     'frais_estimes' => $estime,
                     'montant_retenu' => $montant,
                     'created_by' => $utilisateur->id,
-                ]);
-
-                if ($retenu) {
-                    $budget['engage'] += $montant;
-                    $budget['regions'][$oev->region_id] = ($budget['regions'][$oev->region_id] ?? 0) + $montant;
-                }
-                $compte[$retenu ? 'retenus' : 'attente']++;
+                ];
+                $ajout['engage'] += $montant;
+                $ajout['regions'][$oev->region_id] = ($ajout['regions'][$oev->region_id] ?? 0) + $montant;
             }
 
-            if ($compte['retenus'] + $compte['attente'] > 0) {
+            if ($refus = $this->depassement($session, $budget, $ajout)) {
+                return ['retenus' => 0, 'refus' => $refus];
+            }
+            foreach ($lignes as $ligne) {
+                $session->beneficiaires()->create($ligne);
+            }
+            if ($lignes) {
                 JournalActivite::consigner('session_parrainage.selection', $session,
-                    "Sélection : {$compte['retenus']} OEV retenu(s), {$compte['attente']} en liste d’attente", $compte, $utilisateur);
+                    'Sélection : ' . count($lignes) . ' OEV retenu(s) pour ' . Montant::fcfa($ajout['engage']), ['retenus' => count($lignes)], $utilisateur);
             }
-        });
 
-        return $compte;
+            return ['retenus' => count($lignes), 'refus' => null];
+        });
     }
 
-    /** Fait passer un OEV de la liste d'attente à la liste de la session, si le budget le permet. */
-    public function retenir(SessionParrainage $session, BeneficiaireSession $ligne, User $utilisateur): ?string
+    /**
+     * Raison pour laquelle l'ajout $ajout (montant total et par région) dépasserait l'enveloppe ou un quota ;
+     * null s'il tient dans le budget.
+     *
+     * @param  array{engage: int, regions: array<int, int>}  $budget  montants déjà engagés
+     * @param  array{engage: int, regions: array<int, int>}  $ajout  montants à ajouter
+     */
+    public function depassement(SessionParrainage $session, array $budget, array $ajout): ?string
     {
-        if ($ligne->statut === BeneficiaireSession::RETENU) {
-            return null;
-        }
-        if (! $this->tientDansLeBudget($session, $this->budget($session), $ligne->region_id, $ligne->montant_retenu)) {
-            return $this->messageHorsBudget($session, $ligne);
-        }
+        if ($session->aUneEnveloppe() && $budget['engage'] + $ajout['engage'] > $session->enveloppe) {
+            $reste = $session->enveloppe - $budget['engage'];
 
-        $ligne->update(['statut' => BeneficiaireSession::RETENU, 'rang' => null]);
-        JournalActivite::consigner('session_parrainage.selection', $session, "OEV {$ligne->oev->reference()} retenu depuis la liste d’attente", [], $utilisateur);
+            return 'ces OEV coûtent ' . Montant::fcfa($ajout['engage']) . ' et il reste ' . Montant::fcfa(max(0, $reste))
+                . ' sur l’enveloppe (dépassement de ' . Montant::fcfa($ajout['engage'] - $reste) . '). Retirez des OEV ou affinez les filtres.';
+        }
+        if ($session->quotas_actifs) {
+            foreach ($ajout['regions'] as $regionId => $montant) {
+                $quota = (int) ($session->quotas->firstWhere('region_id', $regionId)?->montant ?? 0);
+                $reste = $quota - ($budget['regions'][$regionId] ?? 0);
+                if ($montant > $reste) {
+                    $nom = Region::whereKey($regionId)->value('nom') ?? 'sans région';
+
+                    return "les OEV de la région {$nom} coûtent " . Montant::fcfa($montant) . ' et il reste ' . Montant::fcfa(max(0, $reste))
+                        . ' sur son quota. Retirez des OEV de cette région ou affinez les filtres.';
+                }
+            }
+        }
 
         return null;
     }
@@ -520,7 +539,7 @@ class SelectionParrainage implements SourceSelectionEnBase
     {
         $montant = BeneficiaireSession::montantPour($frais, $session->plafond_beneficiaire);
 
-        if ($ligne->statut === BeneficiaireSession::RETENU && $montant > $ligne->montant_retenu) {
+        if ($montant > $ligne->montant_retenu) {
             $budget = $this->budget($session);
             $budget['engage'] -= $ligne->montant_retenu;
             $budget['regions'][$ligne->region_id] = ($budget['regions'][$ligne->region_id] ?? 0) - $ligne->montant_retenu;
@@ -566,7 +585,8 @@ class SelectionParrainage implements SourceSelectionEnBase
 
     private function tientDansLeBudget(SessionParrainage $session, array $budget, ?int $regionId, int $montant): bool
     {
-        if ($session->bloquer_depassement_enveloppe && $budget['engage'] + $montant > $session->enveloppe) {
+        // Enveloppe renseignée : jamais dépassée (sans enveloppe, aucune limite globale)
+        if ($session->aUneEnveloppe() && $budget['engage'] + $montant > $session->enveloppe) {
             return false;
         }
         if ($session->quotas_actifs) {
@@ -625,21 +645,14 @@ class SelectionParrainage implements SourceSelectionEnBase
 
         // Lignes brutes (pas de modèles) : la liste peut compter des dizaines de milliers de bénéficiaires
         return $session->beneficiaires()->retenus()->orderByDesc('score')->orderBy('id')->toBase()
-            ->get(['oev_id', 'type_appui', 'frais_reels', 'montant_retenu'])
+            ->get(['oev_id', 'type_appui', 'etablissement_id', 'frais_reels', 'montant_retenu'])
             ->map(fn ($b) => [
                 'oev_id' => (int) $b->oev_id,
                 'type_appui' => $b->type_appui,
-                'etablissement_id' => null,
+                'etablissement_id' => self::entier($b->etablissement_id),
                 'frais_reels' => self::entier($b->frais_reels ?? $b->montant_retenu),
                 'montant_retenu' => self::entier($b->montant_retenu),
             ]);
-    }
-
-    public function listeAttente(SessionParrainage $session): Collection
-    {
-        return $session->beneficiaires()->enAttente()->orderBy('rang')->orderBy('id')->toBase()
-            ->get(['oev_id', 'rang', 'montant_retenu'])
-            ->map(fn ($b) => ['oev_id' => (int) $b->oev_id, 'rang' => self::entier($b->rang), 'besoin_estime' => self::entier($b->montant_retenu)]);
     }
 
     /** Même conversion que le cast « integer » du modèle : null reste null. */
@@ -648,9 +661,25 @@ class SelectionParrainage implements SourceSelectionEnBase
         return $valeur === null ? null : (int) $valeur;
     }
 
+    /** Établissements payés par au moins une session (écoles et centres de formation du référentiel). */
     public function etablissements(): Collection
     {
-        return collect();
+        return Ecole::query()
+            ->whereIn('ecoles.id', BeneficiaireSession::whereNotNull('etablissement_id')->select('etablissement_id'))
+            ->join('communes as c', 'c.id', '=', 'ecoles.commune_id')
+            ->join('provinces as p', 'p.id', '=', 'c.province_id')
+            ->toBase()
+            ->get(['ecoles.id', 'ecoles.nom', 'ecoles.nature', 'ecoles.statut', 'p.region_id', 'c.province_id', 'ecoles.commune_id', 'ecoles.banque', 'ecoles.rib'])
+            ->mapWithKeys(fn ($e) => [(int) $e->id => [
+                'id' => (int) $e->id,
+                'nom' => $e->nom,
+                'type' => trim((Ecole::NATURES[$e->nature] ?? '') . ($e->statut ? ' · ' . (Ecole::STATUTS[$e->statut] ?? $e->statut) : '')),
+                'region_id' => (int) $e->region_id,
+                'province_id' => (int) $e->province_id,
+                'commune_id' => (int) $e->commune_id,
+                'banque' => $e->banque,
+                'rib' => $e->rib === '' ? null : $e->rib,
+            ]]);
     }
 
     public function naturesAppuiEtat(int $oevId, string $annee): array
@@ -669,11 +698,6 @@ class SelectionParrainage implements SourceSelectionEnBase
 
         return BeneficiaireSession::retenus()->whereIn('session_parrainage_id', $arretees)->toBase()
             ->select(['oev_id', 'type_appui', 'montant_retenu']);
-    }
-
-    public function requeteListeAttente(Collection $sessions): QueryBuilder
-    {
-        return BeneficiaireSession::enAttente()->whereIn('session_parrainage_id', $sessions->pluck('id')->all())->toBase()->select('oev_id');
     }
 
     public function requeteResultatsScolaires(string $annee): QueryBuilder

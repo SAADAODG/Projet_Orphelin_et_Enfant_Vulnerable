@@ -76,7 +76,7 @@
               <td class="fw-semibold">n°{{ $session->numero }}</td>
               <td class="oev-nom">{{ $session->description }}</td>
               <td>{{ $session->libelleTypeAppui() }}</td>
-              <td class="text-end text-nowrap">{{ Montant::fcfa($session->enveloppe) }}</td>
+              <td class="text-end text-nowrap">{{ $session->aUneEnveloppe() ? Montant::fcfa($session->enveloppe) : "—" }}</td>
               <td class="text-end">
                 <a class="text-decoration-none" href="{{ route('parrainage.sessions.selection', ['session' => $session, 'onglet' => 'liste']) }}">{{ Montant::nombre($session->nb_retenus) }}</a>
               </td>

@@ -6,15 +6,14 @@ La base de développement n'a jamais servi aux mesures.
 
 ## Ce que l'équipe doit faire
 
-1. **Migrations** : `php artisan migrate` (migrations du 15 et du 16/10/2026). Sans elles, l'enregistrement d'un OEV
-   et la sélection échouent (colonne `oevs.score_besoin` absente).
-   - `2026_10_15_000001_add_performance_indexes` : index (instantané sur une petite base).
-   - `2026_10_15_000002_add_score_besoin_to_oevs_table` : ajoute le score et le calcule pour tous les dossiers
-     (≈ 6 min pour 1 000 000 de dossiers). Sur une grosse base, lancer ensuite `VACUUM ANALYZE oevs;`
-     (la mise à jour réécrit toutes les lignes).
-   - `2026_10_16_000001_add_trigram_search_indexes` (PostgreSQL seulement) : active l'extension `pg_trgm`
+1. **Base de données** : les migrations ont été regroupées le 23/10/2026 (champs et index directement dans les
+   migrations de création). Recréer la base : `php artisan migrate:fresh --seed` (efface les données).
+   - Index de performance, score d'urgence (`oevs.score_besoin`) : dans `create_oevs_table` et les autres
+     créations de tables.
+   - Recherche libre (PostgreSQL seulement) : la création de `oevs` active l'extension `pg_trgm`
      (`CREATE EXTENSION`, droit CREATE sur la base requis : sinon, la faire activer par l'administrateur de la
-     base puis relancer la migration) et crée 10 index trigrammes (≈ 23 s et 117 Mo pour 1 000 000 de dossiers).
+     base avant la migration) et crée 10 index trigrammes (≈ 23 s et 117 Mo pour 1 000 000 de dossiers).
+   - Le seeder calcule le score des dossiers de démonstration (les événements des modèles y sont coupés).
 2. **Import en SQL direct** de dossiers (hors application) : recalculer les scores avec
    `App\Services\Parrainage\ScoreBesoin::recalculerTout()` (ou `recalculerIds([...])`).
 3. **Traitement en masse par le modèle** (import PHP) : l'envelopper dans `ScoreBesoin::differer(fn () => …)`,
@@ -67,8 +66,8 @@ Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 
 | Fichier | Correction |
 |---|---|
-| `database/migrations/2026_10_15_000001_add_performance_indexes.php` | Index des clés de zone, des tris par état et date ; index **partiels** (`WHERE deleted_at IS NULL`, comme toutes les requêtes) : `oevs_comptages_index` (comptages sans lire la table), intégration, tris du filtrage. |
-| `database/migrations/2026_10_15_000002_add_score_besoin_to_oevs_table.php` | Colonne `score_besoin` indexée, remplie avec l'expression SQL du barème. |
+| `database/migrations/2026_09_27_000002_create_oevs_table.php` (et autres créations) | Index des clés de zone, des tris par état et date ; index **partiels** (`WHERE deleted_at IS NULL`, comme toutes les requêtes) : `oevs_comptages_index` (comptages sans lire la table), intégration, tris du filtrage. |
+| `create_oevs_table` | Colonne `score_besoin` indexée (expression SQL du barème). |
 | `app/Services/Parrainage/ScoreBesoin.php`, `app/Observers/ScoreBesoinObserver.php` | Score recalculé **en SQL direct** à la création et à la modification d'un critère (hors journal d'audit) ; mode différé ; recalcul global. |
 | `app/Services/Parrainage/SelectionParrainage.php` | Tri par le score enregistré ; `estimationCout()` en une requête d'agrégat ; listes définitive / d'attente lues en lignes brutes ; requêtes SQL des listes (`SourceSelectionEnBase`). |
 | `app/Services/Parrainage/SourceSelectionEnBase.php` | Interface facultative : listes de la sélection fournies comme requêtes. Une source externe (tableaux) reste possible. |
@@ -79,7 +78,7 @@ Serveur HTTP de mesure (base `_perf`), depuis `public/` :
 | `resources/views/extraction/index.blade.php`, `parrainage/pilotage/extractions.blade.php` | Boutons PDF / Excel désactivés au-delà des limites, avec l'explication (recalculée selon les données cochées). |
 | `app/Http/Controllers/SessionParrainageController.php`, `parrainage/sessions/show.blade.php` | Retenus de la session paginés (50), nombre et montant par la base. |
 | `app/Http/Controllers/DashboardController.php` | Évolution sur 6 mois en une requête ; « à traiter » lu état par état dans l'ordre de l'index. |
-| `database/migrations/2026_10_16_000001_add_trigram_search_indexes.php` | Index trigrammes (`pg_trgm`, GIN) sur les 10 colonnes de la recherche libre des dossiers. |
+| `create_oevs_table` (PostgreSQL) | Index trigrammes (`pg_trgm`, GIN) sur les 10 colonnes de la recherche libre des dossiers. |
 | `app/Models/Concerns/AppartientALocalite.php` | Recherche par localité : identifiants des localités lus d'abord (`IN (…)` au lieu de `OR EXISTS`), pour que la base combine les index de la recherche. |
 
 ### Équivalence prouvée (valeurs stockées et calculs réécrits)

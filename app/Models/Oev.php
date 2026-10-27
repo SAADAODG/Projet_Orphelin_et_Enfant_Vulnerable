@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'code', 'nom', 'prenom', 'sexe', 'date_naissance', 'statut', 'handicap', 'nature_handicap', 'systeme_educatif',
     'nom_tuteur', 'prenom_tuteur', 'contact_tuteur',
     'etablissement_precedent', 'ecole_precedente_id', 'classe_precedente', 'moyenne_annuelle', 'appreciation', 'performance_scolaire', 'performance_difficultes',
-    'etablissement_actuel', 'ecole_id', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite',
+    'etablissement_actuel', 'ecole_id', 'centre_formation_id', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite',
     'region_id', 'province_id', 'commune_id', 'village_id',
     'nom_structure_rib', 'created_by',
     'numero_dossier', 'statut_dossier', 'soumis_at', 'soumis_par', 'verifie_at', 'verifie_par', 'motif_non_conformite', 'integre_at', 'integre_par',
@@ -417,6 +417,12 @@ class Oev extends Model
     }
 
     /** École de l'année précédente, choisie dans le référentiel ; son nom est aussi dans etablissement_precedent. */
+    /** Centre de formation professionnelle fréquenté (référentiel des établissements). */
+    public function centreFormation(): BelongsTo
+    {
+        return $this->belongsTo(Ecole::class, 'centre_formation_id');
+    }
+
     public function ecolePrecedente(): BelongsTo
     {
         return $this->belongsTo(Ecole::class, 'ecole_precedente_id');

@@ -102,13 +102,13 @@ class PilotageEquivalenceTest extends TestCase
         // Sessions de l'année, appuis des partenaires (natures variées, certains OEV aussi appuyés par l'État)
         $session = SessionParrainage::create([
             'description' => 'S1', 'annee' => '2026-2027', 'numero' => 1, 'type_appui' => SessionParrainage::TYPE_LES_DEUX,
-            'enveloppe' => 5_000_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
+            'enveloppe' => 5_000_000, 'date_ouverture' => '2026-10-01',
             'etat' => SessionParrainage::ETAT_VALIDEE, 'quotas_actifs' => true,
         ]);
         $session->quotas()->create(['region_id' => $ici->province->region_id, 'montant' => 1_000_000]);
         $session2 = SessionParrainage::create([
             'description' => 'S2', 'annee' => '2026-2027', 'numero' => 2, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
-            'enveloppe' => 2_000_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-11-01',
+            'enveloppe' => 2_000_000, 'date_ouverture' => '2026-11-01',
             'etat' => SessionParrainage::ETAT_VALIDEE,
         ]);
         $parrains = collect(range(1, 3))->map(fn ($n) => Parrain::create(['type' => 'ong', 'nom' => "Parrain {$n}", 'actif' => true]));
@@ -142,11 +142,6 @@ class PilotageEquivalenceTest extends TestCase
                     SuiviParrainage::create(['beneficiaire_session_id' => $ligne->id, 'oev_id' => $b['oev_id'], 'annee' => '2026-2027',
                         'type_appui' => $b['type_appui'], 'resultat' => ['admis', 'redouble', 'abandon'][$j % 3], 'a_reconduire' => true]);
                 }
-            }
-            foreach ($attente as $b) {
-                BeneficiaireSession::create(['session_parrainage_id' => $sessionDe($b['oev_id'])->id, 'oev_id' => $b['oev_id'],
-                    'type_appui' => SessionParrainage::TYPE_SCOLAIRE, 'statut' => BeneficiaireSession::ATTENTE, 'rang' => $b['rang'], 'score' => 5,
-                    'frais_reels' => null, 'frais_estimes' => true, 'montant_retenu' => $b['besoin_estime']]);
             }
             $source = $this->app->make(SourceSelection::class);
             $this->assertInstanceOf(SourceSelectionEnBase::class, $source);
@@ -196,7 +191,6 @@ class PilotageEquivalenceTest extends TestCase
         $this->assertGreaterThan(0, $i['couverture']['partenaires']);
         $this->assertCount(5, $i['profil']['age']->filter(fn ($l) => $l['total'] > 0));
         $this->assertGreaterThan(0, collect($i['resultats'])->sum('total'));
-        $this->assertGreaterThan(0, $i['couverture']['attente']);
     }
 
     /** Collections converties en tableaux : seules les valeurs comptent. */
@@ -250,10 +244,6 @@ class PilotageEquivalenceTest extends TestCase
                 return collect($this->definitive)->filter(fn ($b) => $b['oev_id'] % 2 === $session->numero % 2)->values();
             }
 
-            public function listeAttente(SessionParrainage $session): Collection
-            {
-                return collect($this->attente)->filter(fn ($b) => $b['oev_id'] % 2 === $session->numero % 2)->values();
-            }
 
             public function etablissements(): Collection
             {

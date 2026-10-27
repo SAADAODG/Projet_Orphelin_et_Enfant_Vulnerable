@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -12,6 +13,22 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    private const INDEX_PARTIELS = [
+        'oevs_comptages_index' => ['statut_dossier', 'desactivation_etat', 'region_id', 'province_id', 'commune_id', 'statut', 'sexe', 'handicap', 'rejete_niveau', 'id'],
+        'oevs_integration_index' => ['statut_dossier', 'integre_at', 'rejete_niveau'],
+        'oevs_mise_a_jour_index' => ['updated_at'],
+        'oevs_tri_recents_index' => ['created_at', 'id'],
+        'oevs_tri_nom_index' => ['nom', 'prenom'],
+        'oevs_tri_age_index' => ['date_naissance'],
+        'oevs_tri_localite_index' => ['region_id', 'province_id', 'commune_id', 'nom'],
+    ];
+
+    /** Colonnes de la recherche libre des dossiers (listes, filtrage, sélection). */
+    private const COLONNES_RECHERCHE = [
+        'code', 'numero_dossier', 'nom', 'prenom', 'nom_tuteur', 'prenom_tuteur',
+        'mere_nom', 'pere_nom', 'etablissement_actuel', 'quartier',
+    ];
+
     public function up(): void
     {
         Schema::create('oevs', function (Blueprint $table): void {
@@ -86,12 +103,15 @@ return new class extends Migration
             $table->string('raison_non_scolarisation', 30)->nullable();
             $table->string('raison_non_scolarisation_precision', 255)->nullable();
             $table->string('etablissement_precedent')->nullable();
+            $table->foreignId('ecole_precedente_id')->nullable()->constrained('ecoles')->restrictOnDelete();
             $table->string('classe_precedente', 20)->nullable();
             $table->decimal('moyenne_annuelle', 4, 2)->nullable();
             $table->string('appreciation', 20)->nullable();
             $table->string('performance_scolaire', 20)->nullable();
             $table->string('performance_difficultes', 255)->nullable();
             $table->string('etablissement_actuel')->nullable();
+            $table->foreignId('ecole_id')->nullable()->constrained('ecoles')->restrictOnDelete();
+            $table->string('rib_etablissement', 60)->nullable()->comment('RIB saisi sur la fiche (Scolarité > Année en cours)');
             $table->string('type_etablissement', 10)->nullable();
             $table->string('classe', 50)->nullable();
             $table->unsignedInteger('frais_scolarite')->nullable();
@@ -102,6 +122,7 @@ return new class extends Migration
             $table->string('formation_etat', 15)->nullable();
             $table->string('formation_filiere', 150)->nullable();
             $table->string('formation_type_centre', 10)->nullable();
+            $table->foreignId('centre_formation_id')->nullable()->constrained('ecoles')->restrictOnDelete();
             $table->unsignedSmallInteger('formation_duree_mois')->nullable();
             $table->unsignedSmallInteger('formation_duree_recue_mois')->nullable();
             $table->unsignedInteger('frais_formation')->nullable()->comment('Frais de la formation professionnelle (FCFA)');
@@ -149,9 +170,37 @@ return new class extends Migration
             $table->timestamp('desactive_at')->nullable();
             $table->foreignId('desactive_par')->nullable()->constrained('users')->nullOnDelete();
 
+            // Score d'urgence du besoin (0 à 100), tenu à jour par ScoreBesoinObserver : tri des éligibles
+            $table->unsignedSmallInteger('score_besoin')->default(0)->comment('Score d’urgence du besoin, voir ScoreBesoin');
+
             $table->timestamps();
             $table->softDeletes();
+
+            // Filtres, comptages et tris à fort volume (mesurés sur 1 000 000 de dossiers, scripts/perf) :
+            // PostgreSQL n'indexe pas les clés étrangères ; listes d'un état triées par date
+            $table->index(['region_id', 'statut_dossier']);
+            $table->index(['province_id', 'statut_dossier']);
+            $table->index(['commune_id']);
+            $table->index(['statut_dossier', 'updated_at']);
+            $table->index(['statut_dossier', 'soumis_at']);
+            $table->index(['statut_dossier', 'verifie_at']);
+            $table->index(['statut_dossier', 'complement_at']);
+            $table->index(['statut_dossier', 'rejete_at']);
+            $table->index(['statut_dossier', 'score_besoin']);
         });
+
+        // Index partiels (dossiers non supprimés, comme toutes les requêtes) : comptages sans lire la table
+        // (index-only scan), intégrations par date, tris du filtrage. Syntaxe commune à PostgreSQL et SQLite.
+        foreach (self::INDEX_PARTIELS as $nom => $colonnes) {
+            DB::statement("CREATE INDEX {$nom} ON oevs (" . implode(', ', $colonnes) . ') WHERE deleted_at IS NULL');
+        }
+        // Recherche libre « contient le texte » : index trigrammes (PostgreSQL ; extension pg_trgm, droit CREATE requis)
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+            foreach (self::COLONNES_RECHERCHE as $colonne) {
+                DB::statement("CREATE INDEX oevs_{$colonne}_trgm_index ON oevs USING gin ({$colonne} gin_trgm_ops) WHERE deleted_at IS NULL");
+            }
+        }
 
         Schema::create('oev_documents', function (Blueprint $table): void {
             $table->id();

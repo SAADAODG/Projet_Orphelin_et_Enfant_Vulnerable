@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\JournalActivite;
-use App\Models\Parrain;
 use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Services\Parrainage\ParrainageService;
@@ -73,7 +72,6 @@ class SessionParrainageController extends Controller
         return new SessionParrainage([
             'annee' => self::anneeScolaireCourante(),
             'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
-            'source_financement' => SessionParrainage::SOURCE_ETAT,
             'date_ouverture' => now(),
         ]);
     }
@@ -90,8 +88,6 @@ class SessionParrainageController extends Controller
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
-            $session->parrains()->sync($donnees['contributions']);
-
             JournalActivite::consigner('session_parrainage.creation', $session, "Création de la session {$session->reference()}", [
                 'enveloppe' => $session->enveloppe,
                 'plafond_beneficiaire' => $session->plafond_beneficiaire,
@@ -105,7 +101,7 @@ class SessionParrainageController extends Controller
             ->with('success', "Session {$session->reference()} ouverte : ajoutez maintenant les OEV à la session.");
     }
 
-    /** Suppression d'une session avec sa sélection, ses quotas et ses contributions (journal conservé). */
+    /** Suppression d'une session avec sa sélection et ses quotas (journal conservé). */
     public function destroy(Request $request, SessionParrainage $session): RedirectResponse
     {
         if (! $session->peutEtreSupprimeePar($request->user())) {
@@ -127,7 +123,7 @@ class SessionParrainageController extends Controller
 
     public function show(Request $request, SessionParrainage $session): View
     {
-        $session->load(['quotas', 'parrains', 'sessionOrigine', 'createur']);
+        $session->load(['quotas', 'sessionOrigine', 'createur']);
         $vue = $request->query('vue') === 'quotas' && $session->quotas_actifs ? 'quotas' : 'informations';
         $gere = $request->user()->can('gérer sessions parrainage');
 
@@ -148,9 +144,9 @@ class SessionParrainageController extends Controller
                 : $session->quotas->pluck('montant', 'region_id')->all(),
             'prorata' => $prorata,
             'eligibles' => $vue === 'quotas' ? $this->sourceSelection->eligiblesParRegion($session) : [],
-            'resteOrigine' => $engageOrigine === null ? null : $origine->enveloppe - $engageOrigine,
+            'resteOrigine' => $engageOrigine === null || ! $origine->aUneEnveloppe() ? null : $origine->enveloppe - $engageOrigine,
             // OEV retenus sur la liste de la session (dans la zone de l'utilisateur), page par page ; nombre et
-            // montant total calculés par la base. Taille de la liste d'attente.
+            // montant total calculés par la base
             'retenus' => $vue === 'informations'
                 ? $retenus()->with(['oev.province', 'oev.commune', 'region', 'suivi'])
                     ->orderBy('id')
@@ -160,7 +156,6 @@ class SessionParrainageController extends Controller
             'totalRetenus' => $vue === 'informations'
                 ? $retenus()->toBase()->selectRaw('count(*) as nombre, coalesce(sum(montant_retenu), 0) as montant')->first()
                 : null,
-            'nbAttente' => $session->beneficiaires()->enAttente()->count(),
         ]);
     }
 
@@ -171,7 +166,7 @@ class SessionParrainageController extends Controller
                 ->with('error', 'Cette session est clôturée : elle ne peut plus être modifiée.');
         }
 
-        return view('parrainage.sessions.edit', $this->donneesFormulaire($session->load('parrains')));
+        return view('parrainage.sessions.edit', $this->donneesFormulaire($session));
     }
 
     public function update(Request $request, SessionParrainage $session): RedirectResponse
@@ -181,9 +176,22 @@ class SessionParrainageController extends Controller
                 ->with('error', 'Cette session est clôturée : elle ne peut plus être modifiée.');
         }
 
-        // Session validée : enveloppe, plafond, financement et options sont figés, seule la description change
+        // Session validée : plafond et options sont figés ; la description change, et l'enveloppe peut être
+        // renseignée (ou corrigée) plus tard, sans descendre sous le montant déjà engagé
         if (! $session->parametresModifiables()) {
-            $donnees = $request->validate(['description' => ['required', 'string', 'max:255']]);
+            $request->merge(['enveloppe' => Montant::normaliserSaisie($request->input('enveloppe'))]);
+            $engage = $this->sourceSelection->montantEngage($session) ?? 0;
+            $donnees = $request->validate([
+                'description' => ['required', 'string', 'max:255'],
+                'enveloppe' => ['nullable', 'integer', 'min:1', function (string $attribut, $valeur, \Closure $echec) use ($engage, $session) {
+                    if ($valeur !== null && (int) $valeur < $engage) {
+                        $echec('L’enveloppe ne peut pas être inférieure au montant déjà engagé (' . Montant::fcfa($engage) . ').');
+                    }
+                    if ($valeur === null && $session->quotas_actifs) {
+                        $echec('Les quotas par région sont actifs : l’enveloppe est obligatoire.');
+                    }
+                }],
+            ], ['enveloppe.min' => 'L’enveloppe doit être strictement positive.']);
             $session->update($donnees + ['updated_by' => $request->user()->id]);
             JournalActivite::consigner('session_parrainage.modification', $session, "Modification de la session {$session->reference()}", [
                 'champs' => array_keys($session->getChanges()),
@@ -198,7 +206,6 @@ class SessionParrainageController extends Controller
             // Changement d'année scolaire : la session prend le numéro suivant de sa nouvelle année
             $numero = $donnees['session']['annee'] === $session->annee ? [] : ['numero' => SessionParrainage::prochainNumero($donnees['session']['annee'])];
             $session->update($donnees['session'] + $numero + ['updated_by' => $request->user()->id]);
-            $session->parrains()->sync($donnees['contributions']);
 
             JournalActivite::consigner('session_parrainage.modification', $session, "Modification de la session {$session->reference()}", [
                 'champs' => array_values(array_diff(array_keys($session->getChanges()), ['updated_at', 'updated_by'])),
@@ -231,6 +238,9 @@ class SessionParrainageController extends Controller
         ]);
 
         $quotas = collect($validated['quotas'])->only($regions)->map(fn ($m) => (int) $m);
+        if (! $session->aUneEnveloppe()) {
+            return $retour->with('error', 'Renseignez d’abord l’enveloppe de la session : les quotas la répartissent entre les régions.');
+        }
         if ($quotas->sum() > $session->enveloppe) {
             return back()->withInput()->withErrors(['quotas' => sprintf(
                 'Le total des quotas (%s) dépasse l’enveloppe de la session (%s).',
@@ -275,29 +285,25 @@ class SessionParrainageController extends Controller
     {
         return [
             'session' => $session,
-            // Parrains proposés : les actifs, plus ceux qui contribuent déjà à la session
-            'parrains' => Parrain::query()
-                ->where(fn ($q) => $q->where('actif', true)->orWhereIn('id', $session->parrains->pluck('id')))
-                ->orderBy('nom')
-                ->get(),
-            'contributions' => $session->parrains->pluck('pivot.montant', 'id')->all(),
             'sessionsOrigine' => SessionParrainage::whereKeyNot($session->id)->orderByDesc('annee')->orderBy('numero')->get(),
         ];
     }
 
     /**
-     * @return array{session: array, contributions: array<int, array{montant: int}>}
+     * Champs de la session. Enveloppe facultative (renseignable plus tard) ; obligatoire pour répartir des
+     * quotas par région.
+     *
+     * @return array{session: array}
      */
     private function valider(Request $request, ?SessionParrainage $session = null): array
     {
         $request->merge([
             'enveloppe' => Montant::normaliserSaisie($request->input('enveloppe')),
             'plafond_beneficiaire' => Montant::normaliserSaisie($request->input('plafond_beneficiaire')),
-            'contributions' => array_map(Montant::normaliserSaisie(...), (array) $request->input('contributions', [])),
         ]);
 
         $annee = (string) $request->input('annee');
-        $avecParrains = in_array($request->input('source_financement'), SessionParrainage::SOURCES_AVEC_PARRAINS, true);
+        $avecEnveloppe = $request->filled('enveloppe');
 
         $validated = $request->validate([
             'description' => ['required', 'string', 'max:255'],
@@ -308,52 +314,34 @@ class SessionParrainageController extends Controller
                 }
             }],
             'type_appui' => ['required', Rule::in(array_keys(SessionParrainage::TYPES_APPUI))],
-            'enveloppe' => ['required', 'integer', 'min:1', function (string $attribut, $valeur, \Closure $echec) use ($session, $request) {
-                if ($session && $request->boolean('quotas_actifs') && (int) $valeur < $session->quotas()->sum('montant')) {
-                    $echec('L’enveloppe ne peut pas être inférieure au total des quotas déjà répartis (' . Montant::fcfa($session->quotas()->sum('montant')) . ').');
-                }
-            }],
-            'plafond_beneficiaire' => ['nullable', 'integer', 'min:1', 'lte:enveloppe'],
-            'source_financement' => ['required', Rule::in(array_keys(SessionParrainage::SOURCES_FINANCEMENT))],
+            'enveloppe' => [Rule::requiredIf($request->boolean('quotas_actifs')), 'nullable', 'integer', 'min:1',
+                function (string $attribut, $valeur, \Closure $echec) use ($session, $request) {
+                    if ($session && $request->boolean('quotas_actifs') && (int) $valeur < $session->quotas()->sum('montant')) {
+                        $echec('L’enveloppe ne peut pas être inférieure au total des quotas déjà répartis (' . Montant::fcfa($session->quotas()->sum('montant')) . ').');
+                    }
+                    $engage = $session ? $session->beneficiaires()->retenus()->sum('montant_retenu') : 0;
+                    if ($valeur !== null && (int) $valeur < $engage) {
+                        $echec('L’enveloppe ne peut pas être inférieure au montant des OEV déjà retenus (' . Montant::fcfa($engage) . ').');
+                    }
+                }],
+            'plafond_beneficiaire' => ['nullable', 'integer', 'min:1', ...($avecEnveloppe ? ['lte:enveloppe'] : [])],
             'date_ouverture' => ['required', 'date'],
             'session_origine_id' => ['nullable', 'integer', Rule::exists('sessions_parrainage', 'id')->where('annee', $annee),
                 Rule::notIn(array_filter([$session?->id]))],
-            'contributions' => [Rule::requiredIf($avecParrains), 'array', function (string $attribut, $valeur, \Closure $echec) use ($avecParrains, $request) {
-                $total = array_sum(array_map('intval', array_filter((array) $valeur)));
-                if ($avecParrains && $total === 0) {
-                    $echec('Indiquez la contribution d’au moins un parrain pour un financement partenaire ou mixte.');
-                } elseif ($avecParrains && $total > (int) $request->input('enveloppe')) {
-                    $echec('Le total des contributions (' . Montant::fcfa($total) . ') dépasse l’enveloppe.');
-                }
-            }],
-            'contributions.*' => ['nullable', 'integer', 'min:0'],
         ], [
             'annee.regex' => 'L’année scolaire s’écrit sous la forme 2026-2027.',
+            'enveloppe.required' => 'Les quotas par région répartissent l’enveloppe : renseignez-la, ou décochez les quotas.',
             'enveloppe.min' => 'L’enveloppe doit être strictement positive.',
             'plafond_beneficiaire.lte' => 'Le plafond par bénéficiaire ne peut pas dépasser l’enveloppe.',
             'session_origine_id.exists' => 'La session d’origine doit appartenir à la même année scolaire.',
             'session_origine_id.not_in' => 'Une session ne peut pas être sa propre session d’origine.',
-            'contributions.required' => 'Indiquez la contribution d’au moins un parrain pour un financement partenaire ou mixte.',
-            'contributions.*.integer' => 'Chaque contribution doit être un montant entier en FCFA.',
         ]);
 
-        // Parrains inconnus ignorés ; aucune contribution pour un financement État
-        $contributions = $avecParrains
-            ? collect($validated['contributions'] ?? [])
-                ->map(fn ($m) => (int) $m)
-                ->filter()
-                ->only(Parrain::whereIn('id', array_keys($validated['contributions'] ?? []))->pluck('id'))
-                ->map(fn (int $montant) => ['montant' => $montant])
-                ->all()
-            : [];
-
         return [
-            'session' => collect($validated)->except('contributions')->all() + [
-                'bloquer_depassement_enveloppe' => $request->boolean('bloquer_depassement_enveloppe'),
+            'session' => $validated + [
                 'quotas_actifs' => $request->boolean('quotas_actifs'),
                 'exclure_deja_appuyes' => $request->boolean('exclure_deja_appuyes'),
             ],
-            'contributions' => $contributions,
         ];
     }
 

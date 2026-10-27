@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('suivis_parrainage', function (Blueprint $table) {
             $table->id();
             $table->foreignId('beneficiaire_session_id')->unique()->constrained('beneficiaires_session')->cascadeOnDelete();
-            $table->foreignId('oev_id')->constrained('oevs')->restrictOnDelete();
+            $table->foreignId('oev_id')->index()->constrained('oevs')->restrictOnDelete();
             $table->string('annee', 9)->index()->comment('Année scolaire de la session, ex. 2026-2027');
             $table->string('type_appui', 30)->comment('scolaire ou formation_professionnelle');
             $table->string('resultat', 20)->comment('Scolaire : admis, redouble, abandon. Formation : poursuit, achevee, abandon');

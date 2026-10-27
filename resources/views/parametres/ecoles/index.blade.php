@@ -3,7 +3,7 @@
 @use('App\Models\Ecole')
 @use('App\Http\Controllers\EcoleController')
 
-@section('title', 'Écoles | ' . $siteSetting->structure_nom)
+@section('title', 'Écoles et centres de formation | ' . $siteSetting->structure_nom)
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
@@ -49,7 +49,7 @@
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
-        <h2 class="h5 mb-1 section-title"><i class="bi bi-building" aria-hidden="true"></i><span>Liste des écoles</span></h2>
+        <h2 class="h5 mb-1 section-title"><i class="bi bi-building" aria-hidden="true"></i><span>Écoles et centres de formation</span></h2>
         <p class="text-muted mb-0">{{ number_format($ecoles->total(), 0, ',', ' ') }} école(s) trouvée(s).</p>
       </div>
     </div>
@@ -63,6 +63,14 @@
       ])
       <div class="d-flex flex-wrap gap-2 mt-2">
         <input class="form-control form-control-sm" style="max-width: 20rem" type="search" name="q" value="{{ $search }}" placeholder="Rechercher une école ou une CEB" aria-label="Rechercher une école ou une CEB">
+        <select class="form-select form-select-sm" style="max-width: 14rem" name="nature" aria-label="Nature">
+          <option value="">Écoles et centres</option>
+          @foreach (Ecole::NATURES as $cle => $libelle)<option value="{{ $cle }}" @selected(($filtres['nature'] ?? '') === $cle)>{{ $libelle }}</option>@endforeach
+        </select>
+        <select class="form-select form-select-sm" style="max-width: 10rem" name="rib" aria-label="RIB">
+          <option value="">Tous les RIB</option>
+          <option value="manquant" @selected(($filtres['rib'] ?? '') === 'manquant')>RIB manquant</option>
+        </select>
         <select class="form-select form-select-sm" style="max-width: 12rem" name="statut" aria-label="Statut">
           <option value="">Tous les statuts</option>
           @foreach (Ecole::STATUTS as $cle => $libelle)<option value="{{ $cle }}" @selected(($filtres['statut'] ?? '') === $cle)>{{ $libelle }}</option>@endforeach
@@ -82,10 +90,11 @@
       <table class="table align-middle mb-0">
         <thead>
           <tr>
-            <th scope="col">École</th>
+            <th scope="col">Établissement</th>
             <th scope="col">CEB</th>
             <th scope="col">Statut</th>
             <th scope="col">Type</th>
+            <th scope="col">Banque et RIB</th>
             <th scope="col">Commune</th>
             <th scope="col">Province</th>
             <th scope="col" class="text-end">Action</th>
@@ -94,16 +103,17 @@
         <tbody>
           @forelse ($ecoles as $ecole)
             <tr>
-              <td class="fw-semibold">{{ $ecole->nom }}</td>
+              <td class="fw-semibold">{{ $ecole->nom }}@if ($ecole->estUnCentre())<span class="d-block small text-muted fw-normal">Centre de formation</span>@endif</td>
               <td>{{ $ecole->ceb ?? '—' }}</td>
               <td>{{ $ecole->libelleStatut() ?? '—' }}</td>
               <td>{{ $ecole->libelleType() ?? '—' }}</td>
+              <td class="small">@if ($ecole->rib){{ $ecole->banque ?: '—' }}<span class="d-block font-monospace">{{ $ecole->rib }}</span>@else<span class="badge text-bg-light border">RIB manquant</span>@endif</td>
               <td>{{ $ecole->commune->nom }}</td>
               <td>{{ $ecole->commune->province->nom }}</td>
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
                   <a class="btn btn-light btn-sm" href="{{ route('parametres.ecoles.edit', $ecole) }}" aria-label="Modifier"><i class="bi bi-pencil" aria-hidden="true"></i></a>
-                  <form action="{{ route('parametres.ecoles.destroy', $ecole) }}" method="POST" data-confirm="Supprimer l’école « {{ $ecole->nom }} » ?" data-confirm-danger>
+                  <form action="{{ route('parametres.ecoles.destroy', $ecole) }}" method="POST" data-confirm="Supprimer « {{ $ecole->nom }} » ?" data-confirm-danger>
                     @csrf
                     @method('DELETE')
                     <button class="btn btn-outline-danger btn-sm" type="submit" aria-label="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>
@@ -113,7 +123,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">Aucune école trouvée.</td>
+              <td colspan="8" class="text-center text-muted py-4">Aucun établissement trouvé.</td>
             </tr>
           @endforelse
         </tbody>

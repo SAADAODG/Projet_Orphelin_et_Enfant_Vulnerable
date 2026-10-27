@@ -38,7 +38,7 @@ class ListeParrainEquivalenceTest extends TestCase
         $parrain = Parrain::create(['type' => 'ong', 'nom' => 'ONG', 'actif' => true]);
         $session = SessionParrainage::create([
             'description' => 'S1', 'annee' => '2026-2027', 'numero' => 1, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
-            'enveloppe' => 1_000_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
+            'enveloppe' => 1_000_000, 'date_ouverture' => '2026-10-01',
             'etat' => SessionParrainage::ETAT_VALIDEE,
         ]);
         $scolaire = NatureAppui::where('code', 'scolaire')->firstOrFail();
@@ -67,12 +67,8 @@ class ListeParrainEquivalenceTest extends TestCase
             if ($k % 5 === 0) {
                 AppuiPartenaire::create(['oev_id' => $oev->id, 'parrain_id' => $parrain->id, 'annee' => '2026-2027', 'nature_appui_id' => ($k % 2 ? $sante : $scolaire)->id]);
             }
-            // Liste d'attente (rangs dans le désordre) et liste définitive de la session
-            if ($k % 3 === 0) {
-                BeneficiaireSession::create(['session_parrainage_id' => $session->id, 'oev_id' => $oev->id, 'type_appui' => 'scolaire',
-                    'statut' => BeneficiaireSession::ATTENTE, 'rang' => ($k * 7) % 50 + 1, 'score' => 10, 'region_id' => $oev->region_id,
-                    'frais_reels' => null, 'frais_estimes' => true, 'montant_retenu' => 15_000 + $k]);
-            } elseif ($k % 7 === 0) {
+            // Liste définitive de la session (bénéficiaires de l'État, exclus pour une nature scolaire)
+            if ($k % 7 === 0) {
                 BeneficiaireSession::create(['session_parrainage_id' => $session->id, 'oev_id' => $oev->id, 'type_appui' => 'scolaire',
                     'statut' => BeneficiaireSession::RETENU, 'score' => 10, 'region_id' => $oev->region_id,
                     'frais_reels' => 30_000, 'frais_estimes' => false, 'montant_retenu' => 30_000]);
@@ -83,7 +79,7 @@ class ListeParrainEquivalenceTest extends TestCase
         $nouveau = new ExtractionsParrainage($source);
         $ancien = new ExtractionsParrainageAvant($source);
         $combinaisons = 0;
-        foreach (['eligibles', 'attente'] as $origine) {
+        foreach (['eligibles'] as $origine) {
             foreach ([null, $scolaire, $sante] as $nature) {
                 foreach ([[], [$ici->province->region_id]] as $regions) {
                     foreach ([[], ['F'], ['M', 'F']] as $sexe) {
@@ -112,11 +108,10 @@ class ListeParrainEquivalenceTest extends TestCase
                 }
             }
         }
-        $this->assertSame(2 * 3 * 2 * 3 * 4 * 2 * 2, $combinaisons);
-        // Le jeu de données exerce bien les deux sources (pas une égalité entre listes vides)
+        $this->assertSame(3 * 2 * 3 * 4 * 2 * 2, $combinaisons);
+        // Le jeu de données exerce bien la liste (pas une égalité entre listes vides)
         $base = ['session' => $session, 'annee' => '2026-2027', 'nature' => null, 'zone_parrain' => false, 'regions' => [], 'provinces' => [],
             'sexe' => [], 'statut' => [], 'vulnerabilite' => [], 'niveau_priorite' => [], 'niveau_etude' => [], 'handicap' => [], 'age_min' => null, 'age_max' => null];
         $this->assertGreaterThan(30, $nouveau->listeParrain($parrain, $central, ['source' => 'eligibles'] + $base)['nombre']);
-        $this->assertGreaterThan(10, $nouveau->listeParrain($parrain, $central, ['source' => 'attente'] + $base)['nombre']);
     }
 }

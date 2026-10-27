@@ -45,101 +45,7 @@
 
   <div class="mt-3">@include('parrainage.pilotage._onglets')</div>
 
-  {{-- Bascule entre les deux extractions --}}
-  <div class="btn-group mt-3" role="group" aria-label="Type d’extraction">
-    <a class="btn btn-sm {{ $vue === 'parrain' ? 'btn-primary' : 'btn-outline-primary' }}" href="{{ route('parrainage.pilotage.extractions') }}" @if ($vue === 'parrain') aria-current="page" @endif>
-      <i class="bi bi-person-heart" aria-hidden="true"></i> Liste pour un parrain
-    </a>
-    @if ($peutPaiement)
-      <a class="btn btn-sm {{ $vue === 'paiement' ? 'btn-primary' : 'btn-outline-primary' }}" href="{{ route('parrainage.pilotage.extractions', ['vue' => 'paiement']) }}" @if ($vue === 'paiement') aria-current="page" @endif>
-        <i class="bi bi-bank" aria-hidden="true"></i> Liste pour paiement
-      </a>
-    @endif
-  </div>
-
-  @if ($vue === 'paiement')
-    {{-- ================= Liste pour paiement ================= --}}
-    <form class="panel mt-3" method="GET" action="{{ route('parrainage.pilotage.paiement') }}">
-      <div class="panel-header">
-        <div><h2 class="h5 mb-1 section-title"><i class="bi bi-bank" aria-hidden="true"></i><span>Liste pour paiement</span></h2></div>
-      </div>
-      @unless ($disponible)
-        <div class="alert alert-info small"><i class="bi bi-info-circle me-1" aria-hidden="true"></i> Données non disponibles : la liste définitive et les établissements viendront du module Sélection. L’extraction produit pour l’instant un fichier sans ligne.</div>
-      @endunless
-      @if ($errors->any())
-        <div class="alert alert-danger small">{{ $errors->first() }}</div>
-      @endif
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label" for="session_id">Session <span class="text-danger">*</span></label>
-          <select class="form-select" id="session_id" name="session_id" required>
-            <option value="">Choisir une session validée…</option>
-            @foreach ($sessionsPaiement as $session)
-              <option value="{{ $session->id }}" @selected((string) old('session_id') === (string) $session->id)>{{ $session->reference() }} — {{ $session->description }} ({{ $session->libelleEtat() }})</option>
-            @endforeach
-          </select>
-          @if ($sessionsPaiement->isEmpty())<div class="form-text">Aucune session validée pour l’instant.</div>@endif
-        </div>
-        <div class="col-md-3">
-          <label class="form-label" for="type_appui_paiement">Type d’appui</label>
-          <select class="form-select" id="type_appui_paiement" name="type_appui">
-            <option value="">Tous</option>
-            @foreach (SessionParrainage::TYPES_APPUI as $cle => $libelle)
-              <option value="{{ $cle }}">{{ $libelle }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label" for="etablissement_id">Établissement</label>
-          <select class="form-select" id="etablissement_id" name="etablissement_id" @disabled($etablissements->isEmpty())>
-            <option value="">{{ $etablissements->isEmpty() ? 'Non disponible' : 'Tous' }}</option>
-            @foreach ($etablissements as $etablissement)
-              <option value="{{ $etablissement['id'] }}">{{ $etablissement['nom'] }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-12">
-          @include('partials.localite-selects', [
-            'localites' => $localites,
-            'requis' => false,
-            'colonnes' => ['region_id' => 'col-md-4', 'province_id' => 'col-md-4', 'commune_id' => 'col-md-4'],
-          ])
-        </div>
-
-        {{-- Données à afficher dans chaque feuille --}}
-        <div class="col-12">
-          <h3 class="h6 mb-2">Données à afficher</h3>
-          <div class="ext-donnees">
-            <fieldset>
-              <legend>Feuille « Par établissement »</legend>
-              @foreach ($colonnesEtablissement as $cle => $libelle)
-                @php($obligatoire = in_array($cle, ExtractionsParrainage::COLONNES_ETABLISSEMENT_OBLIGATOIRES, true))
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="ce-{{ $cle }}" name="colonnes_etablissement[]" value="{{ $cle }}" checked @disabled($obligatoire)>
-                  <label class="form-check-label" for="ce-{{ $cle }}">{{ $libelle }}@if ($obligatoire) <span class="text-muted small">(toujours)</span>@endif</label>
-                </div>
-              @endforeach
-            </fieldset>
-            <fieldset>
-              <legend>Feuille « Nominatif »</legend>
-              @foreach ($colonnesNominatif as $cle => $libelle)
-                @php($obligatoire = in_array($cle, ExtractionsParrainage::COLONNES_NOMINATIF_OBLIGATOIRES, true))
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="cn-{{ $cle }}" name="colonnes_nominatif[]" value="{{ $cle }}"
-                         @checked(in_array($cle, ExtractionsParrainage::NOMINATIF_PAR_DEFAUT, true)) @disabled($obligatoire)>
-                  <label class="form-check-label" for="cn-{{ $cle }}">{{ $libelle }}@if ($obligatoire) <span class="text-muted small">(toujours)</span>@endif</label>
-                </div>
-              @endforeach
-            </fieldset>
-          </div>
-        </div>
-      </div>
-      <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
-        <button class="btn btn-outline-primary" type="submit" name="format" value="pdf"><i class="bi bi-filetype-pdf" aria-hidden="true"></i> PDF</button>
-        <button class="btn btn-primary" type="submit" name="format" value="xlsx"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Excel</button>
-      </div>
-    </form>
-  @else
+  {{-- La liste pour paiement se consulte dans l'onglet « Paiement » de chaque session validée --}}
     {{-- ================= Liste pour un parrain ================= --}}
     <form class="panel mt-3" method="GET" action="{{ route('parrainage.pilotage.extractions') }}" id="formParrain">
       <input type="hidden" name="filtre" value="1">
@@ -162,36 +68,16 @@
         </div>
 
         @if ($parrain)
-          <div class="col-md-6">
-            <span class="form-label d-block">Source</span>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="source" id="source-eligibles" value="eligibles" @checked($f['source'] === 'eligibles')>
-              <label class="form-check-label" for="source-eligibles">OEV éligibles, sans appui de la nature choisie pour l’année</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="source" id="source-attente" value="attente" @checked($f['source'] === 'attente')>
-              <label class="form-check-label" for="source-attente">Liste d’attente d’une session</label>
-            </div>
-          </div>
-          <div class="col-sm-4 col-lg-2" data-source-eligibles>
+          <div class="col-sm-4 col-lg-2">
             <label class="form-label" for="annee">Année scolaire</label>
             <input class="form-control" id="annee" name="annee" value="{{ $f['annee'] }}" pattern="\d{4}-\d{4}">
           </div>
-          <div class="col-sm-8 col-lg-4" data-source-eligibles>
+          <div class="col-sm-8 col-lg-4">
             <label class="form-label" for="nature_id">Nature d’appui</label>
             <select class="form-select" id="nature_id" name="nature_id">
               <option value="">Toutes (aucun OEV exclu)</option>
               @foreach ($natures->sortBy(fn ($n) => in_array($n->id, $f['natures_parrain'], true) ? 0 : 1) as $nature)
                 <option value="{{ $nature->id }}" @selected($f['nature']?->id === $nature->id)>{{ $nature->libelle }}@if (in_array($nature->id, $f['natures_parrain'], true)) (proposée par le parrain)@endif</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-sm-6 col-lg-3" data-source-attente>
-            <label class="form-label" for="session_liste">Session <span class="text-danger">*</span></label>
-            <select class="form-select" id="session_liste" name="session_id">
-              <option value="">Choisir une session…</option>
-              @foreach ($sessions as $session)
-                <option value="{{ $session->id }}" @selected($f['session']?->id === $session->id)>{{ $session->reference() }} — {{ $session->description }}</option>
               @endforeach
             </select>
           </div>
@@ -277,7 +163,6 @@
             <p class="text-muted mb-0">
               {{ Montant::nombre($nombreListe) }} OEV correspondent aux filtres{{ $nombreListe > 10 ? ' (10 premiers affichés)' : '' }}, par ordre de priorité.
               L’aperçu, réservé aux agents, nomme les enfants ; le fichier ne contient que les données cochées.
-              @if ($f['source'] === 'attente' && ! $disponible) Liste d’attente : données non disponibles (module Sélection). @endif
             </p>
           </div>
         </div>
@@ -295,7 +180,6 @@
         </div>
       </section>
     @endif
-  @endif
 </div>
 @endsection
 
@@ -314,16 +198,6 @@
         provinces.querySelectorAll('input').forEach(function (c) { c.disabled = !region.checked; if (!region.checked) { c.checked = false; } });
       });
     });
-
-    // Source : année et nature pour les éligibles, session pour la liste d'attente
-    var majSource = function () {
-      var attente = formulaire.querySelector('#source-attente');
-      if (!attente) return;
-      formulaire.querySelectorAll('[data-source-eligibles]').forEach(function (b) { b.hidden = attente.checked; });
-      formulaire.querySelectorAll('[data-source-attente]').forEach(function (b) { b.hidden = !attente.checked; });
-    };
-    formulaire.querySelectorAll('input[name="source"]').forEach(function (r) { r.addEventListener('change', majSource); });
-    majSource();
 
     // Confirmation demandée dès qu'une donnée d'identité est cochée
     var confirmation = formulaire.querySelector('[data-confirmation-identite]');

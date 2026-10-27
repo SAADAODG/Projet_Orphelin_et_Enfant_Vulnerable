@@ -5,10 +5,9 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Module « Sélection » du parrainage : OEV choisis pour une session.
- *  - retenu : sur la liste de la session (liste définitive une fois la session validée) ;
- *  - attente : hors enveloppe ou hors quota, classé par rang.
- * Le score d'urgence, la région, les frais et le montant retenu sont figés au moment de l'ajout.
+ * Module « Sélection » du parrainage : OEV retenus sur la liste d'une session (liste définitive une fois la
+ * session validée ; pas de liste d'attente). Le score d'urgence, la région, les frais et le montant retenu
+ * sont figés au moment de l'ajout ; l'établissement payé suit la fiche de l'OEV jusqu'au paiement.
  */
 return new class extends Migration
 {
@@ -19,10 +18,11 @@ return new class extends Migration
             $table->foreignId('session_parrainage_id')->constrained('sessions_parrainage')->cascadeOnDelete();
             $table->foreignId('oev_id')->constrained('oevs')->restrictOnDelete();
             $table->string('type_appui', 30)->comment('scolaire ou formation_professionnelle');
-            $table->string('statut', 10)->index()->comment('retenu ou attente');
-            $table->unsignedInteger('rang')->nullable()->comment('Rang dans la liste d’attente');
+            $table->string('statut', 10)->index()->comment('retenu');
             $table->unsignedTinyInteger('score')->default(0)->comment('Score d’urgence du besoin (0 à 100)');
-            $table->foreignId('region_id')->nullable()->constrained('regions')->nullOnDelete();
+            $table->foreignId('region_id')->nullable()->index()->constrained('regions')->nullOnDelete();
+            $table->foreignId('etablissement_id')->nullable()->comment('École ou centre payé (suit la fiche jusqu’au paiement)')
+                ->constrained('ecoles')->restrictOnDelete();
             $table->unsignedBigInteger('frais_reels')->nullable()->comment('FCFA ; vide si non renseignés');
             $table->boolean('frais_estimes')->default(false)->comment('Frais tirés des montants estimatifs de la session');
             $table->unsignedBigInteger('montant_retenu')->comment('min(frais réels, plafond) ; le plafond si les frais manquent');
@@ -30,6 +30,9 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['session_parrainage_id', 'oev_id']);
+            $table->index('oev_id');
+            $table->index(['session_parrainage_id', 'statut']);
+            $table->index(['session_parrainage_id', 'etablissement_id']);
         });
     }
 

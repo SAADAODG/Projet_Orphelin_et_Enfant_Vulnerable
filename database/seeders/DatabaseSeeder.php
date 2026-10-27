@@ -70,5 +70,7 @@ class DatabaseSeeder extends Seeder
 
         // Dossiers OEV de démonstration, après les comptes : auteurs du circuit et part des dossiers dans la province du DP
         $this->call(OevDemoSeeder::class);
+        // Événements des modèles coupés pendant le seed : score d'urgence calculé en une fois (ScoreBesoinObserver)
+        \App\Services\Parrainage\ScoreBesoin::recalculerTout();
     }
 }

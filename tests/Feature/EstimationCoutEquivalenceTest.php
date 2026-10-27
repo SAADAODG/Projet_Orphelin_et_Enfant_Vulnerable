@@ -84,7 +84,7 @@ class EstimationCoutEquivalenceTest extends TestCase
         // Session antérieure de l'année (validée) : financements partiels, complets et inconnus
         $anterieure = SessionParrainage::create([
             'description' => 'Antérieure', 'annee' => '2026-2027', 'numero' => 1, 'type_appui' => SessionParrainage::TYPE_LES_DEUX,
-            'enveloppe' => 9_000_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-09-01',
+            'enveloppe' => 9_000_000, 'date_ouverture' => '2026-09-01',
             'etat' => SessionParrainage::ETAT_VALIDEE,
         ]);
         foreach ($ids as $i => $id) {
@@ -105,7 +105,7 @@ class EstimationCoutEquivalenceTest extends TestCase
                         $session = SessionParrainage::create([
                             'description' => 'Combinaison', 'annee' => '2026-2027', 'numero' => $numero++, 'type_appui' => $type,
                             'enveloppe' => 9_000_000, 'plafond_beneficiaire' => $plafond, 'estimation_scolarisation' => $scolarisation,
-                            'estimation_formation' => $formation, 'source_financement' => SessionParrainage::SOURCE_ETAT,
+                            'estimation_formation' => $formation,
                             'date_ouverture' => '2026-10-01', 'etat' => SessionParrainage::ETAT_EN_COURS,
                         ]);
                         $attendu = $this->ancienneEstimation($session, $selection->eligibles($session, $filtres));
@@ -121,7 +121,7 @@ class EstimationCoutEquivalenceTest extends TestCase
 
         // Le jeu de données exerce bien les trois situations
         $session = SessionParrainage::create(['description' => 'Contrôle', 'annee' => '2026-2027', 'numero' => 99, 'type_appui' => SessionParrainage::TYPE_LES_DEUX,
-            'enveloppe' => 1, 'plafond_beneficiaire' => 50_000, 'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
+            'enveloppe' => 1, 'plafond_beneficiaire' => 50_000, 'date_ouverture' => '2026-10-01',
             'etat' => SessionParrainage::ETAT_EN_COURS]);
         $estimation = $selection->estimationCout($session, $selection->eligibles($session));
         foreach ($estimation['groupes'] as $groupe => $totaux) {

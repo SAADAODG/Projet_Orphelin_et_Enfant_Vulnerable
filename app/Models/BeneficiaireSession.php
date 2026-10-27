@@ -8,18 +8,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * OEV choisi pour une session de parrainage (module « Sélection ») : retenu sur la liste de la session
- * ou placé en liste d'attente (enveloppe ou quota régional atteint).
+ * OEV retenu sur la liste d'une session de parrainage (module « Sélection »), avec l'établissement à payer
+ * (figé à la validation de la liste). Il n'y a pas de liste d'attente.
  */
 class BeneficiaireSession extends Model
 {
     public const RETENU = 'retenu';
-    public const ATTENTE = 'attente';
 
     protected $table = 'beneficiaires_session';
 
     protected $fillable = [
-        'session_parrainage_id', 'oev_id', 'type_appui', 'statut', 'rang', 'score', 'region_id',
+        'session_parrainage_id', 'oev_id', 'type_appui', 'statut', 'score', 'region_id', 'etablissement_id',
         'frais_reels', 'frais_estimes', 'montant_retenu', 'created_by',
     ];
 
@@ -27,7 +26,6 @@ class BeneficiaireSession extends Model
     {
         return [
             'frais_estimes' => 'boolean',
-            'rang' => 'integer',
             'score' => 'integer',
             'frais_reels' => 'integer',
             'montant_retenu' => 'integer',
@@ -58,6 +56,12 @@ class BeneficiaireSession extends Model
         return $query->retenus()->whereHas('session', fn ($q) => $q->where('etat', '!=', SessionParrainage::ETAT_EN_COURS));
     }
 
+    /** École ou centre de formation payé pour ce bénéficiaire. */
+    public function etablissement(): BelongsTo
+    {
+        return $this->belongsTo(Ecole::class, 'etablissement_id');
+    }
+
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class);
@@ -65,12 +69,7 @@ class BeneficiaireSession extends Model
 
     public function scopeRetenus(Builder $query): Builder
     {
-        return $query->where('statut', self::RETENU);
-    }
-
-    public function scopeEnAttente(Builder $query): Builder
-    {
-        return $query->where('statut', self::ATTENTE);
+        return $query->where($query->qualifyColumn('statut'), self::RETENU);
     }
 
     /**

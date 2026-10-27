@@ -43,7 +43,7 @@
           <tr>
             @foreach ($colonnesEtablissement as $cle => $libelle)
               @if ($cle === 'rib')
-                <td>@if ($l['rib_manquant'])<span class="rib-manquant">RIB manquant</span>@else Complet @endif</td>
+                <td>@if ($l['rib_manquant'])<span class="rib-manquant">RIB manquant</span>@else {{ $l['rib'] }} @endif</td>
               @else
                 <td @class(['nombre' => in_array($cle, ['nombre_oev', 'montant'], true), 'rib-manquant' => $l['rib_manquant'] && $loop->first && ! isset($colonnesEtablissement['rib'])])>{{ $valeur($cle, $l[$cle]) }}</td>
               @endif

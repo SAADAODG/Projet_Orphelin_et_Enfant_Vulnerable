@@ -13,7 +13,7 @@
   $suivant = SessionParrainage::etatSuivant($session->etat);
   // Libellé du bouton qui fait avancer la session, et message de confirmation
   $actionsSuivant = [
-      SessionParrainage::ETAT_VALIDEE => ['Valider la session', 'bi-patch-check', 'Valider la session ? L’enveloppe, le plafond, les options et les quotas seront figés. Ce passage est normalement déclenché par la validation de la liste définitive dans le module Sélection.'],
+      SessionParrainage::ETAT_VALIDEE => ['Valider la session', 'bi-patch-check', 'Valider la session ? Le plafond, les options et les quotas seront figés (l’enveloppe pourra encore être renseignée). Ce passage est normalement déclenché par la validation de la liste définitive dans le module Sélection.'],
       SessionParrainage::ETAT_PAIEMENT => ['Passer en paiement', 'bi-cash-stack', 'Confirmer que l’extraction de paiement a été transmise aux services financiers ?'],
       SessionParrainage::ETAT_CLOTUREE => ['Clôturer la session', 'bi-lock', 'Clôturer la session ? Elle passera en lecture seule.'],
   ];
@@ -35,7 +35,7 @@
         <h1 class="h3 mb-1">{{ $session->description }}</h1>
         <p class="text-muted mb-0">
           <span class="badge rounded-pill text-bg-{{ $session->couleurEtat() }}">{{ $session->libelleEtat() }}</span>
-          · {{ $session->libelleTypeAppui() }} · {{ Montant::fcfa($session->enveloppe) }}
+          · {{ $session->libelleTypeAppui() }} · {{ $session->libelleEnveloppe() }}
         </p>
       </div>
     </div>
@@ -134,12 +134,8 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-wallet2" aria-hidden="true"></i> Budget</h2>
           <div class="oev-infos">
-            {!! $info('Enveloppe budgétaire', Montant::fcfa($session->enveloppe)) !!}
+            {!! $info('Enveloppe budgétaire', $session->aUneEnveloppe() ? Montant::fcfa($session->enveloppe) : 'Non renseignée') !!}
             {!! $info('Plafond par bénéficiaire', $session->libellePlafond()) !!}
-            {!! $info('Source de financement', $session->libelleSource()) !!}
-            @if ($session->avecParrains())
-              {!! $info('Total des contributions', Montant::fcfa($session->totalContributions())) !!}
-            @endif
             @if ($session->quotas_actifs)
               {!! $info('Total des quotas régionaux', Montant::fcfa($session->totalQuotas())) !!}
             @endif
@@ -154,38 +150,11 @@
         <section class="oev-carte">
           <h2 class="oev-carte-titre"><i class="bi bi-sliders" aria-hidden="true"></i> Options de sélection</h2>
           <div class="oev-infos">
-            {!! $info('Bloquer le dépassement de l’enveloppe', $ouiNon($session->bloquer_depassement_enveloppe)) !!}
             {!! $info('Quotas par région', $ouiNon($session->quotas_actifs)) !!}
             {!! $info('Exclure les OEV déjà appuyés par un partenaire', $ouiNon($session->exclure_deja_appuyes)) !!}
           </div>
         </section>
       </div>
-
-      @if ($session->avecParrains())
-        <div class="col-12 col-xl-6">
-          <section class="oev-carte">
-            <h2 class="oev-carte-titre"><i class="bi bi-people" aria-hidden="true"></i> Parrains contributeurs</h2>
-            @if ($session->parrains->isEmpty())
-              <p class="text-muted mb-0">Aucun parrain contributeur.</p>
-            @else
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead><tr><th scope="col">Parrain</th><th scope="col">Type</th><th scope="col" class="text-end">Contribution</th></tr></thead>
-                  <tbody>
-                    @foreach ($session->parrains as $parrain)
-                      <tr>
-                        <td>{{ $parrain->nom }}</td>
-                        <td>{{ $parrain->libelleType() }}</td>
-                        <td class="text-end text-nowrap">{{ Montant::fcfa($parrain->pivot->montant) }}</td>
-                      </tr>
-                    @endforeach
-                  </tbody>
-                </table>
-              </div>
-            @endif
-          </section>
-        </div>
-      @endif
 
       {{-- OEV retenus sur la liste de la session --}}
       <div class="col-12">
@@ -206,9 +175,12 @@
             </div>
           </div>
           <p class="text-muted small mt-1 mb-2">
-            Montant engagé : <strong>{{ Montant::fcfa((int) $totalRetenus->montant) }}</strong> sur {{ Montant::fcfa($session->enveloppe) }}
-            · reste {{ Montant::fcfa($session->enveloppe - (int) $totalRetenus->montant) }}
-            @if ($nbAttente) · {{ $nbAttente }} OEV en liste d’attente @endif
+            Montant engagé : <strong>{{ Montant::fcfa((int) $totalRetenus->montant) }}</strong>
+            @if ($session->aUneEnveloppe())
+              sur {{ Montant::fcfa($session->enveloppe) }} · reste {{ Montant::fcfa($session->enveloppe - (int) $totalRetenus->montant) }}
+            @else
+              (aucune enveloppe renseignée)
+            @endif
             @unless ($session->parametresModifiables()) · liste définitive @endunless
           </p>
           @if ($retenus->isEmpty())

@@ -13,6 +13,7 @@ use App\Http\Controllers\JournalController;
 use App\Http\Controllers\ListeReferenceController;
 use App\Http\Controllers\NatureAppuiController;
 use App\Http\Controllers\OevController;
+use App\Http\Controllers\PaiementSessionController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\ParrainController;
 use App\Http\Controllers\PasswordResetController;
@@ -162,13 +163,15 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/sessions/{session}/edit', [SessionParrainageController::class, 'edit'])->name('sessions.edit');
             Route::put('/sessions/{session}', [SessionParrainageController::class, 'update'])->name('sessions.update');
             Route::put('/sessions/{session}/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('sessions.quotas');
-            // Sélection des OEV de la session : ajout, liste d'attente, frais, validation de la liste définitive
+            // Sélection des OEV de la session : ajout, frais, validation de la liste définitive ; réception des fonds
             Route::delete('/sessions/{session}', [SessionParrainageController::class, 'destroy'])->name('sessions.destroy');
             Route::post('/sessions/{session}/selection', [SelectionParrainageController::class, 'ajouter'])->name('sessions.selection.ajouter');
             Route::put('/sessions/{session}/selection/estimations', [SelectionParrainageController::class, 'estimations'])->name('sessions.selection.estimations');
             Route::patch('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'modifier'])->name('sessions.selection.modifier');
             Route::delete('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'retirer'])->name('sessions.selection.retirer');
             Route::post('/sessions/{session}/selection/valider', [SelectionParrainageController::class, 'valider'])->name('sessions.selection.valider');
+            Route::post('/sessions/{session}/paiements', [PaiementSessionController::class, 'store'])->name('sessions.paiements.store');
+            Route::delete('/sessions/{session}/paiements/{paiement}', [PaiementSessionController::class, 'destroy'])->name('sessions.paiements.destroy');
         });
         // Suivi de fin d'année des parrainés : le DP pour sa province, le niveau central pour tout le pays
         Route::put('/suivis/{ligne}', [SuiviParrainageController::class, 'enregistrer'])
@@ -208,6 +211,9 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
             Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
             Route::get('/sessions/{session}/selection', [SelectionParrainageController::class, 'index'])->name('sessions.selection');
+            // Paiement d'une session validée : établissements et régions (niveau central, DR pour leur région)
+            Route::get('/sessions/{session}/paiements', [PaiementSessionController::class, 'index'])->name('sessions.paiements');
+            Route::get('/sessions/{session}/paiements/export', [PaiementSessionController::class, 'export'])->name('sessions.paiements.export');
             // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
             Route::post('/sessions/{session}/etat', [SessionParrainageController::class, 'changerEtat'])->name('sessions.etat');
         });

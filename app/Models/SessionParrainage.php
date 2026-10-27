@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Session de parrainage : une enveloppe (FCFA) pour une année scolaire et un type d'appui.
+ * Session de parrainage de l'État pour une année scolaire et un type d'appui. L'enveloppe (FCFA) est facultative
+ * et peut être renseignée plus tard ; quand elle l'est, les OEV retenus ne la dépassent jamais.
  *
  * Cycle : en cours → validée (liste définitive arrêtée) → paiement en cours → clôturée.
  * Les transitions passent par ParrainageService::changerEtatSession().
@@ -45,24 +45,11 @@ class SessionParrainage extends Model
         self::TYPE_LES_DEUX => 'Scolaire et formation professionnelle',
     ];
 
-    public const SOURCE_ETAT = 'etat';
-    public const SOURCE_PARTENAIRE = 'partenaire';
-    public const SOURCE_MIXTE = 'mixte';
-
-    public const SOURCES_FINANCEMENT = [
-        self::SOURCE_ETAT => 'État',
-        self::SOURCE_PARTENAIRE => 'Partenaire',
-        self::SOURCE_MIXTE => 'Mixte (État et partenaires)',
-    ];
-
-    /** Sources pour lesquelles au moins un parrain contributeur est exigé. */
-    public const SOURCES_AVEC_PARRAINS = [self::SOURCE_PARTENAIRE, self::SOURCE_MIXTE];
-
     protected $table = 'sessions_parrainage';
 
     protected $fillable = [
-        'description', 'annee', 'numero', 'type_appui', 'enveloppe', 'plafond_beneficiaire', 'estimation_scolarisation', 'estimation_formation', 'source_financement',
-        'date_ouverture', 'date_cloture', 'bloquer_depassement_enveloppe', 'quotas_actifs', 'exclure_deja_appuyes',
+        'description', 'annee', 'numero', 'type_appui', 'enveloppe', 'plafond_beneficiaire', 'estimation_scolarisation', 'estimation_formation',
+        'date_ouverture', 'date_cloture', 'quotas_actifs', 'exclure_deja_appuyes',
         'etat', 'session_origine_id', 'created_by', 'updated_by',
     ];
 
@@ -76,7 +63,6 @@ class SessionParrainage extends Model
             'estimation_formation' => 'integer',
             'date_ouverture' => 'date',
             'date_cloture' => 'date',
-            'bloquer_depassement_enveloppe' => 'boolean',
             'quotas_actifs' => 'boolean',
             'exclure_deja_appuyes' => 'boolean',
         ];
@@ -85,11 +71,6 @@ class SessionParrainage extends Model
     public function quotas(): HasMany
     {
         return $this->hasMany(QuotaRegional::class, 'session_parrainage_id');
-    }
-
-    public function parrains(): BelongsToMany
-    {
-        return $this->belongsToMany(Parrain::class, 'contributions_session')->withPivot('montant')->withTimestamps();
     }
 
     /** OEV choisis pour la session (module « Sélection ») : retenus et liste d'attente. */
@@ -132,6 +113,11 @@ class SessionParrainage extends Model
     }
 
     /** Ex : « 75 000 FCFA », ou « Sans plafond ». */
+    public function libelleEnveloppe(): string
+    {
+        return $this->aUneEnveloppe() ? \App\Support\Montant::fcfa($this->enveloppe) : 'Enveloppe non renseignée';
+    }
+
     public function libellePlafond(): string
     {
         return $this->plafond_beneficiaire === null ? 'Sans plafond' : \App\Support\Montant::fcfa($this->plafond_beneficiaire);
@@ -152,9 +138,10 @@ class SessionParrainage extends Model
         return self::TYPES_APPUI[$this->type_appui] ?? $this->type_appui;
     }
 
-    public function libelleSource(): string
+    /** Une enveloppe est fixée : les OEV retenus ne peuvent pas la dépasser. */
+    public function aUneEnveloppe(): bool
     {
-        return self::SOURCES_FINANCEMENT[$this->source_financement] ?? $this->source_financement;
+        return $this->enveloppe !== null;
     }
 
     public static function etatSuivant(string $etat): ?string
@@ -194,18 +181,8 @@ class SessionParrainage extends Model
             && (in_array($this->etat, [self::ETAT_EN_COURS, self::ETAT_VALIDEE], true) || $utilisateur->supervise());
     }
 
-    public function avecParrains(): bool
-    {
-        return in_array($this->source_financement, self::SOURCES_AVEC_PARRAINS, true);
-    }
-
     public function totalQuotas(): int
     {
         return (int) $this->quotas->sum('montant');
-    }
-
-    public function totalContributions(): int
-    {
-        return (int) $this->parrains->sum('pivot.montant');
     }
 }

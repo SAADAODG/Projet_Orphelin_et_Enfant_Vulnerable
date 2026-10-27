@@ -3,7 +3,7 @@
   $nbChoisis = $session->beneficiaires_count ?? $session->beneficiaires()->count();
 @endphp
 <form method="POST" action="{{ route('parrainage.sessions.destroy', $session) }}" data-confirm-danger
-      data-confirm="Supprimer définitivement la session {{ $session->reference() }} ({{ $session->libelleEtat() }}) ?{{ $nbChoisis ? ' Ses ' . $nbChoisis . ' OEV sélectionné(s) seront retirés de la session.' : '' }} Ses quotas et contributions seront aussi supprimés. Cette action est irréversible.">
+      data-confirm="Supprimer définitivement la session {{ $session->reference() }} ({{ $session->libelleEtat() }}) ?{{ $nbChoisis ? ' Ses ' . $nbChoisis . ' OEV sélectionné(s) seront retirés de la session.' : '' }} Ses quotas seront aussi supprimés. Cette action est irréversible.">
   @csrf
   @method('DELETE')
   @if ($compact ?? false)

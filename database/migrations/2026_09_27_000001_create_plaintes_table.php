@@ -29,6 +29,10 @@ return new class extends Migration
             $table->string('statut')->default('nouvelle')->index();
             $table->timestamp('lu_at')->nullable()->index();
             $table->timestamps();
+
+            // Cloisonnement par zone : PostgreSQL n'indexe pas les clés étrangères
+            $table->index('region_id');
+            $table->index('province_id');
         });
     }
 

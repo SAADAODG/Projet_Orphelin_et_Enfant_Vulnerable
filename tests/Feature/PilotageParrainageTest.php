@@ -48,7 +48,7 @@ class PilotageParrainageTest extends TestCase
 
         $this->session = SessionParrainage::create([
             'description' => 'Session principale', 'annee' => '2026-2027', 'numero' => 1, 'type_appui' => SessionParrainage::TYPE_SCOLAIRE,
-            'enveloppe' => 1_000_000, 'plafond_beneficiaire' => 50_000, 'source_financement' => SessionParrainage::SOURCE_ETAT,
+            'enveloppe' => 1_000_000, 'plafond_beneficiaire' => 50_000,
             'date_ouverture' => '2026-10-01', 'etat' => SessionParrainage::ETAT_VALIDEE,
         ]);
         $this->parrain = Parrain::create(['type' => 'ong', 'nom' => 'ONG Espoir', 'actif' => true]);
@@ -96,10 +96,6 @@ class PilotageParrainageTest extends TestCase
                 return collect($this->definitive);
             }
 
-            public function listeAttente(SessionParrainage $session): Collection
-            {
-                return collect($this->attente);
-            }
 
             public function etablissements(): Collection
             {
@@ -336,11 +332,10 @@ class PilotageParrainageTest extends TestCase
 
     public function test_les_ecrans_d_extraction_s_affichent_selon_les_droits(): void
     {
+        // La liste pour paiement se consulte dans l'onglet « Paiement » de la session : l'écran ne garde que la liste pour un parrain
         $this->actingAs($this->central)->get(route('parrainage.pilotage.extractions', ['vue' => 'paiement']))
-            ->assertOk()->assertSee('Liste pour paiement')->assertSee('Session principale');
-        // Le DP n'a pas accès à la liste pour paiement : la vue parrain s'affiche
-        $this->actingAs($this->dp)->get(route('parrainage.pilotage.extractions', ['vue' => 'paiement']))
-            ->assertOk()->assertViewHas('vue', 'parrain')->assertDontSee('Choisir une session validée');
+            ->assertOk()->assertSee('Liste pour un parrain')->assertDontSee('Choisir une session validée');
+        $this->actingAs($this->dp)->get(route('parrainage.pilotage.extractions'))->assertOk()->assertSee('Liste pour un parrain');
         $this->actingAs($this->dp)->get(route('parrainage.pilotage.liste-parrain', ['parrain_id' => $this->parrain->id, 'format' => 'pdf', 'filtre' => 1]))
             ->assertOk()->assertHeader('content-type', 'application/pdf');
     }

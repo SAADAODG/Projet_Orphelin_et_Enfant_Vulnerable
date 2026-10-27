@@ -34,8 +34,7 @@ class ExtractionsParrainage
      */
     public const COLONNES_ETABLISSEMENT = [
         'region' => 'Région', 'province' => 'Province', 'etablissement' => 'Établissement', 'type' => 'Type d’établissement',
-        'banque' => 'Banque', 'code_banque' => 'Code banque', 'code_guichet' => 'Code guichet', 'numero_compte' => 'N° de compte',
-        'cle_rib' => 'Clé RIB', 'titulaire' => 'Titulaire', 'rib' => 'RIB', 'nombre_oev' => 'Nombre d’OEV', 'montant' => 'Montant total (FCFA)',
+        'banque' => 'Banque', 'rib' => 'RIB', 'nombre_oev' => 'Nombre d’OEV', 'montant' => 'Montant total (FCFA)',
     ];
 
     public const COLONNES_ETABLISSEMENT_OBLIGATOIRES = ['nombre_oev', 'montant'];
@@ -153,7 +152,6 @@ class ExtractionsParrainage
             $etab = $etablissements[$id] ?? null;
             $oevPremier = $oevs[$beneficiaires->first()['oev_id']];
             $premier = (object) ['region' => $regions[$oevPremier->region_id] ?? null, 'province' => $provinces[$oevPremier->province_id] ?? null];
-            $rib = collect(['code_banque', 'code_guichet', 'numero_compte', 'cle_rib'])->map(fn ($champ) => $etab[$champ] ?? null);
 
             return [
                 // Localisation de l'établissement, à défaut celle du premier bénéficiaire
@@ -162,14 +160,10 @@ class ExtractionsParrainage
                 'etablissement' => $etab['nom'] ?? 'Établissement non renseigné',
                 'type' => $etab['type'] ?? null,
                 'banque' => $etab['banque'] ?? null,
-                'code_banque' => $etab['code_banque'] ?? null,
-                'code_guichet' => $etab['code_guichet'] ?? null,
-                'numero_compte' => $etab['numero_compte'] ?? null,
-                'cle_rib' => $etab['cle_rib'] ?? null,
-                'titulaire' => $etab['titulaire'] ?? null,
+                'rib' => $etab['rib'] ?? null,
                 'nombre_oev' => $beneficiaires->count(),
                 'montant' => (int) $beneficiaires->sum('montant_retenu'),
-                'rib_manquant' => $rib->contains(fn ($v) => $v === null || $v === ''),
+                'rib_manquant' => ($etab['rib'] ?? null) === null,
             ];
         })->sortBy([['region', 'asc'], ['province', 'asc'], ['etablissement', 'asc']])->values();
 
@@ -220,11 +214,9 @@ class ExtractionsParrainage
      * (« l'une ou l'autre »).
      *
      * La liste n'est jamais chargée en entier : « nombre » est compté par la base et « oevs » est parcouru
-     * par paquets (tri par la base pour les éligibles ; ordre de la liste d'attente sinon). Chaque OEV porte
-     * besoin_estime.
+     * par paquets, dans l'ordre de priorité (tri par la base). Chaque OEV porte besoin_estime.
      *
-     * @param  array  $f  source (« attente » : liste d'attente de la session ; « eligibles » : OEV sans appui de
-     *                    cette nature pour l'année), session, annee, nature, regions, provinces,
+     * @param  array  $f  OEV sans appui de la nature choisie pour l'année : annee, nature, regions, provinces,
      *                    sexe, statut, vulnerabilite, niveau_priorite, niveau_etude, handicap, age_min, age_max
      * @return array{nombre: int, oevs: LazyCollection<int, Oev>, apercu: callable(int): array<int, Oev>}
      */
@@ -248,10 +240,6 @@ class ExtractionsParrainage
             }))
             ->when(isset($f['age_min']), fn ($q) => $q->whereDate('date_naissance', '<=', now()->subYears((int) $f['age_min'])))
             ->when(isset($f['age_max']), fn ($q) => $q->whereDate('date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)));
-
-        if ($f['source'] === 'attente') {
-            return $this->dansLOrdreDeLAttente($requete, $f['session'] ? $this->source->listeAttente($f['session']) : collect());
-        }
 
         if ($f['nature']) {
             $requete->whereNotIn('id', AppuiPartenaire::where('annee', $f['annee'])->where('nature_appui_id', $f['nature']->id)->select('oev_id'));
@@ -297,37 +285,6 @@ class ExtractionsParrainage
     /** Taille des listes d'identifiants envoyées à la base, et des paquets d'OEV lus pour un export. */
     private const PAQUET = 5000;
     private const PAQUET_LECTURE = 500;
-
-    /**
-     * OEV de la liste d'attente correspondant aux filtres, dans l'ordre de la liste (rang) : les identifiants
-     * sont confrontés aux filtres par paquets, les fiches lues par paquets au fil du parcours.
-     */
-    private function dansLOrdreDeLAttente(Builder $requete, Collection $attente): array
-    {
-        $attente = $attente->sortBy('rang')->values();
-        $retenus = collect();
-        foreach ($attente->pluck('oev_id')->unique()->chunk(self::PAQUET) as $paquet) {
-            $retenus = $retenus->merge((clone $requete)->whereIn('id', $paquet->values()->all())->pluck('id'));
-        }
-        $retenus = $retenus->flip();
-        $ordre = $attente->filter(fn (array $b) => $retenus->has($b['oev_id']))->unique('oev_id')->values();
-
-        $oevs = LazyCollection::make(function () use ($ordre) {
-                foreach ($ordre->chunk(self::PAQUET_LECTURE) as $paquet) {
-                    $fiches = Oev::with(['commune', 'province', 'region'])->whereIn('id', $paquet->pluck('oev_id')->all())->get()->keyBy('id');
-                    foreach ($paquet as $b) {
-                        $oev = $fiches[$b['oev_id']];
-                        yield $oev->setAttribute('besoin_estime', $b['besoin_estime'] ?? $oev->frais_scolarite);
-                    }
-                }
-            });
-
-        return [
-            'nombre' => $ordre->count(),
-            'oevs' => $oevs,
-            'apercu' => fn (int $nombre) => $oevs->take($nombre)->values()->all(),
-        ];
-    }
 
     /**
      * Données proposées pour la liste d'un parrain : clé => [libellé, valeur, identifiante].

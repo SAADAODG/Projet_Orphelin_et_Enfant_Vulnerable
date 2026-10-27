@@ -42,7 +42,7 @@ class SuiviParrainageTest extends TestCase
         return SessionParrainage::create($surcharge + [
             'description' => 'Session principale', 'annee' => '2026-2027', 'numero' => 1,
             'type_appui' => SessionParrainage::TYPE_LES_DEUX, 'enveloppe' => 1_000_000, 'plafond_beneficiaire' => 100_000,
-            'source_financement' => SessionParrainage::SOURCE_ETAT, 'date_ouverture' => '2026-10-01',
+            'date_ouverture' => '2026-10-01',
             'etat' => SessionParrainage::ETAT_VALIDEE,
         ]);
     }

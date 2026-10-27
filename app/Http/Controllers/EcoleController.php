@@ -22,16 +22,21 @@ class EcoleController extends Controller
     /** Colonnes attendues dans le fichier importé, dans cet ordre (ligne 1 = en-tête). */
     public const COLONNES_IMPORT = ['Région', 'Province', 'Commune', 'CEB', 'École', 'Statut', 'Type'];
 
-    /** Écoles d'une commune, chargées à la demande par le formulaire OEV (tout agent connecté). */
-    public function parCommune(Commune $commune): JsonResponse
+    /**
+     * Écoles (ou centres de formation : ?nature=centre_formation) d'une commune, chargées à la demande par le
+     * formulaire OEV (tout agent connecté).
+     */
+    public function parCommune(Request $request, Commune $commune): JsonResponse
     {
-        return response()->json($commune->ecoles()->orderBy('ceb')->orderBy('nom')->get(['id', 'nom', 'ceb', 'statut', 'type']));
+        $nature = $request->query('nature') === Ecole::NATURE_CENTRE ? Ecole::NATURE_CENTRE : Ecole::NATURE_ECOLE;
+
+        return response()->json($commune->ecoles()->where('nature', $nature)->orderBy('ceb')->orderBy('nom')->get(['id', 'nom', 'ceb', 'statut', 'type']));
     }
 
     public function index(Request $request): View
     {
         $search = trim((string) $request->query('q'));
-        $filtres = $request->only(['region_id', 'province_id', 'commune_id', 'statut', 'type']);
+        $filtres = $request->only(['region_id', 'province_id', 'commune_id', 'statut', 'type', 'nature', 'rib']);
 
         $ecoles = Ecole::with('commune.province.region')
             ->when($search !== '', fn ($query) => $query->where(fn ($q) => $q->whereLike('nom', "%{$search}%")->orWhereLike('ceb', "%{$search}%")))
@@ -42,6 +47,8 @@ class EcoleController extends Controller
                 fn ($query) => $query->whereHas('commune.province', fn ($q) => $q->where('region_id', $filtres['region_id'])))
             ->when($filtres['statut'] ?? null, fn ($query, $statut) => $query->where('statut', $statut))
             ->when($filtres['type'] ?? null, fn ($query, $type) => $query->where('type', $type))
+            ->when(array_key_exists($filtres['nature'] ?? '', Ecole::NATURES), fn ($query) => $query->where('nature', $filtres['nature']))
+            ->when(($filtres['rib'] ?? null) === 'manquant', fn ($query) => $query->where(fn ($q) => $q->whereNull('rib')->orWhere('rib', '')))
             ->orderBy('nom')
             ->paginate(20)
             ->withQueryString();
@@ -60,7 +67,7 @@ class EcoleController extends Controller
         $commune = Commune::with('province')->find($request->query('commune_id'));
 
         return view('parametres.ecoles.create', [
-            'ecole' => new Ecole(['commune_id' => $commune?->id]),
+            'ecole' => new Ecole(['commune_id' => $commune?->id, 'nature' => $request->query('nature') === Ecole::NATURE_CENTRE ? Ecole::NATURE_CENTRE : Ecole::NATURE_ECOLE]),
             'valeurs' => ['region_id' => $commune?->province->region_id, 'province_id' => $commune?->province_id, 'commune_id' => $commune?->id],
             'localites' => Region::arborescence(),
         ]);
@@ -71,7 +78,7 @@ class EcoleController extends Controller
         $ecole = Ecole::create($this->validateData($request));
 
         return redirect()->route('parametres.ecoles.index', ['commune_id' => $ecole->commune_id])
-            ->with('success', "École « {$ecole->nom} » créée avec succès.");
+            ->with('success', "{$ecole->libelleNature()} « {$ecole->nom} » créé(e) avec succès.");
     }
 
     public function edit(Ecole $ecole): View
@@ -90,20 +97,20 @@ class EcoleController extends Controller
         $ecole->update($this->validateData($request, $ecole->id));
 
         return redirect()->route('parametres.ecoles.index', ['commune_id' => $ecole->commune_id])
-            ->with('success', 'École mise à jour avec succès.');
+            ->with('success', 'Établissement mis à jour avec succès.');
     }
 
     public function destroy(Ecole $ecole): RedirectResponse
     {
         if ($ecole->estUtiliseeParDesDossiers()) {
             return redirect()->route('parametres.ecoles.index')
-                ->with('error', "Impossible de supprimer « {$ecole->nom} » : elle est choisie par des dossiers OEV.");
+                ->with('error', "Impossible de supprimer « {$ecole->nom} » : il est choisi par des dossiers OEV ou payé par une session de parrainage.");
         }
 
         $ecole->delete();
 
         return redirect()->route('parametres.ecoles.index')
-            ->with('success', 'École supprimée avec succès.');
+            ->with('success', 'Établissement supprimé avec succès.');
     }
 
     /** Import du fichier Excel des écoles : ajoute les nouvelles, met à jour le statut et le type des autres. */
@@ -136,6 +143,8 @@ class EcoleController extends Controller
 
     private function validateData(Request $request, ?int $ignoreId = null): array
     {
+        // Sans précision : une école (centres de formation à choisir explicitement)
+        $request->mergeIfMissing(['nature' => Ecole::NATURE_ECOLE]);
         $uniqueNom = Rule::unique('ecoles', 'nom')
             ->where(fn ($query) => $query->where('commune_id', $request->input('commune_id'))->where('ceb', $request->input('ceb')));
 
@@ -147,13 +156,16 @@ class EcoleController extends Controller
             'commune_id' => ['required', 'integer', Rule::exists('communes', 'id')->where('province_id', $request->input('province_id'))],
             'ceb' => ['nullable', 'string', 'max:150'],
             'nom' => ['required', 'string', 'max:255', $uniqueNom],
+            'nature' => ['nullable', Rule::in(array_keys(Ecole::NATURES))],
             'statut' => ['nullable', Rule::in(array_keys(Ecole::STATUTS))],
             'type' => ['nullable', Rule::in(array_keys(Ecole::TYPES))],
+            'banque' => ['nullable', 'string', 'max:120'],
+            'rib' => ['nullable', 'string', 'max:60'],
         ], [
-            'commune_id.required' => 'Choisissez la commune de l’école.',
+            'commune_id.required' => 'Choisissez la commune de l’établissement.',
             'commune_id.exists' => 'La commune choisie n’appartient pas à la province sélectionnée.',
-            'nom.required' => 'Saisissez le nom de l’école.',
-            'nom.unique' => 'Cette école existe déjà dans cette commune (même CEB).',
+            'nom.required' => 'Saisissez le nom de l’établissement.',
+            'nom.unique' => 'Cet établissement existe déjà dans cette commune (même CEB).',
         ]);
     }
 }

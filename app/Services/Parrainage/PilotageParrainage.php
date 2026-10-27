@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  * Indicateurs du tableau de bord « Pilotage » : budget, couverture, profil des OEV appuyés,
  * partenaires et résultats scolaires, dans la zone de l'utilisateur.
  *
- * Les chiffres de l'État (liste définitive, liste d'attente, résultats) viennent de SourceSelection :
+ * Les chiffres de l'État (liste définitive, résultats) viennent de SourceSelection :
  * tant que les modules de Nakoulma ne sont pas branchés, ils valent null (« données non disponibles »).
  */
 class PilotageParrainage
@@ -87,7 +87,6 @@ class PilotageParrainage
                 'eligibles' => $eligibles,
                 'etat' => $etat['nombre'] ?? null,
                 'partenaires' => $partenaires,
-                'attente' => $etat['attente'] ?? null,
                 'appuyes' => $appuyes,
                 'taux' => $eligibles ? round($appuyes / $eligibles * 100, 1) : null,
             ],
@@ -100,7 +99,7 @@ class PilotageParrainage
     /**
      * Chiffres de l'État calculés par la base (listes de la sélection dans la base).
      *
-     * @return array{engage: int, nombre: int, nombre_seul: int, attente: int, engage_par_region: Collection, profil_seul: array<int, Builder>, resultats: array}
+     * @return array{engage: int, nombre: int, nombre_seul: int, engage_par_region: Collection, profil_seul: array<int, Builder>, resultats: array}
      */
     private function etatEnBase(SourceSelectionEnBase $source, Collection $sessions, array $f, Builder $base, Builder $appuis): array
     {
@@ -124,8 +123,6 @@ class PilotageParrainage
             'engage' => (int) $totaux->engage,
             'nombre' => (int) $totaux->nombre,
             'nombre_seul' => $seul()->count(),
-            'attente' => DB::query()->fromSub($source->requeteListeAttente($sessions), 'a')
-                ->whereExists($this->dansLaZoneSql($base, 'a.oev_id'))->distinct()->count('a.oev_id'),
             'engage_par_region' => $parRegion,
             'profil_seul' => [$seul()],
             'resultats' => $this->tauxResultats($resultats),
@@ -139,8 +136,6 @@ class PilotageParrainage
             ->filter(fn (array $b) => $this->typeConvient($b['type_appui'] ?? null, $f['type_appui']));
         $regions = $this->dansLaZone($base, $definitive->pluck('oev_id'));
         $definitive = $definitive->filter(fn (array $b) => $regions->has($b['oev_id']));
-        $attente = $sessions->flatMap(fn (SessionParrainage $s) => $this->source->listeAttente($s));
-        $attenteZone = $this->dansLaZone($base, $attente->pluck('oev_id'));
 
         $oevEtat = $definitive->pluck('oev_id')->unique()->values();
         // OEV appuyés par l'État sans l'être aussi par un partenaire : disjoints des appuyés par un partenaire
@@ -160,7 +155,6 @@ class PilotageParrainage
             'engage' => (int) $definitive->sum('montant_retenu'),
             'nombre' => $oevEtat->count(),
             'nombre_seul' => $etatSeul->count(),
-            'attente' => $attente->filter(fn (array $b) => $attenteZone->has($b['oev_id']))->pluck('oev_id')->unique()->count(),
             'engage_par_region' => $definitive->groupBy(fn ($b) => $regions[$b['oev_id']])->map(fn ($l) => (int) $l->sum('montant_retenu')),
             'profil_seul' => $etatSeul->chunk(self::PAQUET)->map(fn (Collection $paquet) => Oev::whereIn('id', $paquet->values()->all()))->all(),
             'resultats' => $this->tauxResultats($resultats),
@@ -250,7 +244,8 @@ class PilotageParrainage
 
     private function budget(Collection $sessions, ?array $etat, array $f): array
     {
-        $enveloppe = (int) $sessions->sum('enveloppe');
+        // Enveloppes renseignées des sessions ; null si aucune ne l'est (le reste et le taux ne se calculent pas)
+        $enveloppe = $sessions->contains(fn (SessionParrainage $s) => $s->aUneEnveloppe()) ? (int) $sessions->sum('enveloppe') : null;
         $engage = $etat['engage'] ?? null;
 
         // Quotas par région : une session choisie dont les quotas sont actifs ; DR / DP : leur région seulement
@@ -271,7 +266,7 @@ class PilotageParrainage
             'sessions' => $sessions->count(),
             'enveloppe' => $enveloppe,
             'engage' => $engage,
-            'reste' => $engage === null ? null : $enveloppe - $engage,
+            'reste' => $engage === null || $enveloppe === null ? null : $enveloppe - $engage,
             'taux' => $engage === null || ! $enveloppe ? null : round($engage / $enveloppe * 100, 1),
             'quotas' => $quotas,
         ];
