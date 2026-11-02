@@ -4,6 +4,7 @@ namespace App\Services\Referentiel;
 
 use App\Models\Commune;
 use App\Models\Ecole;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -49,6 +50,24 @@ class ImportEcoles
 
     private array $types;
 
+    /** Écoles insérées par lots au fil de la lecture (un fichier national compte plus de 20 000 lignes). */
+    private const TAILLE_LOT = 500;
+
+    /* État de l'import en cours */
+
+    /** Écoles connues (clé normalisée) => liste de [id, statut, type], dans l'ordre d'enregistrement */
+    private array $existantes = [];
+
+    /** Clé normalisée => nombre de lignes déjà lues avec cette clé */
+    private array $occurrences = [];
+
+    private array $lot = [];
+
+    /** « commune (province) » => true */
+    private array $introuvables = [];
+
+    private CarbonInterface $maintenant;
+
     public function __construct()
     {
         $this->communes = $this->indexCommunes();
@@ -62,68 +81,104 @@ class ImportEcoles
      */
     public function importer(iterable $lignes): array
     {
-        // Écoles connues (clé normalisée) => liste de [id, statut, type], dans l'ordre d'enregistrement
+        $this->existantes = $this->ecolesExistantes();
+        $this->occurrences = [];
+        $this->lot = [];
+        $this->introuvables = [];
+        $this->maintenant = now();
+        $rapport = ['ajoutees' => 0, 'mises_a_jour' => 0, 'ignorees' => 0, 'communes_introuvables' => []];
+
+        DB::transaction(function () use ($lignes, &$rapport) {
+            foreach ($lignes as $cellules) {
+                if ($resultat = $this->traiterLigne($cellules)) {
+                    $rapport[$resultat]++;
+                }
+            }
+            $this->insererLot();
+        });
+
+        $rapport['communes_introuvables'] = array_keys($this->introuvables);
+
+        return $rapport;
+    }
+
+    /** Écoles connues (clé normalisée) => liste de [id, statut, type], dans l'ordre d'enregistrement. */
+    private function ecolesExistantes(): array
+    {
         $existantes = [];
         foreach (DB::table('ecoles')->select(['id', 'commune_id', 'ceb', 'nom', 'statut', 'type'])->orderBy('id')->cursor() as $ecole) {
             $existantes[$this->cleEcole($ecole->commune_id, $ecole->ceb, $ecole->nom)][] = [$ecole->id, $ecole->statut, $ecole->type];
         }
 
-        $rapport = ['ajoutees' => 0, 'mises_a_jour' => 0, 'ignorees' => 0, 'communes_introuvables' => []];
-        $introuvables = [];
-        $lot = [];
-        $occurrences = [];
-        $maintenant = now();
-        // Écoles insérées par lots au fil de la lecture (un fichier national compte plus de 20 000 lignes)
-        $inserer = function () use (&$lot): void {
-            if ($lot) {
-                DB::table('ecoles')->insert($lot);
-                $lot = [];
+        return $existantes;
+    }
+
+    /** @return string|null compteur du rapport à augmenter (ignorees, mises_a_jour, ajoutees), null si l'école est déjà à jour */
+    private function traiterLigne(array $cellules): ?string
+    {
+        $ecole = $this->lireLigne($cellules);
+        if ($ecole === null) {
+            return 'ignorees';
+        }
+
+        $cle = $this->cleEcole($ecole['commune_id'], $ecole['ceb'], $ecole['nom']);
+        // Rang de cette école parmi les lignes de même commune, CEB et nom
+        $rang = $this->occurrences[$cle] = ($this->occurrences[$cle] ?? -1) + 1;
+        $existante = $this->existantes[$cle][$rang] ?? null;
+
+        return $existante ? $this->mettreAJour($existante, $ecole) : $this->ajouter($ecole);
+    }
+
+    /** École lue sur la ligne, avec sa commune ; null si la ligne est ignorée (sans nom, ou commune introuvable). */
+    private function lireLigne(array $cellules): ?array
+    {
+        [, $province, $commune, $ceb, $nom, $statut, $type] = array_pad(array_map(fn ($v) => trim(preg_replace('/\s+/u', ' ', (string) $v)), array_values($cellules)), 7, '');
+        $communeId = $nom === '' ? null : $this->trouverCommune($province, $commune);
+        if (! $communeId) {
+            if ($nom !== '') {
+                $this->introuvables["{$commune} ({$province})"] = true;
             }
-        };
 
-        DB::transaction(function () use ($lignes, $existantes, &$occurrences, &$rapport, &$introuvables, &$lot, $inserer, $maintenant) {
-            foreach ($lignes as $cellules) {
-                [, $province, $commune, $ceb, $nom, $statut, $type] = array_pad(array_map(fn ($v) => trim(preg_replace('/\s+/u', ' ', (string) $v)), array_values($cellules)), 7, '');
-                if ($nom === '') {
-                    $rapport['ignorees']++;
-                    continue;
-                }
-                $communeId = $this->trouverCommune($province, $commune);
-                if (! $communeId) {
-                    $introuvables["{$commune} ({$province})"] = true;
-                    $rapport['ignorees']++;
-                    continue;
-                }
+            return null;
+        }
 
-                $ceb = $ceb !== '' ? $ceb : null;
-                $statut = $this->statuts[$this->cle($statut)] ?? null;
-                $type = $type === '' ? null : ($this->types[$this->cle($type)] ?? 'autre');
-                $cle = $this->cleEcole($communeId, $ceb, $nom);
+        return [
+            'commune_id' => $communeId,
+            'ceb' => $ceb !== '' ? $ceb : null,
+            'nom' => $nom,
+            'statut' => $this->statuts[$this->cle($statut)] ?? null,
+            'type' => $type === '' ? null : ($this->types[$this->cle($type)] ?? 'autre'),
+        ];
+    }
 
-                // Rang de cette école parmi les lignes de même commune, CEB et nom
-                $rang = $occurrences[$cle] = ($occurrences[$cle] ?? -1) + 1;
+    /** Statut ou type changé : l'école enregistrée est mise à jour. */
+    private function mettreAJour(array $existante, array $ecole): ?string
+    {
+        [$id, $statutConnu, $typeConnu] = $existante;
+        if ($statutConnu === $ecole['statut'] && $typeConnu === $ecole['type']) {
+            return null;
+        }
+        DB::table('ecoles')->where('id', $id)->update(['statut' => $ecole['statut'], 'type' => $ecole['type'], 'updated_at' => $this->maintenant]);
 
-                if (isset($existantes[$cle][$rang])) {
-                    [$id, $statutConnu, $typeConnu] = $existantes[$cle][$rang];
-                    if ($statutConnu !== $statut || $typeConnu !== $type) {
-                        DB::table('ecoles')->where('id', $id)->update(['statut' => $statut, 'type' => $type, 'updated_at' => $maintenant]);
-                        $rapport['mises_a_jour']++;
-                    }
-                    continue;
-                }
+        return 'mises_a_jour';
+    }
 
-                $lot[] = ['commune_id' => $communeId, 'ceb' => $ceb, 'nom' => $nom, 'statut' => $statut, 'type' => $type, 'created_at' => $maintenant, 'updated_at' => $maintenant];
-                $rapport['ajoutees']++;
-                if (count($lot) >= 500) {
-                    $inserer();
-                }
-            }
-            $inserer();
-        });
+    private function ajouter(array $ecole): string
+    {
+        $this->lot[] = $ecole + ['created_at' => $this->maintenant, 'updated_at' => $this->maintenant];
+        if (count($this->lot) >= self::TAILLE_LOT) {
+            $this->insererLot();
+        }
 
-        $rapport['communes_introuvables'] = array_keys($introuvables);
+        return 'ajoutees';
+    }
 
-        return $rapport;
+    private function insererLot(): void
+    {
+        if ($this->lot) {
+            DB::table('ecoles')->insert($this->lot);
+            $this->lot = [];
+        }
     }
 
     private function indexCommunes(): array

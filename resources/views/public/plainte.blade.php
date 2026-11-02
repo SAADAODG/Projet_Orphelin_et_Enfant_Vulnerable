@@ -69,7 +69,7 @@
 
             @php $anonyme = session()->hasOldInput() ? (bool) old('anonyme') : true; @endphp
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" role="switch" id="anonyme" name="anonyme" value="1" {{ $anonyme ? 'checked' : '' }}>
+              <input class="form-check-input" type="checkbox" role="switch" id="anonyme" name="anonyme" value="1" aria-checked="{{ $anonyme ? 'true' : 'false' }}" {{ $anonyme ? 'checked' : '' }}>
               <label class="form-check-label fw-semibold small" for="anonyme">Je souhaite rester anonyme</label>
             </div>
 
@@ -133,6 +133,8 @@
     const anonyme = document.getElementById('anonyme');
     const blocContact = document.getElementById('blocContact');
     anonyme.addEventListener('change', function () {
+      // Interrupteur : son état annoncé suit la case
+      anonyme.setAttribute('aria-checked', anonyme.checked ? 'true' : 'false');
       blocContact.classList.toggle('d-none', anonyme.checked);
       if (anonyme.checked) {
         blocContact.querySelectorAll('input').forEach(function (champ) { champ.value = ''; });

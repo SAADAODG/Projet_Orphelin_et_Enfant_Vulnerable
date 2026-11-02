@@ -57,7 +57,7 @@
                   <td><code>{{ $element->code }}</code> @if ($element->systeme)<i class="bi bi-lock ms-1" title="Utilisé par les règles de l’application" aria-label="Choix système"></i>@endif</td>
                   <td>
                     <div class="form-check form-switch mb-0">
-                      <input class="form-check-input" type="checkbox" role="switch" name="actif" value="1" form="{{ $formulaire }}" aria-label="Actif" @checked($element->actif) @disabled($element->systeme)>
+                      <input class="form-check-input" type="checkbox" role="switch" name="actif" value="1" form="{{ $formulaire }}" aria-label="Actif" aria-checked="{{ $element->actif ? 'true' : 'false' }}" @checked($element->actif) @disabled($element->systeme)>
                     </div>
                   </td>
                   <td class="text-end">

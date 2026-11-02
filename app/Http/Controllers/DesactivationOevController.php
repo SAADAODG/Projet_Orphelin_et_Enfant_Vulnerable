@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\CloisonneParZone;
 use App\Models\JournalActivite;
 use App\Models\Oev;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -49,7 +50,7 @@ class DesactivationOevController extends Controller
             'filtres' => $filtres,
             'nbDesactives' => $zone()->where('desactivation_etat', Oev::DESACTIVE)->count(),
             'nbDemandes' => $zone()->where('desactivation_etat', Oev::DESACTIVATION_DEMANDEE)->count(),
-            'central' => $request->user()->can('intégrer OEV'),
+            'central' => $request->user()->can(Permissions::INTEGRER_OEV),
         ]);
     }
 
@@ -57,8 +58,8 @@ class DesactivationOevController extends Controller
     public function desactiver(Request $request, Oev $oev): RedirectResponse
     {
         $utilisateur = $request->user();
-        $central = $utilisateur->can('intégrer OEV');
-        abort_unless($central || $utilisateur->can('constituer dossiers'), 403);
+        $central = $utilisateur->can(Permissions::INTEGRER_OEV);
+        abort_unless($central || $utilisateur->can(Permissions::CONSTITUER_DOSSIERS), 403);
         $this->verifierZone($oev, message: 'Cet OEV n’est pas dans votre zone.');
 
         if (! $oev->estIntegre() || $oev->desactivation_etat !== null) {
@@ -96,7 +97,7 @@ class DesactivationOevController extends Controller
     /** Niveau central : valide ou refuse la demande du DP. */
     public function decider(Request $request, Oev $oev): RedirectResponse
     {
-        abort_unless($request->user()->can('intégrer OEV'), 403);
+        abort_unless($request->user()->can(Permissions::INTEGRER_OEV), 403);
 
         if (! $oev->desactivationDemandee()) {
             return back()->withErrors(['desactivation' => 'Aucune demande de désactivation n’est en attente pour cet OEV.']);
@@ -126,7 +127,7 @@ class DesactivationOevController extends Controller
     /** Niveau central : réactivation (désactivation faite par erreur), motif obligatoire. */
     public function reactiver(Request $request, Oev $oev): RedirectResponse
     {
-        abort_unless($request->user()->can('intégrer OEV'), 403);
+        abort_unless($request->user()->can(Permissions::INTEGRER_OEV), 403);
 
         if (! $oev->estDesactive()) {
             return back()->withErrors(['desactivation' => 'Cet OEV n’est pas désactivé.']);

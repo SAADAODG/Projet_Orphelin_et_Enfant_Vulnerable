@@ -13,6 +13,7 @@ use App\Services\Parrainage\FichiersExtraction;
 use App\Services\Parrainage\PaiementsParrainage;
 use App\Support\Montant;
 use App\Support\Perimetre;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -191,7 +192,7 @@ class PaiementSessionController extends Controller
     private function peutEnregistrer(User $utilisateur, SessionParrainage $session): bool
     {
         return $utilisateur->niveau() === User::NIVEAU_CENTRAL
-            && $utilisateur->can('gérer sessions parrainage')
+            && $utilisateur->can(Permissions::GERER_SESSIONS_PARRAINAGE)
             && in_array($session->etat, [SessionParrainage::ETAT_VALIDEE, SessionParrainage::ETAT_PAIEMENT], true);
     }
 }

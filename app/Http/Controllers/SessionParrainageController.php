@@ -10,8 +10,10 @@ use App\Services\Parrainage\ParrainageService;
 use App\Services\Parrainage\SourceSelection;
 use App\Services\Parrainage\TransitionSessionInvalide;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -56,7 +58,7 @@ class SessionParrainageController extends Controller
             'filtres' => $filtres,
             'annees' => SessionParrainage::distinct()->orderByDesc('annee')->pluck('annee'),
             // Fenêtre « Nouvelle session »
-            'formulaire' => $request->user()->can('gérer sessions parrainage') ? $this->donneesFormulaire($this->nouvelleSession()) : null,
+            'formulaire' => $request->user()->can(Permissions::GERER_SESSIONS_PARRAINAGE) ? $this->donneesFormulaire($this->nouvelleSession()) : null,
         ]);
     }
 
@@ -125,7 +127,7 @@ class SessionParrainageController extends Controller
     {
         $session->load(['quotas', 'sessionOrigine', 'createur']);
         $vue = $request->query('vue') === 'quotas' && $session->quotas_actifs ? 'quotas' : 'informations';
-        $gere = $request->user()->can('gérer sessions parrainage');
+        $gere = $request->user()->can(Permissions::GERER_SESSIONS_PARRAINAGE);
 
         // « Répartir au prorata » : proposition affichée dans le formulaire, enregistrée seulement si l'agent valide
         $prorata = $vue === 'quotas' && $request->boolean('prorata') && $gere && $session->parametresModifiables();
@@ -219,12 +221,8 @@ class SessionParrainageController extends Controller
     public function updateQuotas(Request $request, SessionParrainage $session): RedirectResponse
     {
         $retour = redirect()->route('parrainage.sessions.show', ['session' => $session, 'vue' => 'quotas']);
-
-        if (! $session->quotas_actifs) {
-            return $retour->with('error', 'Les quotas par région ne sont pas activés pour cette session.');
-        }
-        if (! $session->parametresModifiables()) {
-            return $retour->with('error', "La session est « {$session->libelleEtat()} » : les quotas sont figés.");
+        if ($figes = $this->quotasFiges($session)) {
+            return $retour->with('error', $figes);
         }
 
         $request->merge(['quotas' => array_map(Montant::normaliserSaisie(...), (array) $request->input('quotas', []))]);
@@ -238,15 +236,8 @@ class SessionParrainageController extends Controller
         ]);
 
         $quotas = collect($validated['quotas'])->only($regions)->map(fn ($m) => (int) $m);
-        if (! $session->aUneEnveloppe()) {
-            return $retour->with('error', 'Renseignez d’abord l’enveloppe de la session : les quotas la répartissent entre les régions.');
-        }
-        if ($quotas->sum() > $session->enveloppe) {
-            return back()->withInput()->withErrors(['quotas' => sprintf(
-                'Le total des quotas (%s) dépasse l’enveloppe de la session (%s).',
-                Montant::fcfa($quotas->sum()),
-                Montant::fcfa($session->enveloppe),
-            )]);
+        if ($refus = $this->refuserQuotas($session, $quotas, $retour)) {
+            return $refus;
         }
 
         DB::transaction(function () use ($session, $quotas) {
@@ -262,6 +253,33 @@ class SessionParrainageController extends Controller
         });
 
         return $retour->with('success', 'Quotas enregistrés.');
+    }
+
+    /** Quotas non modifiables (non activés, ou session figée) : motif, sinon null. */
+    private function quotasFiges(SessionParrainage $session): ?string
+    {
+        return match (true) {
+            ! $session->quotas_actifs => 'Les quotas par région ne sont pas activés pour cette session.',
+            ! $session->parametresModifiables() => "La session est « {$session->libelleEtat()} » : les quotas sont figés.",
+            default => null,
+        };
+    }
+
+    /** Quotas refusés : pas d'enveloppe à répartir, ou total supérieur à l'enveloppe. */
+    private function refuserQuotas(SessionParrainage $session, Collection $quotas, RedirectResponse $retour): ?RedirectResponse
+    {
+        if (! $session->aUneEnveloppe()) {
+            return $retour->with('error', 'Renseignez d’abord l’enveloppe de la session : les quotas la répartissent entre les régions.');
+        }
+        if ($quotas->sum() <= $session->enveloppe) {
+            return null;
+        }
+
+        return back()->withInput()->withErrors(['quotas' => sprintf(
+            'Le total des quotas (%s) dépasse l’enveloppe de la session (%s).',
+            Montant::fcfa($quotas->sum()),
+            Montant::fcfa($session->enveloppe),
+        )]);
     }
 
     public function changerEtat(Request $request, SessionParrainage $session): RedirectResponse

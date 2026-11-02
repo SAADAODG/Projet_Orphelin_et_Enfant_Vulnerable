@@ -20,8 +20,9 @@
     .date { text-align: center; color: #5e6f65; margin-bottom: 16px; }
     h2 { font-size: 12px; background: #0f7a43; color: #ffffff; padding: 5px 8px; margin: 14px 0 0; }
     table.infos { width: 100%; border-collapse: collapse; }
-    table.infos td { padding: 6px 8px; border-bottom: 1px solid #dfe9e1; }
-    table.infos td.label { width: 38%; color: #5e6f65; }
+    table.infos td, table.infos th { padding: 6px 8px; border-bottom: 1px solid #dfe9e1; }
+    /* Libellé de la ligne : en-tête de ligne, avec l'apparence d'une cellule ordinaire */
+    table.infos th.label { width: 38%; color: #5e6f65; font-weight: normal; text-align: inherit; }
     table.infos td.valeur { font-weight: bold; }
     .statut { display: inline-block; padding: 3px 8px; background: #fff3cd; color: #7a5a00; border-radius: 4px; font-weight: bold; }
     .etapes { margin-top: 16px; padding: 10px 12px; background: #f7f9f6; border-left: 4px solid #d8aa2e; }
@@ -32,7 +33,7 @@
   </style>
 </head>
 <body>
-  <table class="bandeau">
+  <table class="bandeau" role="presentation">
     <tr>
       <td class="armoiries"><img src="{{ public_path('assets/images/armoiries-pdf.png') }}" alt="" style="height: 64px;"></td>
       <td>
@@ -54,18 +55,18 @@
 
   <h2>Enfant signalé</h2>
   <table class="infos">
-    <tr><td class="label">Nom et prénom(s)</td><td class="valeur">{{ $signalement->enfant_nom_complet }}</td></tr>
-    <tr><td class="label">Âge estimé</td><td class="valeur">{{ $signalement->enfant_age }} ans</td></tr>
-    <tr><td class="label">Situation</td><td class="valeur">{{ $signalement->vulnerabilite_libelle }}</td></tr>
-    <tr><td class="label">Localité</td><td class="valeur">{{ collect([$signalement->localite, $signalement->localiteComplete()])->filter()->implode(', ') }}</td></tr>
+    <tr><th class="label" scope="row">Nom et prénom(s)</th><td class="valeur">{{ $signalement->enfant_nom_complet }}</td></tr>
+    <tr><th class="label" scope="row">Âge estimé</th><td class="valeur">{{ $signalement->enfant_age }} ans</td></tr>
+    <tr><th class="label" scope="row">Situation</th><td class="valeur">{{ $signalement->vulnerabilite_libelle }}</td></tr>
+    <tr><th class="label" scope="row">Localité</th><td class="valeur">{{ collect([$signalement->localite, $signalement->localiteComplete()])->filter()->implode(', ') }}</td></tr>
   </table>
 
   <h2>Déclarant</h2>
   <table class="infos">
-    <tr><td class="label">Nom et prénom(s)</td><td class="valeur">{{ $signalement->declarant_nom_complet }}</td></tr>
-    <tr><td class="label">Lien avec l'enfant</td><td class="valeur">{{ $signalement->lien_libelle }}</td></tr>
-    <tr><td class="label">Téléphone</td><td class="valeur">{{ $signalement->declarant_telephone }}</td></tr>
-    <tr><td class="label">Statut du signalement</td><td class="valeur"><span class="statut">En attente d'examen</span></td></tr>
+    <tr><th class="label" scope="row">Nom et prénom(s)</th><td class="valeur">{{ $signalement->declarant_nom_complet }}</td></tr>
+    <tr><th class="label" scope="row">Lien avec l'enfant</th><td class="valeur">{{ $signalement->lien_libelle }}</td></tr>
+    <tr><th class="label" scope="row">Téléphone</th><td class="valeur">{{ $signalement->declarant_telephone }}</td></tr>
+    <tr><th class="label" scope="row">Statut du signalement</th><td class="valeur"><span class="statut">En attente d'examen</span></td></tr>
   </table>
 
   <div class="etapes">

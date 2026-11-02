@@ -104,7 +104,7 @@
           <tbody>
             @foreach ($oevs as $oev)
               <tr data-href="{{ route('oevs.show', $oev) }}">
-                <td><a class="oev-code text-decoration-none" href="{{ route('oevs.show', $oev) }}" aria-label="Ouvrir la fiche de {{ $oev->nomComplet() }}">{{ $oev->code }}</a></td>
+                <td><a class="oev-code text-decoration-none" href="{{ route('oevs.show', $oev) }}" aria-label="{{ $oev->code }} : ouvrir la fiche de {{ $oev->nomComplet() }}">{{ $oev->code }}</a></td>
                 <td>
                   <div class="d-flex align-items-center gap-3">
                     <span class="oev-avatar oev-avatar--{{ $oev->sexe }}" aria-hidden="true">{{ $oev->initiales() }}</span>

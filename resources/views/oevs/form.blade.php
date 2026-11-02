@@ -364,7 +364,8 @@
                   <label class="form-label" for="contact_tuteur">Téléphone du parent / tuteur <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text oev-indicatif" title="Burkina Faso">
-                      <svg class="oev-drapeau" viewBox="0 0 30 20" width="24" height="16" role="img" aria-label="Drapeau du Burkina Faso">
+                      <svg class="oev-drapeau" viewBox="0 0 30 20" width="24" height="16">
+                        <title>Drapeau du Burkina Faso</title>
                         <rect width="30" height="10" fill="#EF2B2D"/>
                         <rect y="10" width="30" height="10" fill="#009E49"/>
                         <polygon fill="#FCD116" points="15,6.7 15.74,8.98 18.14,8.98 16.2,10.39 16.94,12.67 15,11.26 13.06,12.67 13.8,10.39 11.86,8.98 14.26,8.98"/>

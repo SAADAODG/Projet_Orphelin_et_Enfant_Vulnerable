@@ -7,7 +7,7 @@
  *   php -d memory_limit=-1 scripts/perf/cout-excel.php [colonnes] [lignes...]
  */
 
-require __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;

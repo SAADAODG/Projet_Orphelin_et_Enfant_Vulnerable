@@ -78,7 +78,8 @@
         <tbody>
           @forelse ($signalements as $signalement)
             @php $url = route('admin.signalements.show', $signalement); @endphp
-            <tr class="sig-row {{ $signalement->lu_at ? '' : 'is-new' }}" onclick="window.location='{{ $url }}'">
+            {{-- Toute la ligne ouvre le signalement (souris) ; au clavier, le lien du nom --}}
+            <tr class="sig-row {{ $signalement->lu_at ? '' : 'is-new' }}" data-href="{{ $url }}">
               <td>
                 <div class="sig-enfant">
                   <span class="sig-avatar">{{ $signalement->initiales }}</span>
@@ -136,3 +137,14 @@
   </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  document.querySelectorAll('.sig-row[data-href]').forEach(function (ligne) {
+    ligne.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, form')) { return; }
+      window.location = ligne.dataset.href;
+    });
+  });
+</script>
+@endpush

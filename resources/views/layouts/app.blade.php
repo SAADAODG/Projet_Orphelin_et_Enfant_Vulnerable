@@ -35,7 +35,7 @@
         </a>
       </div>
 
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" aria-label="Menu principal">
         {{-- Chaque module n'apparaît que si le rôle de l'utilisateur y donne accès --}}
         <div class="nav-section">
           <span class="nav-section-label">Tableau de bord</span>
@@ -194,7 +194,7 @@
     </aside>
 
     <div class="admin-main">
-      <nav class="navbar admin-navbar navbar-expand bg-white">
+      <nav class="navbar admin-navbar navbar-expand bg-white" aria-label="Barre d'outils">
         <div class="container-fluid px-3 px-lg-4">
           <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-controls="adminSidebar" aria-expanded="true" aria-label="Toggle sidebar">
             <span></span>

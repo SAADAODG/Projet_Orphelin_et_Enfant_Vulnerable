@@ -14,6 +14,7 @@ use App\Listeners\JournalAudit;
 use App\Observers\AuditObserver;
 use App\Observers\EtablissementOevObserver;
 use App\Observers\ScoreBesoinObserver;
+use App\Support\Permissions;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -71,8 +72,8 @@ class AppServiceProvider extends ServiceProvider
         View::composer('layouts.app', function ($view) {
             /** @var \App\Models\User|null $utilisateur */
             $utilisateur = Auth::user();
-            $view->with('signalementsNonLus', $utilisateur?->can('voir signalements') ? Signalement::nonLus()->dansLePerimetreDe($utilisateur)->count() : 0);
-            $view->with('plaintesNonLues', $utilisateur?->can('voir plaintes') ? Plainte::nonLues()->count() : 0);
+            $view->with('signalementsNonLus', $utilisateur?->can(Permissions::VOIR_SIGNALEMENTS) ? Signalement::nonLus()->dansLePerimetreDe($utilisateur)->count() : 0);
+            $view->with('plaintesNonLues', $utilisateur?->can(Permissions::VOIR_PLAINTES) ? Plainte::nonLues()->count() : 0);
         });
 
         // Identité du site, liens rapides et services (Paramètres généraux) : partagés avec les

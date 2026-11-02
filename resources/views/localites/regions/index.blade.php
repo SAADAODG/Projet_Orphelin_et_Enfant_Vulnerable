@@ -30,7 +30,7 @@
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('localites.regions.index') }}">
         <input class="form-control form-control-sm" type="search" name="q" value="{{ $search }}" placeholder="Rechercher une région" aria-label="Rechercher une région">
-        <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-search" aria-hidden="true"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Rechercher"><i class="bi bi-search" aria-hidden="true"></i></button>
       </form>
     </div>
     <div class="table-responsive">
@@ -51,11 +51,11 @@
               <td><span class="badge text-bg-light">{{ $region->provinces_count }}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
-                  <a class="btn btn-light btn-sm" href="{{ route('localites.regions.edit', $region) }}"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                  <a class="btn btn-light btn-sm" href="{{ route('localites.regions.edit', $region) }}" aria-label="Modifier"><i class="bi bi-pencil" aria-hidden="true"></i></a>
                   <form action="{{ route('localites.regions.destroy', $region) }}" method="POST" data-confirm="Supprimer la région « {{ $region->nom }} » ?" data-confirm-danger>
                     @csrf
                     @method('DELETE')
-                    <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                    <button class="btn btn-outline-danger btn-sm" type="submit" aria-label="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>
                   </form>
                 </div>
               </td>

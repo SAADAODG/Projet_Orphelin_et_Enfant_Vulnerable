@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\AppartientALocalite;
+use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -480,8 +481,8 @@ class Oev extends Model
     {
         return match (true) {
             $utilisateur === null => null,
-            $this->attendDecisionDr() && $utilisateur->can('valider dossiers') => self::REJET_DR,
-            $this->statut_dossier === self::ETAT_VALIDE && $utilisateur->can('intégrer OEV') => self::REJET_CENTRAL,
+            $this->attendDecisionDr() && $utilisateur->can(Permissions::VALIDER_DOSSIERS) => self::REJET_DR,
+            $this->statut_dossier === self::ETAT_VALIDE && $utilisateur->can(Permissions::INTEGRER_OEV) => self::REJET_CENTRAL,
             default => null,
         };
     }
@@ -496,8 +497,8 @@ class Oev extends Model
             return false;
         }
 
-        return ($this->estModifiable() && $utilisateur->can('constituer dossiers'))
-            || ($this->statut_dossier === self::ETAT_COMPLEMENT && $utilisateur->can('valider dossiers'));
+        return ($this->estModifiable() && $utilisateur->can(Permissions::CONSTITUER_DOSSIERS))
+            || ($this->statut_dossier === self::ETAT_COMPLEMENT && $utilisateur->can(Permissions::VALIDER_DOSSIERS));
     }
 
 
@@ -605,9 +606,9 @@ class Oev extends Model
     public static function etatsVisiblesPar(User $utilisateur): ?array
     {
         return match (true) {
-            $utilisateur->supervise(), $utilisateur->can('constituer dossiers') => null,
-            $utilisateur->can('valider dossiers') => [self::ETAT_SOUMIS, self::ETAT_NON_CONFORME, self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
-            $utilisateur->can('intégrer OEV') => [self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
+            $utilisateur->supervise(), $utilisateur->can(Permissions::CONSTITUER_DOSSIERS) => null,
+            $utilisateur->can(Permissions::VALIDER_DOSSIERS) => [self::ETAT_SOUMIS, self::ETAT_NON_CONFORME, self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
+            $utilisateur->can(Permissions::INTEGRER_OEV) => [self::ETAT_VALIDE, self::ETAT_COMPLEMENT, self::ETAT_INTEGRE, self::ETAT_REJETE],
             default => [self::ETAT_INTEGRE],
         };
     }
@@ -621,8 +622,8 @@ class Oev extends Model
     {
         $etats = self::etatsVisiblesPar($utilisateur);
         $centralSeul = ! $utilisateur->supervise()
-            && ! $utilisateur->canAny(['constituer dossiers', 'valider dossiers'])
-            && $utilisateur->can('intégrer OEV');
+            && ! $utilisateur->canAny([Permissions::CONSTITUER_DOSSIERS, Permissions::VALIDER_DOSSIERS])
+            && $utilisateur->can(Permissions::INTEGRER_OEV);
 
         return $query->dansLePerimetreDe($utilisateur)
             ->when($etats !== null, fn ($q) => $q->whereIn('statut_dossier', $etats))

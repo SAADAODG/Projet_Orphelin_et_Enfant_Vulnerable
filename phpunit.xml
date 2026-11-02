@@ -12,6 +12,9 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+    <!-- Périmètre de la couverture (SonarQube : coverage.xml). Le rapport est demandé en ligne de commande
+         (- -coverage-clover coverage.xml, voir sonar-project.properties) : déclaré ici, il ferait échouer
+         tous les lancements de tests sur un poste sans PCOV ni Xdebug. -->
     <source>
         <include>
             <directory>app</directory>

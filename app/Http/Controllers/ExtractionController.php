@@ -9,6 +9,7 @@ use App\Services\Parrainage\FichiersExtraction;
 use App\Support\Montant;
 use App\Support\Perimetre;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -130,14 +131,8 @@ class ExtractionController extends Controller
         $requete = $this->requete($request, $filtres);
         $relations = ['region', 'province', 'commune', 'village', 'lieuNaissanceCommune', 'lieuProvenanceCommune'];
         $total = (clone $requete)->count();
-        // Limites mesurées (voir FichiersExtraction) : au-delà, le fichier n'est pas produit
-        if ($donnees['format'] === 'pdf' && $total > FichiersExtraction::PDF_LIGNES_MAX) {
-            return back()->with('error', Montant::nombre($total) . ' dossiers correspondent aux filtres : le PDF est limité à '
-                . Montant::nombre(FichiersExtraction::PDF_LIGNES_MAX) . ' lignes. Exportez en Excel ou affinez les filtres.');
-        }
-        if ($donnees['format'] === 'xlsx' && $total > ($max = FichiersExtraction::lignesExcelMax(count($colonnes)))) {
-            return back()->with('error', Montant::nombre($total) . ' dossiers correspondent aux filtres : avec ' . count($colonnes)
-                . ' donnée(s) cochée(s), l’export Excel est limité à ' . Montant::nombre($max) . ' lignes. Affinez les filtres ou cochez moins de données.');
+        if ($refus = $this->refusTaille($donnees['format'], $total, count($colonnes))) {
+            return back()->with('error', $refus);
         }
 
         $utilisateur = $request->user();
@@ -161,6 +156,20 @@ class ExtractionController extends Controller
         return $donnees['format'] === 'pdf'
             ? $this->fichiers->listePdf($requete->with($relations)->get(), $colonnes, $entete, $nom)
             : $this->fichiers->listeExcel(FichiersExtraction::dansLOrdre($requete, $relations), $colonnes, $entete, $nom, 'Dossiers OEV');
+    }
+
+    /** Limites mesurées (voir FichiersExtraction) : au-delà, le fichier n'est pas produit et le motif est renvoyé. */
+    private function refusTaille(string $format, int $total, int $nbColonnes): ?string
+    {
+        $max = $format === 'pdf' ? FichiersExtraction::PDF_LIGNES_MAX : FichiersExtraction::lignesExcelMax($nbColonnes);
+        if ($total <= $max) {
+            return null;
+        }
+
+        return Montant::nombre($total) . ' dossiers correspondent aux filtres : ' . match ($format) {
+            'pdf' => 'le PDF est limité à ' . Montant::nombre($max) . ' lignes. Exportez en Excel ou affinez les filtres.',
+            default => "avec {$nbColonnes} donnée(s) cochée(s), l’export Excel est limité à " . Montant::nombre($max) . ' lignes. Affinez les filtres ou cochez moins de données.',
+        };
     }
 
     /**
@@ -190,37 +199,46 @@ class ExtractionController extends Controller
     /** Filtres de la requête, limités aux valeurs connues (toute autre valeur est ignorée). */
     private function lireFiltres(Request $request): array
     {
-        $texte = fn (string $cle) => trim((string) $request->query($cle)) ?: null;
-        $entier = fn (string $cle) => is_numeric($request->query($cle)) ? max(0, (int) $request->query($cle)) : null;
-        $date = function (string $cle) use ($request) {
-            $valeur = (string) $request->query($cle);
-
-            return preg_match('/^\d{4}-\d{2}-\d{2}$/', $valeur) ? $valeur : null;
-        };
-
-        $filtres = ['q' => $texte('q')];
+        $filtres = ['q' => trim((string) $request->query('q')) ?: null];
         foreach (['region_id', 'province_id', 'commune_id'] as $cle) {
-            $filtres[$cle] = $entier($cle) ?: null;
+            $filtres[$cle] = self::entier($request, $cle) ?: null;
         }
-        foreach (self::listes() as $cle => $liste) {
-            $valeur = (string) $request->query($cle);
-            $filtres[$cle] = array_key_exists($valeur, $liste) ? $valeur : null;
+        $listes = self::listes() + ['vulnerabilite' => Oev::vulnerabilites(), 'type_handicap' => Oev::TYPES_HANDICAP];
+        foreach ($listes as $cle => $liste) {
+            $filtres[$cle] = self::valeurConnue($request, $cle, $liste);
         }
-        $vulnerabilite = (string) $request->query('vulnerabilite');
-        $filtres['vulnerabilite'] = array_key_exists($vulnerabilite, Oev::vulnerabilites()) ? $vulnerabilite : null;
-        $handicap = (string) $request->query('type_handicap');
-        $filtres['type_handicap'] = array_key_exists($handicap, Oev::TYPES_HANDICAP) ? $handicap : null;
         foreach (self::OUI_NON as $cle) {
             $filtres[$cle] = in_array($request->query($cle), ['0', '1'], true) ? $request->query($cle) : null;
         }
-        $filtres['age_min'] = $entier('age_min');
-        $filtres['age_max'] = $entier('age_max');
-        $filtres['date_champ'] = array_key_exists((string) $request->query('date_champ'), self::DATES) ? $request->query('date_champ') : 'integre_at';
-        $filtres['date_du'] = $date('date_du');
-        $filtres['date_au'] = $date('date_au');
-        $filtres['tri'] = array_key_exists((string) $request->query('tri'), self::TRIS) ? $request->query('tri') : 'recent';
+        $filtres['age_min'] = self::entier($request, 'age_min');
+        $filtres['age_max'] = self::entier($request, 'age_max');
+        $filtres['date_champ'] = self::valeurConnue($request, 'date_champ', self::DATES, 'integre_at');
+        $filtres['date_du'] = self::date($request, 'date_du');
+        $filtres['date_au'] = self::date($request, 'date_au');
+        $filtres['tri'] = self::valeurConnue($request, 'tri', self::TRIS, 'recent');
 
         return $filtres;
+    }
+
+    /** Valeur du paramètre si elle fait partie de la liste, sinon $defaut. */
+    private static function valeurConnue(Request $request, string $cle, array $liste, ?string $defaut = null): ?string
+    {
+        $valeur = (string) $request->query($cle);
+
+        return array_key_exists($valeur, $liste) ? $valeur : $defaut;
+    }
+
+    private static function entier(Request $request, string $cle): ?int
+    {
+        return is_numeric($request->query($cle)) ? max(0, (int) $request->query($cle)) : null;
+    }
+
+    /** Date au format AAAA-MM-JJ, sinon null. */
+    private static function date(Request $request, string $cle): ?string
+    {
+        $valeur = (string) $request->query($cle);
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $valeur) ? $valeur : null;
     }
 
     private function requete(Request $request, array $f): Builder
@@ -268,9 +286,9 @@ class ExtractionController extends Controller
     /** Colonnes du fichier exporté : libellé => valeur pour un dossier. */
     private function colonnesExport(): array
     {
-        $date = fn (?CarbonInterface $d) => $d?->format('d/m/Y') ?? '';
-        $ouiNon = fn ($v) => $v === null ? '' : ($v ? 'Oui' : 'Non');
-        $lib = fn (string $champ, array $liste) => fn (Oev $o) => $o->{$champ} === null ? '' : ($liste[$o->{$champ}] ?? $o->{$champ});
+        $date = self::jour(...);
+        $ouiNon = self::ouiNon(...);
+        $lib = self::libelle(...);
         $multi = fn (string $champ, array $liste) => fn (Oev $o) => implode(', ', $o->libelles($champ, $liste));
 
         return [
@@ -280,7 +298,7 @@ class ExtractionController extends Controller
             'Nom' => fn (Oev $o) => $o->nom,
             'Prénom(s)' => fn (Oev $o) => $o->prenom,
             'Sexe' => $lib('sexe', Oev::SEXES),
-            'Date de naissance' => fn (Oev $o) => $date($o->date_naissance) . ($o->date_naissance_estimee ? ' (estimée)' : ''),
+            'Date de naissance' => self::dateDeNaissance(...),
             'Âge' => fn (Oev $o) => $o->age(),
             'Lieu de naissance' => fn (Oev $o) => $o->lieuDeNaissance() ?? '',
             'Nationalité' => fn (Oev $o) => $o->nationalite ?? '',
@@ -309,21 +327,21 @@ class ExtractionController extends Controller
             'Vulnérabilités' => $multi('vulnerabilites', Oev::vulnerabilites()),
             'Handicap' => fn (Oev $o) => $ouiNon($o->handicap),
             'Type de handicap' => $multi('types_handicap', Oev::TYPES_HANDICAP),
-            'Maladie' => fn (Oev $o) => $o->maladie_chronique ? ($o->maladie_nom ?: 'Oui') : $ouiNon($o->maladie_chronique),
+            'Maladie' => self::maladie(...),
             'Source de revenu' => $lib('source_revenu', Oev::SOURCES_REVENU),
             'Niveau de revenu' => $lib('niveau_revenu', Oev::NIVEAUX),
             'Logement' => $lib('logement', Oev::LOGEMENTS),
             'Situation scolaire' => $lib('situation_scolaire', Oev::SITUATIONS_SCOLAIRES),
             'Niveau d’étude' => $lib('niveau_etude', Oev::NIVEAUX_ETUDE),
             'Classe précédente' => $lib('classe_precedente', Oev::toutesLesClasses()),
-            'Moyenne annuelle' => fn (Oev $o) => $o->moyenne_annuelle !== null ? str_replace('.', ',', (string) $o->moyenne_annuelle) . ' / ' . Oev::baremeMoyenne($o->classe_precedente) : '',
+            'Moyenne annuelle' => self::moyenne(...),
             'Appréciation' => $lib('appreciation', Oev::APPRECIATIONS),
             'Établissement actuel' => fn (Oev $o) => $o->etablissement_actuel ?? '',
             'Public / privé' => $lib('type_etablissement', Oev::TYPES_ETABLISSEMENT),
             'Classe actuelle' => $lib('classe', Oev::toutesLesClasses()),
             'Frais de scolarité (FCFA)' => fn (Oev $o) => $o->frais_scolarite ?? '',
             'Performances' => $lib('performance_scolaire', Oev::PERFORMANCES_SCOLAIRES),
-            'Formation professionnelle' => fn (Oev $o) => $o->formation_professionnelle ? ($o->formation_filiere ?: 'Oui') : $ouiNon($o->formation_professionnelle),
+            'Formation professionnelle' => self::formation(...),
             'Date d’identification' => fn (Oev $o) => $date($o->date_identification),
             'Identifié par' => $lib('identifie_par', Oev::IDENTIFIE_PAR),
             'Priorité' => $lib('niveau_priorite', Oev::NIVEAUX),
@@ -333,5 +351,48 @@ class ExtractionController extends Controller
             'Soumis au DR le' => fn (Oev $o) => $date($o->soumis_at),
             'Intégré le' => fn (Oev $o) => $date($o->integre_at),
         ];
+    }
+
+    private static function jour(?CarbonInterface $d): string
+    {
+        return $d?->format('d/m/Y') ?? '';
+    }
+
+    private static function ouiNon(mixed $v): string
+    {
+        return match (true) {
+            $v === null => '',
+            (bool) $v => 'Oui',
+            default => 'Non',
+        };
+    }
+
+    /** Colonne affichant le libellé du code enregistré dans $champ (le code lui-même s'il n'est pas dans la liste). */
+    private static function libelle(string $champ, array $liste): Closure
+    {
+        return fn (Oev $o) => $o->{$champ} === null ? '' : ($liste[$o->{$champ}] ?? $o->{$champ});
+    }
+
+    private static function dateDeNaissance(Oev $o): string
+    {
+        return self::jour($o->date_naissance) . ($o->date_naissance_estimee ? ' (estimée)' : '');
+    }
+
+    /** Nom de la maladie s'il est connu, sinon Oui / Non. */
+    private static function maladie(Oev $o): string
+    {
+        return $o->maladie_chronique && $o->maladie_nom ? $o->maladie_nom : self::ouiNon($o->maladie_chronique);
+    }
+
+    /** « 12,5 / 20 » : barème selon la classe de l'année précédente. */
+    private static function moyenne(Oev $o): string
+    {
+        return $o->moyenne_annuelle !== null ? str_replace('.', ',', (string) $o->moyenne_annuelle) . ' / ' . Oev::baremeMoyenne($o->classe_precedente) : '';
+    }
+
+    /** Filière suivie si elle est connue, sinon Oui / Non. */
+    private static function formation(Oev $o): string
+    {
+        return $o->formation_professionnelle && $o->formation_filiere ? $o->formation_filiere : self::ouiNon($o->formation_professionnelle);
     }
 }

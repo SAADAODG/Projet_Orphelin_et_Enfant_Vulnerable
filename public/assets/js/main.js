@@ -24,7 +24,8 @@
       window.localStorage.setItem(testKey, "1");
       window.localStorage.removeItem(testKey);
       return true;
-    } catch (error) {
+    } catch {
+      // Stockage refusé par le navigateur (navigation privée, cookies bloqués) : préférences non mémorisées
       return false;
     }
   }
@@ -50,11 +51,28 @@
       return savedTheme;
     }
 
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
       return "dark";
     }
 
     return "light";
+  }
+
+  function setClass(element, className, enabled) {
+    if (enabled) {
+      element.classList.add(className);
+    } else {
+      element.classList.remove(className);
+    }
+  }
+
+  // Lignes du tableau masquées quand elles ne contiennent pas le texte recherché
+  function filterRows(table, query) {
+    var rows = table.querySelectorAll("tbody tr");
+
+    Array.prototype.forEach.call(rows, function (row) {
+      row.hidden = query !== "" && !row.textContent.toLowerCase().includes(query);
+    });
   }
 
   onReady(function () {
@@ -86,7 +104,7 @@
       var searchInputs = document.querySelectorAll("[data-table-search]");
 
       Array.prototype.forEach.call(searchInputs, function (input) {
-        var tableId = input.getAttribute("data-table-search");
+        var tableId = input.dataset.tableSearch;
         var table = document.getElementById(tableId);
 
         if (!table) {
@@ -94,12 +112,7 @@
         }
 
         input.addEventListener("input", function () {
-          var query = input.value.trim().toLowerCase();
-          var rows = table.querySelectorAll("tbody tr");
-
-          Array.prototype.forEach.call(rows, function (row) {
-            row.hidden = query !== "" && row.textContent.toLowerCase().indexOf(query) === -1;
-          });
+          filterRows(table, input.value.trim().toLowerCase());
         });
       });
     }
@@ -120,8 +133,8 @@
     }
 
     function applyTheme(theme) {
-      document.documentElement.setAttribute("data-theme", theme);
-      document.documentElement.setAttribute("data-bs-theme", theme);
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.bsTheme = theme;
 
       if (storageAvailable) {
         window.localStorage.setItem(themeStorageKey, theme);
@@ -135,7 +148,7 @@
 
       Array.prototype.forEach.call(themeToggles, function (button) {
         button.addEventListener("click", function () {
-          var currentTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+          var currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
           applyTheme(currentTheme === "dark" ? "light" : "dark");
         });
       });
@@ -147,14 +160,6 @@
 
     if (!sidebarToggle) {
       return;
-    }
-
-    function setClass(element, className, enabled) {
-      if (enabled) {
-        element.classList.add(className);
-      } else {
-        element.classList.remove(className);
-      }
     }
 
     function setToggleExpanded() {
@@ -211,10 +216,14 @@
       setToggleExpanded();
     }
 
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleBreakpointChange);
-    } else if (mediaQuery.addListener) {
-      mediaQuery.addListener(handleBreakpointChange);
+    mediaQuery.addEventListener("change", handleBreakpointChange);
+  });
+
+  // Interrupteurs (case à cocher role="switch") : aria-checked suit l'état de la case
+  document.addEventListener("change", function (event) {
+    var champ = event.target;
+    if (champ.matches && champ.matches('input[type="checkbox"][role="switch"]')) {
+      champ.setAttribute("aria-checked", champ.checked ? "true" : "false");
     }
   });
 })();

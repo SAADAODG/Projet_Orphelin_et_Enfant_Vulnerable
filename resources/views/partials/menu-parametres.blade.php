@@ -12,11 +12,12 @@
   }
   $liensParametres[] = ['Natures d’appui', 'bi-gift', route('parametres.natures-appui.index'), request()->routeIs('parametres.natures-appui.*')];
 @endphp
-<a class="nav-link nav-groupe {{ $ecranParametres ? '' : 'collapsed' }}" href="#menu-parametres" data-bs-toggle="collapse" role="button" aria-expanded="{{ $ecranParametres ? 'true' : 'false' }}" aria-controls="menu-parametres">
+{{-- Vrai bouton (clavier : Entrée et Espace) qui déplie le sous-menu ; même apparence que les liens du menu --}}
+<button class="nav-link nav-groupe w-100 text-start {{ $ecranParametres ? '' : 'collapsed' }}" type="button" data-bs-toggle="collapse" data-bs-target="#menu-parametres" aria-expanded="{{ $ecranParametres ? 'true' : 'false' }}" aria-controls="menu-parametres">
   <span class="nav-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
   <span class="nav-text">Paramètres</span>
   <i class="bi bi-chevron-down nav-chevron nav-text" aria-hidden="true"></i>
-</a>
+</button>
 <div class="collapse nav-sous-menu {{ $ecranParametres ? 'show' : '' }}" id="menu-parametres">
   @foreach ($liensParametres as [$libelleLien, $iconeLien, $urlLien, $actifLien])
     <a class="nav-link {{ $actifLien ? 'active' : '' }}" href="{{ $urlLien }}" @if ($actifLien) aria-current="page" @endif title="{{ $libelleLien }}">

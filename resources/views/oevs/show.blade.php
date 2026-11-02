@@ -119,7 +119,7 @@
     <div class="oev-hero-banniere"></div>
     <div class="oev-hero-corps">
       @if ($photo)
-        <img class="oev-avatar" src="{{ route('oevs.documents.show', [$oev, $photo]) }}" alt="Photo de {{ $oev->nomComplet() }}">
+        <img class="oev-avatar" src="{{ route('oevs.documents.show', [$oev, $photo]) }}" alt="{{ $oev->nomComplet() }}">
       @else
         <span class="oev-avatar oev-avatar--{{ $oev->sexe }}" aria-hidden="true">{{ $oev->initiales() }}</span>
       @endif

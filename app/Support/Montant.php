@@ -16,7 +16,8 @@ final class Montant
         if (! is_string($valeur)) {
             return $valeur;
         }
-        $chiffres = preg_replace('/[\s.\x{00A0}\x{202F}]|fcfa/iu', '', $valeur);
+        // En mode « u », \s couvre aussi les espaces insécables (U+00A0, U+202F)
+        $chiffres = preg_replace('/[\s.]|fcfa/iu', '', $valeur);
 
         return $chiffres === '' ? null : $chiffres;
     }

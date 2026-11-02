@@ -12,8 +12,8 @@
  * journal d'audit (1 entrée par dossier), signalements (1/10) et plaintes (1/20).
  */
 
-require __DIR__ . '/_amorce.php';
-require __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
 
 $n = (int) ($argv[1] ?? 0);
 if ($n < 1) {

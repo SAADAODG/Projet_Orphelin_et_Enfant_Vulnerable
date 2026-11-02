@@ -11,6 +11,7 @@ use App\Models\Parrain;
 use App\Models\User;
 use App\Services\Parrainage\ParrainageService;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -80,7 +81,7 @@ class AppuiPartenaireController extends Controller
             'natures' => NatureAppui::actives()->get(),
             'parrains' => Parrain::orderBy('nom')->pluck('nom', 'id'),
             // Fenêtre « Nouvel appui » (?oev=… : OEV déjà choisi, ex. depuis sa fiche)
-            'formulaire' => $request->user()->can('enregistrer appuis') ? $this->donneesFormulaire($this->nouvelAppui($request)) : null,
+            'formulaire' => $request->user()->can(Permissions::ENREGISTRER_APPUIS) ? $this->donneesFormulaire($this->nouvelAppui($request)) : null,
         ]);
     }
 
@@ -412,16 +413,20 @@ class AppuiPartenaireController extends Controller
     /** Date d'une cellule Excel : nombre de série Excel ou texte jj/mm/aaaa ; invalide → renvoyée telle quelle (rejetée). */
     private static function dateExcel(mixed $valeur): mixed
     {
-        if ($valeur === null || $valeur === '') {
-            return null;
-        }
-        if (is_numeric($valeur)) {
-            return Carbon::instance(DateExcel::excelToDateTimeObject((float) $valeur))->toDateString();
-        }
+        return match (true) {
+            $valeur === null || $valeur === '' => null,
+            is_numeric($valeur) => Carbon::instance(DateExcel::excelToDateTimeObject((float) $valeur))->toDateString(),
+            default => self::dateDepuisTexte((string) $valeur) ?? $valeur,
+        };
+    }
+
+    /** Texte jj/mm/aaaa → AAAA-MM-JJ ; null s'il n'est pas une date lisible. */
+    private static function dateDepuisTexte(string $texte): ?string
+    {
         try {
-            return Carbon::createFromFormat('!d/m/Y', (string) $valeur)->toDateString();
+            return Carbon::createFromFormat('!d/m/Y', $texte)->toDateString();
         } catch (\Throwable) {
-            return $valeur;
+            return null;
         }
     }
 }

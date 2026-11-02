@@ -76,17 +76,20 @@ class FicheApresSuivi
         $etaitScolarise = ($avant['situation_scolaire'] ?? null) === 'scolarise' && ($avant['classe'] ?? null) !== null;
 
         // L'année suivie devient « l'année précédente » de la fiche
-        $anneePrecedente = $etaitScolarise ? [
-            'etablissement_precedent' => $avant['etablissement_actuel'] ?? $avant['etablissement_precedent'] ?? null,
-            'ecole_precedente_id' => isset($avant['etablissement_actuel']) ? ($avant['ecole_id'] ?? null) : ($avant['ecole_precedente_id'] ?? null),
-            'classe_precedente' => $avant['classe'],
-            'moyenne_annuelle' => $suivi->moyenne,
-            'appreciation' => match ($suivi->resultat) {
-                'admis' => 'admis',
-                'redouble' => 'redouble',
-                default => null,
-            },
-        ] : [];
+        $anneePrecedente = [];
+        if ($etaitScolarise) {
+            $anneePrecedente = [
+                'etablissement_precedent' => $avant['etablissement_actuel'] ?? $avant['etablissement_precedent'] ?? null,
+                'ecole_precedente_id' => isset($avant['etablissement_actuel']) ? ($avant['ecole_id'] ?? null) : ($avant['ecole_precedente_id'] ?? null),
+                'classe_precedente' => $avant['classe'],
+                'moyenne_annuelle' => $suivi->moyenne,
+                'appreciation' => match ($suivi->resultat) {
+                    'admis' => 'admis',
+                    'redouble' => 'redouble',
+                    default => null,
+                },
+            ];
+        }
 
         $details = $suivi->details_prochaine_annee ?? [];
 

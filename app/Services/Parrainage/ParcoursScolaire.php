@@ -5,6 +5,7 @@ namespace App\Services\Parrainage;
 use App\Models\Oev;
 use App\Models\SuiviParrainage;
 use App\Support\Montant;
+use Illuminate\Support\Collection;
 
 /**
  * Parcours scolaire et professionnel d'un OEV, année par année, sans rien perdre :
@@ -22,45 +23,76 @@ class ParcoursScolaire
     public function pour(Oev $oev): array
     {
         $suivis = SuiviParrainage::with('beneficiaire.session')->where('oev_id', $oev->id)->orderBy('annee')->orderBy('id')->get();
+
         $etapes = [];
-
-        // Année précédant le premier parrainage (ou l'année précédente de la fiche, sans parrainage)
-        $origine = $suivis->first()?->fiche_avant ?? FicheApresSuivi::photographier($oev);
-        if (filled($origine['classe_precedente'] ?? null) || filled($origine['etablissement_precedent'] ?? null)) {
-            $etapes[] = $this->etape(
-                $suivis->isNotEmpty() ? self::anneePrecedente($suivis->first()->annee) : 'Année précédente',
-                'precedente',
-                Oev::toutesLesClasses()[$origine['classe_precedente'] ?? ''] ?? 'Scolarisé',
-                $origine['etablissement_precedent'] ?? null,
-                null,
-                Oev::APPRECIATIONS[$origine['appreciation'] ?? ''] ?? null,
-                match ($origine['appreciation'] ?? null) { 'admis' => 'success', 'redouble' => 'warning', 'exclu' => 'danger', default => null },
-                self::moyenne($origine['moyenne_annuelle'] ?? null, $origine['classe_precedente'] ?? null),
-            );
+        if ($origine = $this->etapeOrigine($oev, $suivis)) {
+            $etapes[] = $origine;
         }
-
-        // Chaque année parrainée : la situation d'alors et le résultat du suivi
         foreach ($suivis as $suivi) {
-            $etat = $suivi->fiche_avant ?? [];
-            [$situation, $detail, $frais] = $this->situation($etat);
-            $session = $suivi->beneficiaire?->session;
-            $etapes[] = $this->etape($suivi->annee, 'parrainee', $situation, $detail, $frais, $suivi->libelleResultat(), $suivi->couleur(),
-                self::moyenne($suivi->moyenne, $etat['classe'] ?? null),
-                'Parrainé' . ($session ? " · session n°{$session->numero}" : '') . ($suivi->beneficiaire ? ' · ' . Montant::fcfa($suivi->beneficiaire->montant_retenu) : ''),
-                trim(implode(' · ', array_filter([
-                    $suivi->libelleProchaineAnnee() ? 'Ensuite : ' . $suivi->libelleProchaineAnnee() : null,
-                    $suivi->insertion ? SuiviParrainage::INSERTIONS[$suivi->insertion] : null,
-                    $suivi->a_reconduire ? 'Recommandé pour un nouveau parrainage' : 'Non recommandé pour un nouveau parrainage',
-                ]))) ?: null,
-                $suivi->observation,
-            );
+            $etapes[] = $this->etapeParrainee($suivi);
         }
-
-        // Année en cours : la fiche actuelle
-        [$situation, $detail, $frais] = $this->situation(FicheApresSuivi::photographier($oev));
-        $etapes[] = $this->etape($suivis->isNotEmpty() ? self::anneeSuivante($suivis->last()->annee) : 'Année en cours', 'actuelle', $situation, $detail, $frais);
+        $etapes[] = $this->etapeActuelle($oev, $suivis);
 
         return $etapes;
+    }
+
+    /** Année précédant le premier parrainage (ou l'année précédente de la fiche, sans parrainage) ; null si elle n'est pas renseignée. */
+    private function etapeOrigine(Oev $oev, Collection $suivis): ?array
+    {
+        $origine = $suivis->first()?->fiche_avant ?? FicheApresSuivi::photographier($oev);
+        if (blank($origine['classe_precedente'] ?? null) && blank($origine['etablissement_precedent'] ?? null)) {
+            return null;
+        }
+
+        return $this->etape([
+            'annee' => $suivis->isNotEmpty() ? self::anneePrecedente($suivis->first()->annee) : 'Année précédente',
+            'periode' => 'precedente',
+            'situation' => Oev::toutesLesClasses()[$origine['classe_precedente'] ?? ''] ?? 'Scolarisé',
+            'detail' => $origine['etablissement_precedent'] ?? null,
+            'resultat' => Oev::APPRECIATIONS[$origine['appreciation'] ?? ''] ?? null,
+            'couleur' => match ($origine['appreciation'] ?? null) { 'admis' => 'success', 'redouble' => 'warning', 'exclu' => 'danger', default => null },
+            'moyenne' => self::moyenne($origine['moyenne_annuelle'] ?? null, $origine['classe_precedente'] ?? null),
+        ]);
+    }
+
+    /** Une année parrainée : la situation d'alors et le résultat du suivi. */
+    private function etapeParrainee(SuiviParrainage $suivi): array
+    {
+        $etat = $suivi->fiche_avant ?? [];
+        [$situation, $detail, $frais] = $this->situation($etat);
+        $session = $suivi->beneficiaire?->session;
+
+        return $this->etape([
+            'annee' => $suivi->annee,
+            'periode' => 'parrainee',
+            'situation' => $situation,
+            'detail' => $detail,
+            'frais' => $frais,
+            'resultat' => $suivi->libelleResultat(),
+            'couleur' => $suivi->couleur(),
+            'moyenne' => self::moyenne($suivi->moyenne, $etat['classe'] ?? null),
+            'parrainage' => 'Parrainé' . ($session ? " · session n°{$session->numero}" : '') . ($suivi->beneficiaire ? ' · ' . Montant::fcfa($suivi->beneficiaire->montant_retenu) : ''),
+            'suite' => self::joindre([
+                $suivi->libelleProchaineAnnee() ? 'Ensuite : ' . $suivi->libelleProchaineAnnee() : null,
+                $suivi->insertion ? SuiviParrainage::INSERTIONS[$suivi->insertion] : null,
+                $suivi->a_reconduire ? 'Recommandé pour un nouveau parrainage' : 'Non recommandé pour un nouveau parrainage',
+            ]),
+            'observation' => $suivi->observation,
+        ]);
+    }
+
+    /** Année en cours : la fiche actuelle. */
+    private function etapeActuelle(Oev $oev, Collection $suivis): array
+    {
+        [$situation, $detail, $frais] = $this->situation(FicheApresSuivi::photographier($oev));
+
+        return $this->etape([
+            'annee' => $suivis->isNotEmpty() ? self::anneeSuivante($suivis->last()->annee) : 'Année en cours',
+            'periode' => 'actuelle',
+            'situation' => $situation,
+            'detail' => $detail,
+            'frais' => $frais,
+        ]);
     }
 
     /** @return array{0: string, 1: ?string, 2: ?string} situation, établissement ou centre, frais */
@@ -72,15 +104,15 @@ class ParcoursScolaire
         return match (true) {
             ($etat['situation_scolaire'] ?? null) === 'scolarise' => [
                 Oev::toutesLesClasses()[$etat['classe'] ?? ''] ?? 'Scolarisé',
-                trim(implode(' · ', array_filter([$etat['etablissement_actuel'] ?? null, $type($etat['type_etablissement'] ?? null)]))) ?: null,
+                self::joindre([$etat['etablissement_actuel'] ?? null, $type($etat['type_etablissement'] ?? null)]),
                 isset($etat['frais_scolarite']) ? 'Scolarité : ' . Montant::fcfa((int) $etat['frais_scolarite']) : null,
             ],
             $enFormation && ($etat['formation_etat'] ?? null) === 'en_cours' => [
                 'Formation professionnelle' . (filled($etat['formation_filiere'] ?? null) ? ' : ' . $etat['formation_filiere'] : ''),
-                trim(implode(' · ', array_filter([
+                self::joindre([
                     $type($etat['formation_type_centre'] ?? null) ? 'Centre ' . mb_strtolower($type($etat['formation_type_centre'])) : null,
                     filled($etat['formation_duree_mois'] ?? null) ? $etat['formation_duree_mois'] . ' mois' : null,
-                ]))) ?: null,
+                ]),
                 isset($etat['frais_formation']) ? 'Formation : ' . Montant::fcfa((int) $etat['frais_formation']) : null,
             ],
             $enFormation && ($etat['formation_etat'] ?? null) === 'achevee' => [
@@ -96,10 +128,22 @@ class ParcoursScolaire
         };
     }
 
-    private function etape(string $annee, string $periode, string $situation, ?string $detail = null, ?string $frais = null, ?string $resultat = null,
-        ?string $couleur = null, ?string $moyenne = null, ?string $parrainage = null, ?string $suite = null, ?string $observation = null): array
+    /** Champs d'une étape du parcours (voir pour()) : ceux qui ne sont pas fournis valent null. */
+    private const ETAPE = [
+        'annee' => null, 'periode' => null, 'situation' => null, 'detail' => null, 'frais' => null, 'resultat' => null,
+        'couleur' => null, 'moyenne' => null, 'parrainage' => null, 'suite' => null, 'observation' => null,
+    ];
+
+    /** @param  array<string, ?string>  $valeurs  annee, periode et situation au moins */
+    private function etape(array $valeurs): array
     {
-        return compact('annee', 'periode', 'situation', 'detail', 'frais', 'resultat', 'couleur', 'moyenne', 'parrainage', 'suite', 'observation');
+        return array_merge(self::ETAPE, $valeurs);
+    }
+
+    /** Parties renseignées séparées par « · », null si aucune. */
+    private static function joindre(array $parties): ?string
+    {
+        return trim(implode(' · ', array_filter($parties))) ?: null;
     }
 
     /** « 12.50 » en 5e → « 12,5/20 ». */

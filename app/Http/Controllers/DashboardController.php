@@ -8,6 +8,7 @@ use App\Models\Region;
 use App\Models\Signalement;
 use App\Models\User;
 use App\Support\Perimetre;
+use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -31,7 +32,7 @@ class DashboardController extends Controller
     {
         $utilisateur = $this->utilisateur = $request->user();
         $perimetre = Perimetre::pour($utilisateur, $request);
-        $voitSignalements = $utilisateur->can('voir signalements');
+        $voitSignalements = $utilisateur->can(Permissions::VOIR_SIGNALEMENTS);
 
         $etats = $this->compter($this->oevs($perimetre), 'statut_dossier');
         // Seules les étapes du circuit où l'utilisateur intervient sont affichées
@@ -50,7 +51,7 @@ class DashboardController extends Controller
             // null : module non accessible à l'utilisateur, le panneau n'est pas affiché
             'signalements' => $voitSignalements ? $this->compter($perimetre->appliquer(Signalement::query()), 'statut') : null,
             'signalementsNonLus' => $voitSignalements ? $perimetre->appliquer(Signalement::nonLus())->count() : 0,
-            'plaintes' => $utilisateur->can('voir plaintes') ? $this->compter($perimetre->appliquer(Plainte::query()), 'statut') : null,
+            'plaintes' => $utilisateur->can(Permissions::VOIR_PLAINTES) ? $this->compter($perimetre->appliquer(Plainte::query()), 'statut') : null,
             'repartition' => $this->repartition($perimetre, $voitSignalements),
             'evolution' => $this->evolution($perimetre, $voitSignalements),
             'aTraiter' => $this->aTraiter($utilisateur, $perimetre),
@@ -81,33 +82,33 @@ class DashboardController extends Controller
         return match ($niveau) {
             User::NIVEAU_PROVINCE => [
                 ['libelle' => 'En constitution', 'valeur' => $n(Oev::ETAT_BROUILLON), 'icone' => 'bi-folder2-open', 'couleur' => 'primary',
-                    'aide' => 'dossiers à compléter', 'route' => ['oevs.index', ['etat' => Oev::ETAT_BROUILLON]], 'permission' => 'constituer dossiers'],
+                    'aide' => 'dossiers à compléter', 'route' => ['oevs.index', ['etat' => Oev::ETAT_BROUILLON]], 'permission' => Permissions::CONSTITUER_DOSSIERS],
                 ['libelle' => 'Prêts à soumettre', 'valeur' => $this->oevs($perimetre)->etat(Oev::ETAT_BROUILLON)->dossierComplet()->count(), 'icone' => 'bi-send-check', 'couleur' => 'success',
-                    'aide' => 'complets, à soumettre au DR', 'route' => ['oevs.index', ['etat' => Oev::ETAT_BROUILLON]], 'permission' => 'constituer dossiers'],
+                    'aide' => 'complets, à soumettre au DR', 'route' => ['oevs.index', ['etat' => Oev::ETAT_BROUILLON]], 'permission' => Permissions::CONSTITUER_DOSSIERS],
                 ['libelle' => 'Non conformes', 'valeur' => $n(Oev::ETAT_NON_CONFORME), 'icone' => 'bi-exclamation-octagon', 'couleur' => 'danger',
-                    'aide' => 'renvoyés par le DR, à corriger', 'route' => ['oevs.index', ['etat' => Oev::ETAT_NON_CONFORME]], 'permission' => 'constituer dossiers'],
+                    'aide' => 'renvoyés par le DR, à corriger', 'route' => ['oevs.index', ['etat' => Oev::ETAT_NON_CONFORME]], 'permission' => Permissions::CONSTITUER_DOSSIERS],
                 ['libelle' => 'Chez le DR', 'valeur' => $n(Oev::ETAT_SOUMIS, Oev::ETAT_COMPLEMENT), 'icone' => 'bi-hourglass-split', 'couleur' => 'warning',
-                    'aide' => 'en cours de vérification', 'route' => ['oevs.index', ['etat' => Oev::ETAT_SOUMIS]], 'permission' => 'constituer dossiers'],
+                    'aide' => 'en cours de vérification', 'route' => ['oevs.index', ['etat' => Oev::ETAT_SOUMIS]], 'permission' => Permissions::CONSTITUER_DOSSIERS],
             ],
             User::NIVEAU_REGION => [
                 ['libelle' => 'À vérifier', 'valeur' => $n(Oev::ETAT_SOUMIS), 'icone' => 'bi-clipboard-check', 'couleur' => 'warning',
-                    'aide' => 'soumis par les DP', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_SOUMIS]], 'permission' => 'valider dossiers'],
+                    'aide' => 'soumis par les DP', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_SOUMIS]], 'permission' => Permissions::VALIDER_DOSSIERS],
                 ['libelle' => 'Compléments demandés', 'valeur' => $n(Oev::ETAT_COMPLEMENT), 'icone' => 'bi-arrow-return-left', 'couleur' => 'danger',
-                    'aide' => 'renvoyés par le niveau central', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_COMPLEMENT]], 'permission' => 'valider dossiers'],
+                    'aide' => 'renvoyés par le niveau central', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_COMPLEMENT]], 'permission' => Permissions::VALIDER_DOSSIERS],
                 ['libelle' => 'Validés', 'valeur' => $n(Oev::ETAT_VALIDE), 'icone' => 'bi-patch-check', 'couleur' => 'primary',
-                    'aide' => 'transmis au niveau central', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_VALIDE]], 'permission' => 'valider dossiers'],
+                    'aide' => 'transmis au niveau central', 'route' => ['oevs.validation', ['etat' => Oev::ETAT_VALIDE]], 'permission' => Permissions::VALIDER_DOSSIERS],
                 ['libelle' => 'Chez les DP', 'valeur' => $perimetre->appliquer(Oev::etat(Oev::ETAT_BROUILLON, Oev::ETAT_NON_CONFORME))->count(), 'icone' => 'bi-folder2-open', 'couleur' => 'success',
                     'aide' => 'en constitution ou en correction', 'route' => null, 'permission' => null],
             ],
             default => [
                 ['libelle' => 'À intégrer', 'valeur' => $n(Oev::ETAT_VALIDE), 'icone' => 'bi-person-check', 'couleur' => 'warning',
-                    'aide' => 'dossiers validés par les DR', 'route' => ['oevs.integration', ['etat' => Oev::ETAT_VALIDE]], 'permission' => 'intégrer OEV'],
+                    'aide' => 'dossiers validés par les DR', 'route' => ['oevs.integration', ['etat' => Oev::ETAT_VALIDE]], 'permission' => Permissions::INTEGRER_OEV],
                 ['libelle' => 'Compléments en attente', 'valeur' => $n(Oev::ETAT_COMPLEMENT), 'icone' => 'bi-arrow-return-left', 'couleur' => 'primary',
-                    'aide' => 'renvoyés aux DR', 'route' => ['oevs.integration', ['etat' => Oev::ETAT_COMPLEMENT]], 'permission' => 'intégrer OEV'],
+                    'aide' => 'renvoyés aux DR', 'route' => ['oevs.integration', ['etat' => Oev::ETAT_COMPLEMENT]], 'permission' => Permissions::INTEGRER_OEV],
                 ['libelle' => 'OEV intégrés', 'valeur' => $n(Oev::ETAT_INTEGRE), 'icone' => 'bi-people', 'couleur' => 'success',
-                    'aide' => 'enfants pris en charge', 'route' => ['oevs.liste', []], 'permission' => 'voir OEV'],
+                    'aide' => 'enfants pris en charge', 'route' => ['oevs.liste', []], 'permission' => Permissions::VOIR_OEV],
                 ['libelle' => 'Nouvelles plaintes', 'valeur' => $perimetre->appliquer(Plainte::where('statut', Plainte::NOUVELLE))->count(), 'icone' => 'bi-chat-text', 'couleur' => 'danger',
-                    'aide' => 'plaintes et avis à examiner', 'route' => ['admin.plaintes.index', ['statut' => Plainte::NOUVELLE]], 'permission' => 'voir plaintes'],
+                    'aide' => 'plaintes et avis à examiner', 'route' => ['admin.plaintes.index', ['statut' => Plainte::NOUVELLE]], 'permission' => Permissions::VOIR_PLAINTES],
             ],
         };
     }

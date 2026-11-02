@@ -7,7 +7,7 @@
  *   php scripts/perf/expliquer.php <url> [email] [N]
  */
 
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $url = $argv[1] ?? '/admin/dashboard';
 $email = $argv[2] ?? 'agent@oev.gov.bf';

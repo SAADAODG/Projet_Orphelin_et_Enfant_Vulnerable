@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permissions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -177,7 +178,7 @@ class SessionParrainage extends Model
      */
     public function peutEtreSupprimeePar(User $utilisateur): bool
     {
-        return $utilisateur->can('gérer sessions parrainage')
+        return $utilisateur->can(Permissions::GERER_SESSIONS_PARRAINAGE)
             && (in_array($this->etat, [self::ETAT_EN_COURS, self::ETAT_VALIDEE], true) || $utilisateur->supervise());
     }
 

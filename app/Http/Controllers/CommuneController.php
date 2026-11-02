@@ -95,19 +95,15 @@ class CommuneController extends Controller
      */
     public function destroy(Commune $commune): RedirectResponse
     {
-        if ($commune->estUtiliseeParDesDossiers()) {
+        $motif = match (true) {
+            $commune->estUtiliseeParDesDossiers() => 'elle est utilisée par des signalements, plaintes ou OEV.',
+            $commune->aDesVillages() => 'des villages y sont rattachés.',
+            $commune->aDesEcoles() => 'des écoles y sont rattachées (Paramètres > Écoles).',
+            default => null,
+        };
+        if ($motif !== null) {
             return redirect()->route('localites.communes.index')
-                ->with('error', "Impossible de supprimer « {$commune->nom} » : elle est utilisée par des signalements, plaintes ou OEV.");
-        }
-
-        if ($commune->aDesVillages()) {
-            return redirect()->route('localites.communes.index')
-                ->with('error', "Impossible de supprimer « {$commune->nom} » : des villages y sont rattachés.");
-        }
-
-        if ($commune->aDesEcoles()) {
-            return redirect()->route('localites.communes.index')
-                ->with('error', "Impossible de supprimer « {$commune->nom} » : des écoles y sont rattachées (Paramètres > Écoles).");
+                ->with('error', "Impossible de supprimer « {$commune->nom} » : {$motif}");
         }
 
         $commune->delete();

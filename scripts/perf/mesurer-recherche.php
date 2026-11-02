@@ -7,7 +7,7 @@
  *   php scripts/perf/mesurer-recherche.php
  */
 
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $pdo = perf_pdo();
 $session = (int) $pdo->query("select max(id) from sessions_parrainage where etat = 'en_cours'")->fetchColumn();

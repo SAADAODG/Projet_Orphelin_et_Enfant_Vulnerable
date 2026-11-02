@@ -65,7 +65,9 @@
               </div>
             </div>
 
-            <label class="form-label mt-4 d-block mb-1">Quelle est la situation de l'enfant ?</label>
+            {{-- Groupe de cases : titre en légende (fieldset sans bordure, légende sans flottant : même rendu) --}}
+            <fieldset class="m-0 p-0 border-0">
+            <legend class="form-label mt-4 d-block mb-1 float-none">Quelle est la situation de l'enfant ?</legend>
             <p class="form-text mt-0 mb-2">Cochez tout ce qui s'applique : un enfant peut être dans plusieurs situations.</p>
             <div class="choice-grid choice-grid-situations">
               @php $situationsChoisies = (array) old('vulnerabilites', []); @endphp
@@ -80,6 +82,7 @@
                 </label>
               @endforeach
             </div>
+            </fieldset>
             @error('vulnerabilites')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
 
             <div id="vulnerabilitePrecision" class="mt-3 {{ in_array('autre', (array) old('vulnerabilites', []), true) ? '' : 'd-none' }}">
@@ -148,7 +151,8 @@
               </div>
             </div>
 
-            <label class="form-label mt-4 d-block">Quel est votre lien avec l'enfant ?</label>
+            <fieldset class="m-0 p-0 border-0">
+            <legend class="form-label mt-4 d-block float-none">Quel est votre lien avec l'enfant ?</legend>
             <div class="choice-chips">
               @foreach ($liens as $valeur => $libelle)
                 <label class="choice-chip">
@@ -157,6 +161,7 @@
                 </label>
               @endforeach
             </div>
+            </fieldset>
             @error('declarant_lien')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
 
             <div id="lienPrecision" class="mt-3 {{ old('declarant_lien') === 'autre' ? '' : 'd-none' }}">

@@ -10,6 +10,7 @@ use App\Models\SessionParrainage;
 use App\Models\SuiviParrainage;
 use App\Services\Parrainage\FicheApresSuivi;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,7 +80,7 @@ class SuiviParrainageController extends Controller
             'annees' => $annees,
             'sessions' => SessionParrainage::where('annee', $filtres['annee'])->where('etat', '!=', SessionParrainage::ETAT_EN_COURS)->orderBy('numero')->get(),
             'compteurs' => $compteurs,
-            'peutRenseigner' => $request->user()->can('suivre parrainages'),
+            'peutRenseigner' => $request->user()->can(Permissions::SUIVRE_PARRAINAGES),
         ]);
     }
 
@@ -89,86 +90,19 @@ class SuiviParrainageController extends Controller
         abort_unless($ligne->statut === BeneficiaireSession::RETENU && $ligne->session->etat !== SessionParrainage::ETAT_EN_COURS, 404);
         $this->verifierZone($ligne, 'oev');
 
-        $formation = $ligne->type_appui === SessionParrainage::TYPE_FORMATION;
         $existant = $ligne->suivi()->first();
-        // Classe de l'année suivie : celle de la fiche avant le premier enregistrement du suivi
-        $classeSuivie = FicheApresSuivi::classeSuivie($ligne->oev, $existant);
-        $bareme = Oev::baremeMoyenne($classeSuivie);
         $request->merge([
             'moyenne' => str_replace(',', '.', (string) $request->input('moyenne')) ?: null,
             'prochains_frais' => Montant::normaliserSaisie($request->input('prochains_frais')),
             'prochains_frais_formation' => Montant::normaliserSaisie($request->input('prochains_frais_formation')),
         ]);
-        $orientation = $request->input('orientation');
-        $resultat = (string) $request->input('resultat');
-        // Les frais de l'année prochaine sont demandés dès que l'OEV continue (école ou formation)
-        $versEcole = ! $formation && $orientation === SuiviParrainage::ECOLE;
-        $versFormation = ! $formation && $orientation === SuiviParrainage::FORMATION;
-        $poursuitFormation = $formation && $resultat === 'poursuit';
-        // Classe de l'an prochain calculée ; saisie seulement si la classe suivie est inconnue
-        $classeCalculee = $formation ? null : SuiviParrainage::classeSuivante($classeSuivie, (string) $request->input('resultat'));
+        $c = $this->contexteSuivi($request, $ligne, $existant);
+        $formation = $c['formation'];
 
-        $donnees = $request->validate([
-            'resultat' => ['required', Rule::in(array_keys(SuiviParrainage::resultatsPour($ligne->type_appui)))],
-            'moyenne' => $formation ? ['prohibited'] : ['nullable', 'numeric', 'min:0', "max:{$bareme}"],
-            'insertion' => ['nullable', Rule::requiredIf($formation && $request->input('resultat') === 'achevee'), Rule::in(array_keys(SuiviParrainage::INSERTIONS))],
-            // L'année prochaine (appui scolaire) : continuer l'école, partir en formation professionnelle ou arrêter
-            'orientation' => $formation ? ['prohibited'] : ['required', Rule::in(array_keys(SuiviParrainage::ORIENTATIONS))],
-            'prochaine_filiere' => ['nullable', Rule::requiredIf(! $formation && $orientation === SuiviParrainage::FORMATION), 'string', 'max:150'],
-            'prochaine_classe' => ['nullable', Rule::requiredIf(! $formation && $orientation === SuiviParrainage::ECOLE && $classeCalculee === null), Rule::in(array_keys(Oev::toutesLesClasses()))],
-            // Frais et détails de l'année prochaine
-            'prochains_frais' => ['nullable', Rule::requiredIf($versEcole || $poursuitFormation), 'integer', 'min:0'],
-            'prochains_frais_formation' => ['nullable', Rule::requiredIf($versFormation), 'integer', 'min:0'],
-            'prochain_etablissement' => ['nullable', 'string', 'max:255'],
-            'prochain_type_etablissement' => ['nullable', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
-            'prochain_type_centre' => ['nullable', Rule::requiredIf($versFormation), Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
-            'prochaine_duree' => ['nullable', Rule::requiredIf($versFormation), 'integer', 'min:1', 'max:120'],
-            'a_reconduire' => ['required', 'boolean'],
-            'observation' => ['nullable', 'string', 'max:1000'],
-        ], [
-            'prochains_frais.required' => $versEcole ? 'Indiquez les frais de scolarité de l’année prochaine (0 si l’école est gratuite).' : 'Indiquez les frais de la formation pour l’année prochaine (0 si elle est gratuite).',
-            'prochains_frais.integer' => 'Les frais doivent être un montant entier en FCFA.',
-            'prochains_frais_formation.required' => 'Indiquez les frais de la formation choisie (0 si elle est gratuite).',
-            'prochains_frais_formation.integer' => 'Les frais doivent être un montant entier en FCFA.',
-            'prochain_type_centre.required' => 'Indiquez si le centre de formation est public ou privé.',
-            'prochaine_duree.required' => 'Indiquez la durée de la formation (en mois).',
-            'resultat.required' => 'Indiquez le résultat de l’année.',
-            'moyenne.max' => "La moyenne est notée sur {$bareme}.",
-            'moyenne.numeric' => 'La moyenne doit être un nombre (ex : 12,5).',
-            'insertion.required' => 'Indiquez la situation de l’OEV après sa formation.',
-            'orientation.required' => 'Indiquez ce que fera l’OEV l’année prochaine (école, formation professionnelle ou arrêt).',
-            'prochaine_filiere.required' => 'Indiquez la formation professionnelle choisie (ex : Couture).',
-            'prochaine_classe.required' => 'La classe actuelle n’est pas connue : indiquez la classe de l’année prochaine.',
-            'a_reconduire.required' => 'Indiquez si l’OEV est recommandé pour un nouveau parrainage.',
-        ]);
+        $donnees = $request->validate($this->reglesSuivi($request, $ligne, $c), $this->messagesSuivi($c));
 
-        // L'année prochaine, cohérente avec le résultat et l'orientation
-        if ($formation) {
-            $orientation = SuiviParrainage::orientationFormation($donnees['resultat']);
-            $prochaine = $orientation === SuiviParrainage::FORMATION ? ($existant?->fiche_avant['formation_filiere'] ?? $ligne->oev->formation_filiere) : null;
-        } else {
-            $prochaine = match ($orientation) {
-                SuiviParrainage::ECOLE => $classeCalculee ?? $donnees['prochaine_classe'],
-                SuiviParrainage::FORMATION => trim($donnees['prochaine_filiere']),
-                default => null,
-            };
-        }
-
-        $frais = isset($donnees['prochains_frais']) ? (int) $donnees['prochains_frais'] : null;
-        $details = match (true) {
-            $versEcole => [
-                'frais' => $frais,
-                'etablissement' => trim((string) ($donnees['prochain_etablissement'] ?? '')) ?: null,
-                'type_etablissement' => $donnees['prochain_type_etablissement'] ?? null,
-            ],
-            $versFormation => [
-                'frais' => (int) $donnees['prochains_frais_formation'],
-                'type_centre' => $donnees['prochain_type_centre'],
-                'duree_mois' => (int) $donnees['prochaine_duree'],
-            ],
-            $poursuitFormation => ['frais' => $frais],
-            default => null,
-        };
+        [$orientation, $prochaine] = $this->anneeProchaine($donnees, $c, $ligne, $existant);
+        $details = $this->detailsAnneeProchaine($donnees, $c);
 
         // Suivi et fiche de l'OEV enregistrés ensemble (jamais l'un sans l'autre)
         [$suivi, $miseAJour] = DB::transaction(function () use ($ligne, $donnees, $formation, $orientation, $prochaine, $details, $existant, $request) {
@@ -201,5 +135,112 @@ class SuiviParrainageController extends Controller
 
         return back()->with('success', "Suivi de {$ligne->oev->nomComplet()} enregistré."
             . ($miseAJour ? " Fiche de l’OEV mise à jour : {$miseAJour}." : ' Un suivi plus récent existe : la fiche de l’OEV n’est pas modifiée.'));
+    }
+
+    /** Conditions du formulaire de suivi, selon le type d'appui et les réponses. */
+    private function contexteSuivi(Request $request, BeneficiaireSession $ligne, ?SuiviParrainage $existant): array
+    {
+        $formation = $ligne->type_appui === SessionParrainage::TYPE_FORMATION;
+        $orientation = $request->input('orientation');
+        $resultat = (string) $request->input('resultat');
+        // Classe de l'année suivie : celle de la fiche avant le premier enregistrement du suivi
+        $classeSuivie = FicheApresSuivi::classeSuivie($ligne->oev, $existant);
+
+        return [
+            'formation' => $formation,
+            'orientation' => $orientation,
+            'bareme' => Oev::baremeMoyenne($classeSuivie),
+            // Les frais de l'année prochaine sont demandés dès que l'OEV continue (école ou formation)
+            'versEcole' => ! $formation && $orientation === SuiviParrainage::ECOLE,
+            'versFormation' => ! $formation && $orientation === SuiviParrainage::FORMATION,
+            'poursuitFormation' => $formation && $resultat === 'poursuit',
+            // Classe de l'an prochain calculée ; saisie seulement si la classe suivie est inconnue
+            'classeCalculee' => $formation ? null : SuiviParrainage::classeSuivante($classeSuivie, $resultat),
+        ];
+    }
+
+    private function reglesSuivi(Request $request, BeneficiaireSession $ligne, array $c): array
+    {
+        $formation = $c['formation'];
+
+        return [
+            'resultat' => ['required', Rule::in(array_keys(SuiviParrainage::resultatsPour($ligne->type_appui)))],
+            'moyenne' => $formation ? ['prohibited'] : ['nullable', 'numeric', 'min:0', "max:{$c['bareme']}"],
+            'insertion' => ['nullable', Rule::requiredIf($formation && $request->input('resultat') === 'achevee'), Rule::in(array_keys(SuiviParrainage::INSERTIONS))],
+            // L'année prochaine (appui scolaire) : continuer l'école, partir en formation professionnelle ou arrêter
+            'orientation' => $formation ? ['prohibited'] : ['required', Rule::in(array_keys(SuiviParrainage::ORIENTATIONS))],
+            'prochaine_filiere' => ['nullable', Rule::requiredIf($c['versFormation']), 'string', 'max:150'],
+            'prochaine_classe' => ['nullable', Rule::requiredIf($c['versEcole'] && $c['classeCalculee'] === null), Rule::in(array_keys(Oev::toutesLesClasses()))],
+            // Frais et détails de l'année prochaine
+            'prochains_frais' => ['nullable', Rule::requiredIf($c['versEcole'] || $c['poursuitFormation']), 'integer', 'min:0'],
+            'prochains_frais_formation' => ['nullable', Rule::requiredIf($c['versFormation']), 'integer', 'min:0'],
+            'prochain_etablissement' => ['nullable', 'string', 'max:255'],
+            'prochain_type_etablissement' => ['nullable', Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            'prochain_type_centre' => ['nullable', Rule::requiredIf($c['versFormation']), Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
+            'prochaine_duree' => ['nullable', Rule::requiredIf($c['versFormation']), 'integer', 'min:1', 'max:120'],
+            'a_reconduire' => ['required', 'boolean'],
+            'observation' => ['nullable', 'string', 'max:1000'],
+        ];
+    }
+
+    private function messagesSuivi(array $c): array
+    {
+        return [
+            'prochains_frais.required' => $c['versEcole'] ? 'Indiquez les frais de scolarité de l’année prochaine (0 si l’école est gratuite).' : 'Indiquez les frais de la formation pour l’année prochaine (0 si elle est gratuite).',
+            'prochains_frais.integer' => 'Les frais doivent être un montant entier en FCFA.',
+            'prochains_frais_formation.required' => 'Indiquez les frais de la formation choisie (0 si elle est gratuite).',
+            'prochains_frais_formation.integer' => 'Les frais doivent être un montant entier en FCFA.',
+            'prochain_type_centre.required' => 'Indiquez si le centre de formation est public ou privé.',
+            'prochaine_duree.required' => 'Indiquez la durée de la formation (en mois).',
+            'resultat.required' => 'Indiquez le résultat de l’année.',
+            'moyenne.max' => "La moyenne est notée sur {$c['bareme']}.",
+            'moyenne.numeric' => 'La moyenne doit être un nombre (ex : 12,5).',
+            'insertion.required' => 'Indiquez la situation de l’OEV après sa formation.',
+            'orientation.required' => 'Indiquez ce que fera l’OEV l’année prochaine (école, formation professionnelle ou arrêt).',
+            'prochaine_filiere.required' => 'Indiquez la formation professionnelle choisie (ex : Couture).',
+            'prochaine_classe.required' => 'La classe actuelle n’est pas connue : indiquez la classe de l’année prochaine.',
+            'a_reconduire.required' => 'Indiquez si l’OEV est recommandé pour un nouveau parrainage.',
+        ];
+    }
+
+    /**
+     * L'année prochaine, cohérente avec le résultat et l'orientation.
+     *
+     * @return array{0: ?string, 1: ?string} orientation, classe ou filière de l'année prochaine
+     */
+    private function anneeProchaine(array $donnees, array $c, BeneficiaireSession $ligne, ?SuiviParrainage $existant): array
+    {
+        if ($c['formation']) {
+            $orientation = SuiviParrainage::orientationFormation($donnees['resultat']);
+
+            return [$orientation, $orientation === SuiviParrainage::FORMATION ? ($existant?->fiche_avant['formation_filiere'] ?? $ligne->oev->formation_filiere) : null];
+        }
+
+        return [$c['orientation'], match ($c['orientation']) {
+            SuiviParrainage::ECOLE => $c['classeCalculee'] ?? $donnees['prochaine_classe'],
+            SuiviParrainage::FORMATION => trim($donnees['prochaine_filiere']),
+            default => null,
+        }];
+    }
+
+    /** Frais et détails de l'année prochaine (école ou formation), null si l'OEV ne continue pas. */
+    private function detailsAnneeProchaine(array $donnees, array $c): ?array
+    {
+        $frais = isset($donnees['prochains_frais']) ? (int) $donnees['prochains_frais'] : null;
+
+        return match (true) {
+            $c['versEcole'] => [
+                'frais' => $frais,
+                'etablissement' => trim((string) ($donnees['prochain_etablissement'] ?? '')) ?: null,
+                'type_etablissement' => $donnees['prochain_type_etablissement'] ?? null,
+            ],
+            $c['versFormation'] => [
+                'frais' => (int) $donnees['prochains_frais_formation'],
+                'type_centre' => $donnees['prochain_type_centre'],
+                'duree_mois' => (int) $donnees['prochaine_duree'],
+            ],
+            $c['poursuitFormation'] => ['frais' => $frais],
+            default => null,
+        };
     }
 }

@@ -117,8 +117,10 @@ class EcoleController extends Controller
     public function import(Request $request): RedirectResponse
     {
         $request->validate(
-            ['fichier' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']],
-            ['fichier.required' => 'Choisissez le fichier Excel à importer.', 'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.'],
+            // 10 Mo (en Ko) : le fichier du ministère fait environ 650 Ko
+            ['fichier' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']],
+            ['fichier.required' => 'Choisissez le fichier Excel à importer.', 'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.',
+                'fichier.max' => 'Le fichier ne doit pas dépasser 10 Mo.'],
         );
 
         try {

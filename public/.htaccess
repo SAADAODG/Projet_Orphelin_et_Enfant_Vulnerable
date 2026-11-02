@@ -23,3 +23,10 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# En-têtes de sécurité pour les fichiers servis directement par Apache (CSS, JS, images) ;
+# les pages de l'application les reçoivent du middleware EnTetesSecurite
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>

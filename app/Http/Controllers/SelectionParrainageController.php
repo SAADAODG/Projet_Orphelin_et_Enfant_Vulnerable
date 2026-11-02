@@ -11,6 +11,7 @@ use App\Services\Parrainage\ParrainageService;
 use App\Services\Parrainage\SelectionParrainage;
 use App\Services\Parrainage\TransitionSessionInvalide;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -40,7 +41,7 @@ class SelectionParrainageController extends Controller
         $session->load('quotas');
         $utilisateur = $request->user();
         $perimetre = $this->zone();
-        $gere = $utilisateur->can('gérer sessions parrainage');
+        $gere = $utilisateur->can(Permissions::GERER_SESSIONS_PARRAINAGE);
         $modifiable = $gere && $session->parametresModifiables();
         // Tant que la liste est modifiable, on arrive sur tous les éligibles : les filtres ne font que réduire la liste
         $onglet = match ($request->query('onglet')) {
@@ -119,10 +120,32 @@ class SelectionParrainageController extends Controller
             return $refus;
         }
 
+        [$ids, $erreur] = $this->oevsAAjouter($request, $session);
+        if ($erreur === null) {
+            // Tout ou rien : un ajout qui dépasserait l'enveloppe ou un quota est refusé en entier
+            $compte = $this->selection->ajouter($session, $ids, $request->user());
+            $erreur = $compte['refus'] ? 'Aucun OEV ajouté : ' . $compte['refus'] : null;
+        }
+        if ($erreur !== null) {
+            return back()->with('error', $erreur);
+        }
+
+        return redirect()->route('parrainage.sessions.selection', $session)->with('success', $compte['retenus'] === 0
+            ? 'Aucun OEV ajouté : ils ne sont plus éligibles à cette session.'
+            : "{$compte['retenus']} OEV retenu(s) sur la liste de la session.");
+    }
+
+    /**
+     * OEV cochés, ou tous les éligibles correspondant aux filtres (« tout ajouter »).
+     *
+     * @return array{0: array<int, int>, 1: ?string} identifiants, message d'erreur éventuel
+     */
+    private function oevsAAjouter(Request $request, SessionParrainage $session): array
+    {
         if ($request->boolean('tous')) {
             $requete = $this->selection->eligibles($session, $this->lireFiltres($request));
             if ((clone $requete)->count() > self::AJOUT_MAX) {
-                return back()->with('error', 'Trop d’OEV correspondent à ces filtres (plus de ' . self::AJOUT_MAX . ') : affinez la recherche avant de tout ajouter.');
+                return [[], 'Trop d’OEV correspondent à ces filtres (plus de ' . self::AJOUT_MAX . ') : affinez la recherche avant de tout ajouter.'];
             }
             // Le tri par score (colonne calculée) est retiré : seuls les identifiants sont lus
             $ids = $requete->reorder()->pluck('oevs.id')->all();
@@ -130,18 +153,7 @@ class SelectionParrainageController extends Controller
             $ids = array_map('intval', (array) $request->input('oev_ids', []));
         }
 
-        if (! $ids) {
-            return back()->with('error', 'Cochez au moins un OEV à ajouter.');
-        }
-        // Tout ou rien : un ajout qui dépasserait l'enveloppe ou un quota est refusé en entier
-        $compte = $this->selection->ajouter($session, $ids, $request->user());
-        if ($compte['refus']) {
-            return back()->with('error', 'Aucun OEV ajouté : ' . $compte['refus']);
-        }
-
-        return redirect()->route('parrainage.sessions.selection', $session)->with('success', $compte['retenus'] === 0
-            ? 'Aucun OEV ajouté : ils ne sont plus éligibles à cette session.'
-            : "{$compte['retenus']} OEV retenu(s) sur la liste de la session.");
+        return [$ids, $ids ? null : 'Cochez au moins un OEV à ajouter.'];
     }
 
     /** Correction des frais réels d'un OEV de la liste. */

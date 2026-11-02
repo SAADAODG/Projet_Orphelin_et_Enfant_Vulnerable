@@ -103,53 +103,78 @@ class FichiersExtraction
     {
         self::prevoirGrosFichier();
         $classeur = new Spreadsheet();
-        $lettre = fn (array $colonnes, string $cle) => Coordinate::stringFromColumnIndex(array_search($cle, array_keys($colonnes), true) + 1);
-
-        $feuille = $classeur->getActiveSheet()->setTitle('Par établissement');
-        $ligne = $this->ecrireEntete($feuille, $entete);
-        $debut = $ligne;
-        $derniere = Coordinate::stringFromColumnIndex(count($colonnesEtablissement));
-        $feuille->fromArray(array_values($colonnesEtablissement), null, "A{$ligne}");
-        foreach (ExtractionsParrainage::lignesAvecTotaux($donnees['etablissements']) as $l) {
-            $ligne++;
-            if ($l['niveau'] === 'etablissement') {
-                $valeurs = array_map(fn ($cle) => $cle === 'rib' ? ($l['rib_manquant'] ? 'RIB manquant' : $l['rib']) : $l[$cle], array_keys($colonnesEtablissement));
-                $feuille->fromArray($valeurs, null, "A{$ligne}", true);
-                if ($l['rib_manquant']) {
-                    $cellule = isset($colonnesEtablissement['rib']) ? $lettre($colonnesEtablissement, 'rib') : 'A';
-                    $this->colorer($feuille, "{$cellule}{$ligne}", 'FDE2E1', 'B42318');
-                }
-            } else {
-                $feuille->setCellValue("A{$ligne}", $l['libelle'])
-                    ->setCellValue($lettre($colonnesEtablissement, 'nombre_oev') . $ligne, $l['nombre_oev'])
-                    ->setCellValue($lettre($colonnesEtablissement, 'montant') . $ligne, $l['montant']);
-                $feuille->getStyle("A{$ligne}:{$derniere}{$ligne}")->getFont()->setBold(true);
-                $this->colorer($feuille, "A{$ligne}:{$derniere}{$ligne}", $l['niveau'] === 'general' ? 'D9EAD3' : 'F2F4F3');
-            }
-        }
-        $this->finaliserTableau($feuille, $debut, $ligne, $derniere, [$lettre($colonnesEtablissement, 'montant')]);
-
-        $nominatif = $classeur->createSheet()->setTitle('Nominatif');
-        $ligne = $this->ecrireEntete($nominatif, $entete);
-        $debut = $ligne;
-        $derniere = Coordinate::stringFromColumnIndex(count($colonnesNominatif));
-        $nominatif->fromArray(array_values($colonnesNominatif), null, "A{$ligne}");
-        foreach ($donnees['nominatif'] as $l) {
-            $nominatif->fromArray(array_map(fn ($cle) => $l[$cle], array_keys($colonnesNominatif)), null, 'A' . ++$ligne, true);
-        }
-        $ligne++;
-        $nominatif->setCellValue("A{$ligne}", 'Total général (' . $donnees['total_oev'] . ' OEV)')
-            ->setCellValue($lettre($colonnesNominatif, 'montant_retenu') . $ligne, $donnees['total_montant']);
-        if (isset($colonnesNominatif['frais_reels'])) {
-            $nominatif->setCellValue($lettre($colonnesNominatif, 'frais_reels') . $ligne, $donnees['nominatif']->sum('frais_reels'));
-        }
-        $nominatif->getStyle("A{$ligne}:{$derniere}{$ligne}")->getFont()->setBold(true);
-        $montants = array_map(fn ($cle) => $lettre($colonnesNominatif, $cle), array_values(array_intersect(['frais_reels', 'montant_retenu'], array_keys($colonnesNominatif))));
-        $this->finaliserTableau($nominatif, $debut, $ligne, $derniere, $montants);
-
+        $this->feuilleParEtablissement($classeur->getActiveSheet()->setTitle('Par établissement'), $donnees['etablissements'], $entete, $colonnesEtablissement);
+        $this->feuilleNominative($classeur->createSheet()->setTitle('Nominatif'), $donnees, $entete, $colonnesNominatif);
         $classeur->setActiveSheetIndex(0);
 
         return $this->telecharger($classeur, $nomFichier);
+    }
+
+    /** Lettre de la colonne Excel de $cle parmi $colonnes (clé => libellé). */
+    private static function lettre(array $colonnes, string $cle): string
+    {
+        return Coordinate::stringFromColumnIndex(array_search($cle, array_keys($colonnes), true) + 1);
+    }
+
+    /** Feuille « Par établissement » : établissements, sous-totaux par province et région, total général. */
+    private function feuilleParEtablissement(Worksheet $feuille, Collection $etablissements, array $entete, array $colonnes): void
+    {
+        $ligne = $this->ecrireEntete($feuille, $entete);
+        $debut = $ligne;
+        $derniere = Coordinate::stringFromColumnIndex(count($colonnes));
+        $feuille->fromArray(array_values($colonnes), null, "A{$ligne}");
+        foreach (ExtractionsParrainage::lignesAvecTotaux($etablissements) as $l) {
+            $ligne++;
+            if ($l['niveau'] === 'etablissement') {
+                $this->ecrireEtablissement($feuille, $ligne, $l, $colonnes);
+            } else {
+                $this->ecrireTotal($feuille, $ligne, $l, $colonnes, $derniere);
+            }
+        }
+        $this->finaliserTableau($feuille, $debut, $ligne, $derniere, [self::lettre($colonnes, 'montant')]);
+    }
+
+    /** Ligne d'un établissement ; « RIB manquant » en rouge (dans la colonne RIB, ou la première si elle n'est pas extraite). */
+    private function ecrireEtablissement(Worksheet $feuille, int $ligne, array $l, array $colonnes): void
+    {
+        $rib = $l['rib_manquant'] ? 'RIB manquant' : $l['rib'];
+        $valeurs = array_map(fn ($cle) => $cle === 'rib' ? $rib : $l[$cle], array_keys($colonnes));
+        $feuille->fromArray($valeurs, null, "A{$ligne}", true);
+        if ($l['rib_manquant']) {
+            $cellule = isset($colonnes['rib']) ? self::lettre($colonnes, 'rib') : 'A';
+            $this->colorer($feuille, "{$cellule}{$ligne}", 'FDE2E1', 'B42318');
+        }
+    }
+
+    /** Sous-total (province, région) ou total général, en gras sur fond coloré. */
+    private function ecrireTotal(Worksheet $feuille, int $ligne, array $l, array $colonnes, string $derniere): void
+    {
+        $feuille->setCellValue("A{$ligne}", $l['libelle'])
+            ->setCellValue(self::lettre($colonnes, 'nombre_oev') . $ligne, $l['nombre_oev'])
+            ->setCellValue(self::lettre($colonnes, 'montant') . $ligne, $l['montant']);
+        $feuille->getStyle("A{$ligne}:{$derniere}{$ligne}")->getFont()->setBold(true);
+        $this->colorer($feuille, "A{$ligne}:{$derniere}{$ligne}", $l['niveau'] === 'general' ? 'D9EAD3' : 'F2F4F3');
+    }
+
+    /** Feuille « Nominatif » : un OEV par ligne, puis le total général. */
+    private function feuilleNominative(Worksheet $feuille, array $donnees, array $entete, array $colonnes): void
+    {
+        $ligne = $this->ecrireEntete($feuille, $entete);
+        $debut = $ligne;
+        $derniere = Coordinate::stringFromColumnIndex(count($colonnes));
+        $feuille->fromArray(array_values($colonnes), null, "A{$ligne}");
+        foreach ($donnees['nominatif'] as $l) {
+            $feuille->fromArray(array_map(fn ($cle) => $l[$cle], array_keys($colonnes)), null, 'A' . ++$ligne, true);
+        }
+        $ligne++;
+        $feuille->setCellValue("A{$ligne}", 'Total général (' . $donnees['total_oev'] . ' OEV)')
+            ->setCellValue(self::lettre($colonnes, 'montant_retenu') . $ligne, $donnees['total_montant']);
+        if (isset($colonnes['frais_reels'])) {
+            $feuille->setCellValue(self::lettre($colonnes, 'frais_reels') . $ligne, $donnees['nominatif']->sum('frais_reels'));
+        }
+        $feuille->getStyle("A{$ligne}:{$derniere}{$ligne}")->getFont()->setBold(true);
+        $montants = array_map(fn ($cle) => self::lettre($colonnes, $cle), array_values(array_intersect(['frais_reels', 'montant_retenu'], array_keys($colonnes))));
+        $this->finaliserTableau($feuille, $debut, $ligne, $derniere, $montants);
     }
 
     public function paiementPdf(array $donnees, array $entete, string $nomFichier, array $colonnesEtablissement, array $colonnesNominatif): Response

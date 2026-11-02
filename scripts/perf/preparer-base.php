@@ -7,15 +7,22 @@
  * Seule une base dont le nom se termine par « _perf » est acceptée (voir _amorce.php).
  */
 
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $base = perf_nom_base();
 
 // Création de la base si elle n'existe pas (connexion à « postgres », jamais à la base de développement)
 $admin = new PDO('pgsql:host=127.0.0.1;port=5432;dbname=postgres', 'postgres', getenv('PERF_DB_PASSWORD') ?: '1234', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-$existe = $admin->query("select 1 from pg_database where datname = " . $admin->quote($base))->fetchColumn();
-if (! $existe) {
-    $admin->exec('CREATE DATABASE "' . str_replace('"', '', $base) . '"');
+$requete = $admin->prepare('select 1 from pg_database where datname = ?');
+$requete->execute([$base]);
+if (! $requete->fetchColumn()) {
+    // Un nom de base ne peut pas être un paramètre lié : il est validé strictement avant d'être inséré
+    if (! preg_match('/^[a-zA-Z0-9_]+$/', $base)) {
+        fwrite(STDERR, "REFUS : nom de base invalide « {$base} » (lettres, chiffres et _ seulement).
+");
+        exit(2);
+    }
+    $admin->exec('CREATE DATABASE "' . $base . '"');
     echo "Base {$base} créée.\n";
 }
 $admin = null;

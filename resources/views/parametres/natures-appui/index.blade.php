@@ -59,7 +59,7 @@
                   <td><code>{{ $nature->code }}</code> @if ($nature->estSysteme())<i class="bi bi-lock ms-1" title="Utilisée par les règles de l’application" aria-label="Nature système"></i>@endif</td>
                   <td>
                     <div class="form-check form-switch mb-0">
-                      <input class="form-check-input" type="checkbox" role="switch" name="actif" value="1" form="{{ $formulaire }}" aria-label="Active" @checked($nature->actif) @disabled($nature->estSysteme())>
+                      <input class="form-check-input" type="checkbox" role="switch" name="actif" value="1" form="{{ $formulaire }}" aria-label="Active" aria-checked="{{ $nature->actif ? 'true' : 'false' }}" @checked($nature->actif) @disabled($nature->estSysteme())>
                     </div>
                   </td>
                   <td class="text-end">

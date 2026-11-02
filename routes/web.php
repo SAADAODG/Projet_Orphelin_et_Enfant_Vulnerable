@@ -34,6 +34,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VillageController;
 use App\Models\ListeReference;
 use App\Models\Province;
+use App\Support\Permissions;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -83,29 +84,29 @@ Route::middleware('auth')->prefix('admin')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     // Module « Signalements » : le DP traite ceux de sa province, le DR consulte ceux de sa région
-    Route::middleware('can:voir signalements')->group(function () {
+    Route::middleware('can:' . Permissions::VOIR_SIGNALEMENTS)->group(function () {
         Route::get('/signalements', [AdminSignalementController::class, 'index'])->name('admin.signalements.index');
         Route::get('/signalements/non-lus', [AdminSignalementController::class, 'nonLus'])->name('admin.signalements.non-lus');
         Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
     });
-    Route::middleware('can:traiter signalements')->group(function () {
+    Route::middleware('can:' . Permissions::TRAITER_SIGNALEMENTS)->group(function () {
         Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
         Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
         Route::patch('/signalements/{signalement}/cloturer', [AdminSignalementController::class, 'cloturer'])->name('admin.signalements.cloturer');
     });
 
     // Module « Gestion de plainte » : niveau central
-    Route::middleware('can:voir plaintes')->group(function () {
+    Route::middleware('can:' . Permissions::VOIR_PLAINTES)->group(function () {
         Route::get('/plaintes', [AdminPlainteController::class, 'index'])->name('admin.plaintes.index');
         Route::get('/plaintes/{plainte}', [AdminPlainteController::class, 'show'])->name('admin.plaintes.show');
     });
-    Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->middleware('can:traiter plaintes')->name('admin.plaintes.statut');
+    Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->middleware('can:' . Permissions::TRAITER_PLAINTES)->name('admin.plaintes.statut');
 
     // Gestion des utilisateurs
-    Route::get('/users', [UserController::class, 'index'])->middleware('can:voir utilisateurs')->name('users.index');
-    Route::post('/users', [UserController::class, 'store'])->middleware('can:créer utilisateurs')->name('users.store');
-    Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->middleware('can:modifier utilisateurs')->name('users.update');
-    Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('can:supprimer utilisateurs')->name('users.destroy');
+    Route::get('/users', [UserController::class, 'index'])->middleware('can:' . Permissions::VOIR_UTILISATEURS)->name('users.index');
+    Route::post('/users', [UserController::class, 'store'])->middleware('can:' . Permissions::CREER_UTILISATEURS)->name('users.store');
+    Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->middleware('can:' . Permissions::MODIFIER_UTILISATEURS)->name('users.update');
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('can:' . Permissions::SUPPRIMER_UTILISATEURS)->name('users.destroy');
     Route::middleware('role:superAdmin|administrateur')->group(function () {
         Route::get('/roles-permissions', [RolePermissionController::class, 'index'])->name('roles-permissions.index');
         Route::post('/roles-permissions', [RolePermissionController::class, 'store'])->name('roles-permissions.store');
@@ -114,81 +115,109 @@ Route::middleware('auth')->prefix('admin')->group(function () {
     });
 
     // --- Dossiers enfants / OEV : DP (constituer) → DR (valider) → niveau central (intégrer) ---
-    Route::middleware('can:constituer dossiers')->group(function () {
+    Route::middleware('can:' . Permissions::CONSTITUER_DOSSIERS)->group(function () {
         Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
         Route::get('/oevs/create', [OevController::class, 'create'])->name('oevs.create');
         Route::post('/oevs', [OevController::class, 'store'])->name('oevs.store');
-        Route::delete('/oevs/{oev}', [OevController::class, 'destroy'])->name('oevs.destroy');
-        Route::post('/oevs/{oev}/soumettre', [OevController::class, 'soumettre'])->name('oevs.soumettre');
     });
-    // Modification : DP pendant la constitution, DR sur demande de complément (contrôlé dans le contrôleur)
-    Route::middleware('can:voir OEV')->group(function () {
-        Route::get('/oevs/{oev}/edit', [OevController::class, 'edit'])->name('oevs.edit');
-        Route::put('/oevs/{oev}', [OevController::class, 'update'])->name('oevs.update');
-        Route::delete('/oevs/{oev}/documents/{document}', [OevController::class, 'destroyDocument'])->name('oevs.documents.destroy');
-        // Rejet définitif : DR ou niveau central selon l'étape (contrôlé dans le contrôleur)
-        Route::post('/oevs/{oev}/rejeter', [OevController::class, 'rejeter'])->name('oevs.rejeter');
-    });
-    Route::middleware('can:valider dossiers')->group(function () {
-        Route::get('/validation-dossiers', [OevController::class, 'validation'])->name('oevs.validation');
-        Route::post('/oevs/{oev}/conforme', [OevController::class, 'conforme'])->name('oevs.conforme');
-        Route::post('/oevs/{oev}/non-conforme', [OevController::class, 'nonConforme'])->name('oevs.non-conforme');
-    });
-    Route::middleware('can:intégrer OEV')->group(function () {
-        Route::get('/integration-oev', [OevController::class, 'integration'])->name('oevs.integration');
-        Route::post('/oevs/{oev}/integrer', [OevController::class, 'integrer'])->name('oevs.integrer');
-        Route::post('/oevs/{oev}/complement', [OevController::class, 'demanderComplement'])->name('oevs.complement');
-    });
-    Route::middleware('can:voir OEV')->group(function () {
+    Route::get('/validation-dossiers', [OevController::class, 'validation'])->middleware('can:' . Permissions::VALIDER_DOSSIERS)->name('oevs.validation');
+    Route::get('/integration-oev', [OevController::class, 'integration'])->middleware('can:' . Permissions::INTEGRER_OEV)->name('oevs.integration');
+    Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
         Route::get('/liste-oev', [OevController::class, 'liste'])->name('oevs.liste');
-        Route::get('/oevs/{oev}', [OevController::class, 'show'])->name('oevs.show');
-        Route::get('/oevs/{oev}/documents/{document}', [OevController::class, 'showDocument'])->name('oevs.documents.show');
-        // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
         // OEV sortants : désactivés (décès, majorité…) et demandes de désactivation en attente
         Route::get('/oevs-sortants', [DesactivationOevController::class, 'index'])->name('oevs.sortants');
-        Route::post('/oevs/{oev}/desactiver', [DesactivationOevController::class, 'desactiver'])->name('oevs.desactiver');
-        Route::post('/oevs/{oev}/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('oevs.desactivation.decider');
-        Route::post('/oevs/{oev}/reactiver', [DesactivationOevController::class, 'reactiver'])->name('oevs.reactiver');
+    });
+    // Un dossier : chaque action selon l'étape du circuit (déclarées après « /oevs/create »)
+    Route::prefix('oevs/{oev}')->name('oevs.')->group(function () {
+        Route::middleware('can:' . Permissions::CONSTITUER_DOSSIERS)->group(function () {
+            Route::delete('/', [OevController::class, 'destroy'])->name('destroy');
+            Route::post('/soumettre', [OevController::class, 'soumettre'])->name('soumettre');
+        });
+        Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
+            Route::get('/', [OevController::class, 'show'])->name('show');
+            Route::get('/documents/{document}', [OevController::class, 'showDocument'])->name('documents.show');
+            // Modification : DP pendant la constitution, DR sur demande de complément (contrôlé dans le contrôleur)
+            Route::get('/edit', [OevController::class, 'edit'])->name('edit');
+            Route::put('/', [OevController::class, 'update'])->name('update');
+            Route::delete('/documents/{document}', [OevController::class, 'destroyDocument'])->name('documents.destroy');
+            // Rejet définitif : DR ou niveau central selon l'étape (contrôlé dans le contrôleur)
+            Route::post('/rejeter', [OevController::class, 'rejeter'])->name('rejeter');
+            // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
+            Route::post('/desactiver', [DesactivationOevController::class, 'desactiver'])->name('desactiver');
+            Route::post('/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('desactivation.decider');
+            Route::post('/reactiver', [DesactivationOevController::class, 'reactiver'])->name('reactiver');
+        });
+        Route::middleware('can:' . Permissions::VALIDER_DOSSIERS)->group(function () {
+            Route::post('/conforme', [OevController::class, 'conforme'])->name('conforme');
+            Route::post('/non-conforme', [OevController::class, 'nonConforme'])->name('non-conforme');
+        });
+        Route::middleware('can:' . Permissions::INTEGRER_OEV)->group(function () {
+            Route::post('/integrer', [OevController::class, 'integrer'])->name('integrer');
+            Route::post('/complement', [OevController::class, 'demanderComplement'])->name('complement');
+        });
     });
     // Filtrage multicritère des dossiers enfants / OEV et export CSV (limités à la zone de l'utilisateur)
-    Route::middleware(['can:voir rapports', 'can:voir OEV'])->group(function () {
+    Route::middleware(['can:' . Permissions::VOIR_RAPPORTS, 'can:' . Permissions::VOIR_OEV])->group(function () {
         Route::get('/filtrage-extraction', [ExtractionController::class, 'index'])->name('extraction.index');
         Route::get('/filtrage-extraction/export', [ExtractionController::class, 'export'])->name('extraction.export');
     });
 
     // --- Parrainage : sessions ouvertes par le niveau central, consultées par les DR et DP ---
     Route::prefix('parrainage')->name('parrainage.')->group(function () {
-        Route::middleware('can:gérer sessions parrainage')->group(function () {
+        Route::get('/sessions', [SessionParrainageController::class, 'index'])->middleware('can:' . Permissions::VOIR_PARRAINAGE)->name('sessions.index');
+        Route::middleware('can:' . Permissions::GERER_SESSIONS_PARRAINAGE)->group(function () {
             Route::get('/sessions/create', [SessionParrainageController::class, 'create'])->name('sessions.create');
             Route::post('/sessions', [SessionParrainageController::class, 'store'])->name('sessions.store');
-            Route::get('/sessions/{session}/edit', [SessionParrainageController::class, 'edit'])->name('sessions.edit');
-            Route::put('/sessions/{session}', [SessionParrainageController::class, 'update'])->name('sessions.update');
-            Route::put('/sessions/{session}/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('sessions.quotas');
-            // Sélection des OEV de la session : ajout, frais, validation de la liste définitive ; réception des fonds
-            Route::delete('/sessions/{session}', [SessionParrainageController::class, 'destroy'])->name('sessions.destroy');
-            Route::post('/sessions/{session}/selection', [SelectionParrainageController::class, 'ajouter'])->name('sessions.selection.ajouter');
-            Route::put('/sessions/{session}/selection/estimations', [SelectionParrainageController::class, 'estimations'])->name('sessions.selection.estimations');
-            Route::patch('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'modifier'])->name('sessions.selection.modifier');
-            Route::delete('/sessions/{session}/selection/{ligne}', [SelectionParrainageController::class, 'retirer'])->name('sessions.selection.retirer');
-            Route::post('/sessions/{session}/selection/valider', [SelectionParrainageController::class, 'valider'])->name('sessions.selection.valider');
-            Route::post('/sessions/{session}/paiements', [PaiementSessionController::class, 'store'])->name('sessions.paiements.store');
-            Route::delete('/sessions/{session}/paiements/{paiement}', [PaiementSessionController::class, 'destroy'])->name('sessions.paiements.destroy');
+        });
+        Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
+            Route::middleware('can:' . Permissions::GERER_SESSIONS_PARRAINAGE)->group(function () {
+                Route::get('/edit', [SessionParrainageController::class, 'edit'])->name('edit');
+                Route::put('/', [SessionParrainageController::class, 'update'])->name('update');
+                Route::put('/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('quotas');
+                Route::delete('/', [SessionParrainageController::class, 'destroy'])->name('destroy');
+                // Sélection des OEV de la session : ajout, frais, validation de la liste définitive ; réception des fonds
+                Route::post('/selection', [SelectionParrainageController::class, 'ajouter'])->name('selection.ajouter');
+                Route::put('/selection/estimations', [SelectionParrainageController::class, 'estimations'])->name('selection.estimations');
+                Route::patch('/selection/{ligne}', [SelectionParrainageController::class, 'modifier'])->name('selection.modifier');
+                Route::delete('/selection/{ligne}', [SelectionParrainageController::class, 'retirer'])->name('selection.retirer');
+                Route::post('/selection/valider', [SelectionParrainageController::class, 'valider'])->name('selection.valider');
+                Route::post('/paiements', [PaiementSessionController::class, 'store'])->name('paiements.store');
+                Route::delete('/paiements/{paiement}', [PaiementSessionController::class, 'destroy'])->name('paiements.destroy');
+            });
+            Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
+                Route::get('/', [SessionParrainageController::class, 'show'])->name('show');
+                Route::get('/selection', [SelectionParrainageController::class, 'index'])->name('selection');
+                // Paiement d'une session validée : établissements et régions (niveau central, DR pour leur région)
+                Route::get('/paiements', [PaiementSessionController::class, 'index'])->name('paiements');
+                Route::get('/paiements/export', [PaiementSessionController::class, 'export'])->name('paiements.export');
+                // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
+                Route::post('/etat', [SessionParrainageController::class, 'changerEtat'])->name('etat');
+            });
         });
         // Suivi de fin d'année des parrainés : le DP pour sa province, le niveau central pour tout le pays
         Route::put('/suivis/{ligne}', [SuiviParrainageController::class, 'enregistrer'])
-            ->middleware('can:suivre parrainages')->name('suivis.enregistrer');
-        // Répertoire des parrains : géré par le niveau central
-        Route::middleware('can:gérer parrains')->group(function () {
+            ->middleware('can:' . Permissions::SUIVRE_PARRAINAGES)->name('suivis.enregistrer');
+        // Répertoire des parrains : géré par le niveau central, consulté par tous
+        Route::get('/parrains', [ParrainController::class, 'index'])->middleware('can:' . Permissions::VOIR_PARRAINAGE)->name('parrains.index');
+        Route::middleware('can:' . Permissions::GERER_PARRAINS)->group(function () {
             Route::get('/parrains/create', [ParrainController::class, 'create'])->name('parrains.create');
             Route::post('/parrains', [ParrainController::class, 'store'])->name('parrains.store');
-            Route::get('/parrains/{parrain}/edit', [ParrainController::class, 'edit'])->name('parrains.edit');
-            Route::put('/parrains/{parrain}', [ParrainController::class, 'update'])->name('parrains.update');
-            Route::delete('/parrains/{parrain}', [ParrainController::class, 'destroy'])->name('parrains.destroy');
-            Route::post('/parrains/{parrain}/engagements', [ParrainController::class, 'storeEngagement'])->name('parrains.engagements.store');
-            Route::delete('/parrains/{parrain}/engagements/{engagement}', [ParrainController::class, 'destroyEngagement'])->name('parrains.engagements.destroy');
+        });
+        Route::prefix('parrains/{parrain}')->name('parrains.')->group(function () {
+            Route::middleware('can:' . Permissions::GERER_PARRAINS)->group(function () {
+                Route::get('/edit', [ParrainController::class, 'edit'])->name('edit');
+                Route::put('/', [ParrainController::class, 'update'])->name('update');
+                Route::delete('/', [ParrainController::class, 'destroy'])->name('destroy');
+                Route::post('/engagements', [ParrainController::class, 'storeEngagement'])->name('engagements.store');
+                Route::delete('/engagements/{engagement}', [ParrainController::class, 'destroyEngagement'])->name('engagements.destroy');
+            });
+            Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
+                Route::get('/', [ParrainController::class, 'show'])->name('show');
+                Route::get('/engagements/{engagement}/convention', [ParrainController::class, 'convention'])->name('engagements.convention');
+            });
         });
         // Appuis : le DP pour les OEV de sa province, le niveau central pour tout le pays
-        Route::middleware('can:enregistrer appuis')->group(function () {
+        Route::middleware('can:' . Permissions::ENREGISTRER_APPUIS)->group(function () {
             Route::get('/appuis/create', [AppuiPartenaireController::class, 'create'])->name('appuis.create');
             Route::post('/appuis', [AppuiPartenaireController::class, 'store'])->name('appuis.store');
             Route::get('/appuis/recherche-oev', [AppuiPartenaireController::class, 'rechercheOev'])->name('appuis.recherche-oev');
@@ -198,10 +227,7 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/appuis/{appui}/edit', [AppuiPartenaireController::class, 'edit'])->name('appuis.edit');
             Route::put('/appuis/{appui}', [AppuiPartenaireController::class, 'update'])->name('appuis.update');
         });
-        Route::middleware('can:voir parrainage')->group(function () {
-            Route::get('/parrains', [ParrainController::class, 'index'])->name('parrains.index');
-            Route::get('/parrains/{parrain}', [ParrainController::class, 'show'])->name('parrains.show');
-            Route::get('/parrains/{parrain}/engagements/{engagement}/convention', [ParrainController::class, 'convention'])->name('parrains.engagements.convention');
+        Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
             Route::get('/appuis', [AppuiPartenaireController::class, 'index'])->name('appuis.index');
             // Pilotage : tableau de bord et extractions, dans la zone de l'utilisateur (droits fins contrôlés dans le contrôleur)
             Route::get('/pilotage', [PilotageParrainageController::class, 'tableauDeBord'])->name('pilotage.index');
@@ -209,19 +235,11 @@ Route::middleware('auth')->prefix('admin')->group(function () {
             Route::get('/pilotage/extractions/paiement', [PilotageParrainageController::class, 'paiement'])->name('pilotage.paiement');
             Route::get('/pilotage/extractions/parrain', [PilotageParrainageController::class, 'listeParrain'])->name('pilotage.liste-parrain');
             Route::get('/suivis', [SuiviParrainageController::class, 'index'])->name('suivis.index');
-            Route::get('/sessions', [SessionParrainageController::class, 'index'])->name('sessions.index');
-            Route::get('/sessions/{session}', [SessionParrainageController::class, 'show'])->name('sessions.show');
-            Route::get('/sessions/{session}/selection', [SelectionParrainageController::class, 'index'])->name('sessions.selection');
-            // Paiement d'une session validée : établissements et régions (niveau central, DR pour leur région)
-            Route::get('/sessions/{session}/paiements', [PaiementSessionController::class, 'index'])->name('sessions.paiements');
-            Route::get('/sessions/{session}/paiements/export', [PaiementSessionController::class, 'export'])->name('sessions.paiements.export');
-            // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
-            Route::post('/sessions/{session}/etat', [SessionParrainageController::class, 'changerEtat'])->name('sessions.etat');
         });
     });
 
     // --- Paramétrage : localités (Régions > Provinces > Communes > Villages) et paramètres généraux du site ---
-    Route::middleware('can:gérer paramètres')->group(function () {
+    Route::middleware('can:' . Permissions::GERER_PARAMETRES)->group(function () {
         Route::prefix('localites')->name('localites.')->group(function () {
             Route::resource('regions', RegionController::class)->except('show');
             Route::resource('provinces', ProvinceController::class)->except('show');
@@ -258,7 +276,7 @@ Route::middleware('auth')->prefix('admin')->group(function () {
     });
 
     // Journal d'audit : consultation et export (administrateurs)
-    Route::middleware('can:voir journal')->group(function () {
+    Route::middleware('can:' . Permissions::VOIR_JOURNAL)->group(function () {
         Route::get('/journal', [JournalController::class, 'index'])->name('journal.index');
         Route::get('/journal/export', [JournalController::class, 'export'])->name('journal.export');
     });

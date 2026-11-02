@@ -22,20 +22,21 @@
   <div class="mt-3">@include('oevs._onglets_liste')</div>
 
   {{-- OEV sortants : désactivés / demandes de désactivation en attente --}}
-  <div class="btn-group mt-3" role="group" aria-label="OEV sortants">
+  <nav class="btn-group mt-3" aria-label="OEV sortants">
     <a class="btn btn-sm {{ $vue === 'desactives' ? 'btn-primary' : 'btn-outline-primary' }}" href="{{ route('oevs.sortants') }}" @if ($vue === 'desactives') aria-current="page" @endif>
       <i class="bi bi-person-slash" aria-hidden="true"></i> Désactivés <span class="badge rounded-pill text-bg-light ms-1">{{ $nbDesactives }}</span>
     </a>
     <a class="btn btn-sm {{ $vue === 'demandes' ? 'btn-warning' : 'btn-outline-warning' }}" href="{{ route('oevs.sortants', ['vue' => 'demandes']) }}" @if ($vue === 'demandes') aria-current="page" @endif>
       <i class="bi bi-hourglass-split" aria-hidden="true"></i> Demandes en attente <span class="badge rounded-pill {{ $nbDemandes ? 'text-bg-danger' : 'text-bg-light' }} ms-1">{{ $nbDemandes }}</span>
     </a>
-  </div>
+  </nav>
 
   <section class="panel mt-3">
     <form class="d-flex flex-wrap gap-2 mb-3" method="GET" action="{{ route('oevs.sortants') }}" role="search">
       @if ($vue === 'demandes')<input type="hidden" name="vue" value="demandes">@endif
       <input class="form-control form-control-sm w-auto" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Code OEV, nom ou prénom" aria-label="Rechercher un OEV">
-      <select class="form-select form-select-sm w-auto" name="motif" aria-label="Filtrer par motif" onchange="this.form.submit()">
+      <label class="visually-hidden" for="filtre-motif">Filtrer par motif</label>
+      <select id="filtre-motif" class="form-select form-select-sm w-auto" name="motif" onchange="this.form.submit()">
         <option value="">Tous les motifs</option>
         @foreach (Oev::MOTIFS_DESACTIVATION as $cle => $libelle)
           <option value="{{ $cle }}" @selected($filtres['motif'] === $cle)>{{ $libelle }}</option>

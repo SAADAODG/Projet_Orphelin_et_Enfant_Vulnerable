@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permissions;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -69,9 +70,9 @@ class User extends Authenticatable
             : collect();
 
         return match (true) {
-            $permissions->contains('intégrer OEV') => self::NIVEAU_CENTRAL,
-            $permissions->contains('valider dossiers') => self::NIVEAU_REGION,
-            $permissions->contains('constituer dossiers') => self::NIVEAU_PROVINCE,
+            $permissions->contains(Permissions::INTEGRER_OEV) => self::NIVEAU_CENTRAL,
+            $permissions->contains(Permissions::VALIDER_DOSSIERS) => self::NIVEAU_REGION,
+            $permissions->contains(Permissions::CONSTITUER_DOSSIERS) => self::NIVEAU_PROVINCE,
             default => self::NIVEAU_CENTRAL,
         };
     }
@@ -82,7 +83,7 @@ class User extends Authenticatable
      */
     public function checkPermissionTo($permission, ?string $guardName = null): bool
     {
-        if (! config('app.module_signalements') && in_array($permission, ['voir signalements', 'traiter signalements'], true)) {
+        if (! config('app.module_signalements') && in_array($permission, [Permissions::VOIR_SIGNALEMENTS, Permissions::TRAITER_SIGNALEMENTS], true)) {
             return false;
         }
 
@@ -99,9 +100,9 @@ class User extends Authenticatable
     {
         return match (true) {
             $this->supervise() => self::NIVEAU_CENTRAL,
-            $this->can('intégrer OEV') => self::NIVEAU_CENTRAL,
-            $this->can('valider dossiers') => self::NIVEAU_REGION,
-            $this->can('constituer dossiers') => self::NIVEAU_PROVINCE,
+            $this->can(Permissions::INTEGRER_OEV) => self::NIVEAU_CENTRAL,
+            $this->can(Permissions::VALIDER_DOSSIERS) => self::NIVEAU_REGION,
+            $this->can(Permissions::CONSTITUER_DOSSIERS) => self::NIVEAU_PROVINCE,
             default => self::NIVEAU_CENTRAL,
         };
     }

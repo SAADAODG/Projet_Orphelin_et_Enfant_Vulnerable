@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Jeu de démonstration : dossiers OEV remplis comme le formulaire de constitution les accepte
- * (mêmes listes, mêmes champs conditionnels et mêmes règles de cohérence que OevController::valider).
+ * (mêmes listes, mêmes champs conditionnels et mêmes règles de cohérence que App\Services\Oev\ValidationOev).
  *
  *   php artisan db:seed --class=OevDemoSeeder
  *

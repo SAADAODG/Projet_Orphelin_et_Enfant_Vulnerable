@@ -27,6 +27,13 @@ class DatabaseSeeder extends Seeder
             ServiceSeeder::class,
         ]);
 
+        // Comptes de test (mot de passe connu) et dossiers fictifs : jamais en production
+        if (app()->isProduction()) {
+            $this->command?->warn('Production : comptes de test et dossiers de démonstration non créés. Créez le premier administrateur à la main.');
+
+            return;
+        }
+
         // DR et DP rattachés à une localité (sans elle, ils ne voient aucun dossier)
         $province = Province::orderBy('id')->firstOrFail();
 

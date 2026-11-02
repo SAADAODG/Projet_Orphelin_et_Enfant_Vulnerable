@@ -60,14 +60,18 @@ class JournalActivite extends Model
      */
     public static function consigner(string $action, ?Model $sujet = null, string $description = '', array $details = [], ?User $utilisateur = null): self
     {
+        // Adresse IP de l'auteur pour les actions faites depuis le navigateur
+        if (! app()->runningInConsole()) {
+            $details += ['ip' => request()->ip()];
+        }
+
         return static::create([
             'user_id' => ($utilisateur ?? auth()->user())?->getKey(),
             'action' => $action,
             'sujet_type' => $sujet?->getMorphClass(),
             'sujet_id' => $sujet?->getKey(),
             'description' => mb_substr($description !== '' ? $description : $action, 0, 500),
-            // Adresse IP de l'auteur pour les actions faites depuis le navigateur
-            'details' => ($details + (app()->runningInConsole() ? [] : ['ip' => request()->ip()])) ?: null,
+            'details' => $details ?: null,
         ]);
     }
 

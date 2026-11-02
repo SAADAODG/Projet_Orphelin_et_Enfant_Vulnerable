@@ -50,15 +50,15 @@
           </div>
         </div>
         <div class="settings-list">
-          <label class="settings-row">
+          <div class="settings-row">
             <span><strong>{{ auth()->user()->name }}</strong><small>{{ auth()->user()->email }}</small></span>
-          </label>
-          <label class="settings-row">
+          </div>
+          <div class="settings-row">
             <span><strong>Rôle(s)</strong><small>{{ auth()->user()->getRoleNames()->join(', ') ?: 'Aucun rôle' }}</small></span>
-          </label>
-          <label class="settings-row">
+          </div>
+          <div class="settings-row">
             <span><strong>Dernière modification</strong><small>{{ auth()->user()->updated_at?->format('d/m/Y à H:i') }}</small></span>
-          </label>
+          </div>
         </div>
       </div>
     </div>

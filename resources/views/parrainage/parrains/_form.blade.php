@@ -40,7 +40,7 @@
   <div class="col-12">
     <div class="form-check form-switch">
       <input type="hidden" name="actif" value="0">
-      <input class="form-check-input" type="checkbox" role="switch" id="actif" name="actif" value="1" @checked(old('actif', $parrain->actif))>
+      <input class="form-check-input" type="checkbox" role="switch" id="actif" name="actif" value="1" aria-checked="{{ old('actif', $parrain->actif) ? 'true' : 'false' }}" @checked(old('actif', $parrain->actif))>
       <label class="form-check-label" for="actif">Parrain actif</label>
     </div>
   </div>

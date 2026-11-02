@@ -188,8 +188,10 @@
               <form class="quick-link-edit" method="POST" action="{{ route('quick-links.update', $link) }}">
                 @csrf
                 @method('PUT')
-                <input class="form-control form-control-sm" type="text" name="libelle" value="{{ $link->libelle }}" placeholder="Libellé" required>
-                <input class="form-control form-control-sm" type="text" name="url" value="{{ $link->url }}" placeholder="URL ou chemin (/signaler)" required>
+                <label class="visually-hidden" for="lien-{{ $link->id }}-libelle">Libellé du lien</label>
+                <input class="form-control form-control-sm" id="lien-{{ $link->id }}-libelle" type="text" name="libelle" value="{{ $link->libelle }}" placeholder="Libellé" required>
+                <label class="visually-hidden" for="lien-{{ $link->id }}-url">Adresse du lien</label>
+                <input class="form-control form-control-sm" id="lien-{{ $link->id }}-url" type="text" name="url" value="{{ $link->url }}" placeholder="URL ou chemin (/signaler)" required>
                 <button class="btn btn-light btn-sm" type="submit" title="Enregistrer"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
               </form>
               <form method="POST" action="{{ route('quick-links.destroy', $link) }}" data-confirm="Supprimer le lien « {{ $link->libelle }} » ?" data-confirm-danger>
@@ -209,8 +211,10 @@
           <span class="quick-link-handle text-muted"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>
           <form class="quick-link-edit" method="POST" action="{{ route('quick-links.store') }}">
             @csrf
-            <input class="form-control form-control-sm" type="text" name="libelle" placeholder="Libellé (ex : Signaler un OEV)" required>
-            <input class="form-control form-control-sm" type="text" name="url" placeholder="URL ou chemin (ex : /signaler)" required>
+            <label class="visually-hidden" for="lien-nouveau-libelle">Libellé du nouveau lien</label>
+            <input class="form-control form-control-sm" id="lien-nouveau-libelle" type="text" name="libelle" placeholder="Libellé (ex : Signaler un OEV)" required>
+            <label class="visually-hidden" for="lien-nouveau-url">Adresse du nouveau lien</label>
+            <input class="form-control form-control-sm" id="lien-nouveau-url" type="text" name="url" placeholder="URL ou chemin (ex : /signaler)" required>
             <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ajouter</button>
           </form>
         </div>
@@ -233,8 +237,10 @@
               <form class="quick-link-edit" method="POST" action="{{ route('services.update', $service) }}">
                 @csrf
                 @method('PUT')
-                <input class="form-control form-control-sm" type="text" name="libelle" value="{{ $service->libelle }}" placeholder="Libellé" required>
-                <input class="form-control form-control-sm" type="text" name="url" value="{{ $service->url }}" placeholder="URL ou # si aucune page" required>
+                <label class="visually-hidden" for="service-{{ $service->id }}-libelle">Libellé du service</label>
+                <input class="form-control form-control-sm" id="service-{{ $service->id }}-libelle" type="text" name="libelle" value="{{ $service->libelle }}" placeholder="Libellé" required>
+                <label class="visually-hidden" for="service-{{ $service->id }}-url">Adresse du service</label>
+                <input class="form-control form-control-sm" id="service-{{ $service->id }}-url" type="text" name="url" value="{{ $service->url }}" placeholder="URL ou # si aucune page" required>
                 <button class="btn btn-light btn-sm" type="submit" title="Enregistrer"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
               </form>
               <form method="POST" action="{{ route('services.destroy', $service) }}" data-confirm="Supprimer le service « {{ $service->libelle }} » ?" data-confirm-danger>
@@ -254,8 +260,10 @@
           <span class="quick-link-handle text-muted"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>
           <form class="quick-link-edit" method="POST" action="{{ route('services.store') }}">
             @csrf
-            <input class="form-control form-control-sm" type="text" name="libelle" placeholder="Libellé (ex : Bourses d'études)" required>
-            <input class="form-control form-control-sm" type="text" name="url" placeholder="URL ou # si aucune page" required>
+            <label class="visually-hidden" for="service-nouveau-libelle">Libellé du nouveau service</label>
+            <input class="form-control form-control-sm" id="service-nouveau-libelle" type="text" name="libelle" placeholder="Libellé (ex : Bourses d'études)" required>
+            <label class="visually-hidden" for="service-nouveau-url">Adresse du nouveau service</label>
+            <input class="form-control form-control-sm" id="service-nouveau-url" type="text" name="url" placeholder="URL ou # si aucune page" required>
             <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ajouter</button>
           </form>
         </div>

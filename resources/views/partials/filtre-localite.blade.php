@@ -8,14 +8,16 @@
   $provinces = $regionChoisie['provinces'] ?? [];
 @endphp
 @if (count($localites) > 1 || count($localites[0]['provinces'] ?? []) > 1)
-  <select class="form-select w-auto" name="region_id" aria-label="Filtrer par région" onchange="this.form.province_id && (this.form.province_id.value = ''); this.form.submit()">
+  <label class="visually-hidden" for="filtre-region-id">Filtrer par région</label>
+  <select id="filtre-region-id" class="form-select w-auto" name="region_id" onchange="this.form.province_id && (this.form.province_id.value = ''); this.form.submit()">
     @if (count($localites) > 1)<option value="">Toutes les régions</option>@endif
     @foreach ($localites as $region)
       <option value="{{ $region['id'] }}" @selected($regionId === $region['id'])>{{ $region['nom'] }}</option>
     @endforeach
   </select>
   @if ($regionChoisie && count($provinces) > 1)
-    <select class="form-select w-auto" name="province_id" aria-label="Filtrer par province" onchange="this.form.submit()">
+    <label class="visually-hidden" for="filtre-province-id">Filtrer par province</label>
+    <select id="filtre-province-id" class="form-select w-auto" name="province_id" onchange="this.form.submit()">
       <option value="">Toutes les provinces</option>
       @foreach ($provinces as $province)
         <option value="{{ $province['id'] }}" @selected($provinceId === $province['id'])>{{ $province['nom'] }}</option>

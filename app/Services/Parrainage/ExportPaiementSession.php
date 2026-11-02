@@ -134,7 +134,11 @@ class ExportPaiementSession
             'nombre_oev' => (int) $e->nombre_oev,
             'montant' => (int) $e->montant,
             'paye' => $e->paiement_id !== null,
-            'paiement' => $e->paiement_id ? 'Reçu le ' . Carbon::parse($e->recu_le)->format('d/m/Y') : ($e->etablissement_id ? 'À payer' : ''),
+            'paiement' => match (true) {
+                (bool) $e->paiement_id => 'Reçu le ' . Carbon::parse($e->recu_le)->format('d/m/Y'),
+                (bool) $e->etablissement_id => 'À payer',
+                default => '',
+            },
             'reference' => $e->reference,
         ];
     }
@@ -199,31 +203,35 @@ class ExportPaiementSession
             ->filter(fn ($b) => $etablissements->has(($b->etablissement_id ?? 0) . '-' . $b->region_id));
         $communes = Commune::whereIn('id', $lignes->pluck('commune_id')->filter()->unique()->values()->all())->pluck('nom', 'id');
 
-        return $lignes->map(function ($b) use ($etablissements, $regions, $provinces, $communes) {
-            $e = $etablissements[($b->etablissement_id ?? 0) . '-' . $b->region_id];
-            $rib = $e->rib === null || $e->rib === '' ? null : $e->rib;
+        return $lignes->map(fn ($b) => $this->ligneNominative($b, $etablissements[($b->etablissement_id ?? 0) . '-' . $b->region_id], $regions, $provinces, $communes))
+            ->sortBy([['region', 'asc'], ['province', 'asc'], ['etablissement', 'asc'], ['nom', 'asc'], ['prenom', 'asc']])->values();
+    }
 
-            return [
-                'niveau' => null,
-                'region' => $regions[$b->region_id] ?? 'Région non renseignée',
-                'province' => $provinces[$e->province_id] ?? '',
-                'etablissement' => $b->etablissement_id ? $e->nom : 'Établissement non renseigné',
-                'banque' => $e->banque,
-                'rib' => $b->etablissement_id ? ($rib ?? 'RIB manquant') : '',
-                'code' => $b->code,
-                'nom' => $b->nom,
-                'prenom' => $b->prenom,
-                'sexe' => Oev::SEXES[$b->sexe] ?? $b->sexe,
-                'date_naissance' => $b->date_naissance ? Carbon::parse($b->date_naissance)->format('d/m/Y') : null,
-                'commune' => $communes[$b->commune_id] ?? null,
-                'type_appui' => SessionParrainage::TYPES_APPUI[$b->type_appui] ?? $b->type_appui,
-                'classe' => $b->classe ?: ($b->formation_filiere ?: '—'),
-                'tuteur' => trim($b->nom_tuteur . ' ' . $b->prenom_tuteur),
-                'telephone_tuteur' => $b->contact_tuteur,
-                'frais_reels' => $b->frais_reels === null ? null : (int) $b->frais_reels,
-                'montant_retenu' => (int) $b->montant_retenu,
-            ];
-        })->sortBy([['region', 'asc'], ['province', 'asc'], ['etablissement', 'asc'], ['nom', 'asc'], ['prenom', 'asc']])->values();
+    /** Ligne d'un OEV retenu ($b), avec son établissement ($e). */
+    private function ligneNominative(object $b, object $e, Collection $regions, Collection $provinces, Collection $communes): array
+    {
+        $rib = $e->rib === null || $e->rib === '' ? null : $e->rib;
+
+        return [
+            'niveau' => null,
+            'region' => $regions[$b->region_id] ?? 'Région non renseignée',
+            'province' => $provinces[$e->province_id] ?? '',
+            'etablissement' => $b->etablissement_id ? $e->nom : 'Établissement non renseigné',
+            'banque' => $e->banque,
+            'rib' => $b->etablissement_id ? ($rib ?? 'RIB manquant') : '',
+            'code' => $b->code,
+            'nom' => $b->nom,
+            'prenom' => $b->prenom,
+            'sexe' => Oev::SEXES[$b->sexe] ?? $b->sexe,
+            'date_naissance' => $b->date_naissance ? Carbon::parse($b->date_naissance)->format('d/m/Y') : null,
+            'commune' => $communes[$b->commune_id] ?? null,
+            'type_appui' => SessionParrainage::TYPES_APPUI[$b->type_appui] ?? $b->type_appui,
+            'classe' => $b->classe ?: ($b->formation_filiere ?: '—'),
+            'tuteur' => trim($b->nom_tuteur . ' ' . $b->prenom_tuteur),
+            'telephone_tuteur' => $b->contact_tuteur,
+            'frais_reels' => $b->frais_reels === null ? null : (int) $b->frais_reels,
+            'montant_retenu' => (int) $b->montant_retenu,
+        ];
     }
 
     /** OEV d'une région avec le sous-total de chaque établissement et le total de la région. */

@@ -32,19 +32,22 @@
         <p class="text-muted mb-0">Cliquez sur une session pour ouvrir sa fiche et la liste de ses OEV.</p>
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('parrainage.sessions.index') }}">
-        <select class="form-select form-select-sm w-auto" name="annee" aria-label="Filtrer par année" onchange="this.form.submit()">
+        <label class="visually-hidden" for="filtre-annee">Filtrer par année</label>
+        <select id="filtre-annee" class="form-select form-select-sm w-auto" name="annee" onchange="this.form.submit()">
           <option value="">Toutes les années</option>
           @foreach ($annees as $annee)
             <option value="{{ $annee }}" @selected($filtres['annee'] === $annee)>{{ $annee }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="type_appui" aria-label="Filtrer par type d’appui" onchange="this.form.submit()">
+        <label class="visually-hidden" for="filtre-type-appui">Filtrer par type d’appui</label>
+        <select id="filtre-type-appui" class="form-select form-select-sm w-auto" name="type_appui" onchange="this.form.submit()">
           <option value="">Tous les types</option>
           @foreach (SessionParrainage::TYPES_APPUI as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['type_appui'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
-        <select class="form-select form-select-sm w-auto" name="etat" aria-label="Filtrer par état" onchange="this.form.submit()">
+        <label class="visually-hidden" for="filtre-etat">Filtrer par état</label>
+        <select id="filtre-etat" class="form-select form-select-sm w-auto" name="etat" onchange="this.form.submit()">
           <option value="">Tous les états</option>
           @foreach (SessionParrainage::ETATS as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['etat'] === $cle)>{{ $libelle }}</option>

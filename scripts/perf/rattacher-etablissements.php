@@ -7,7 +7,7 @@
  *   php scripts/perf/rattacher-etablissements.php
  */
 
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $pdo = perf_pdo();
 $debut = microtime(true);

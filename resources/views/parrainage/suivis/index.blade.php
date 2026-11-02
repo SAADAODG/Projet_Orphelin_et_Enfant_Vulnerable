@@ -96,14 +96,17 @@
           <input class="form-control" name="q" type="search" value="{{ $f['q'] }}" placeholder="Code OEV, nom, prénom…" aria-label="Rechercher un OEV parrainé">
         </div>
         <div class="suivi-filtres">
-          <select class="form-select" name="annee" aria-label="Année scolaire">
+          <label class="visually-hidden" for="filtre-annee">Année scolaire</label>
+          <select id="filtre-annee" class="form-select" name="annee">
             @foreach ($annees as $annee)<option value="{{ $annee }}" @selected($f['annee'] === $annee)>{{ $annee }}</option>@endforeach
           </select>
-          <select class="form-select" name="session" aria-label="Session">
+          <label class="visually-hidden" for="filtre-session">Session</label>
+          <select id="filtre-session" class="form-select" name="session">
             <option value="">Toutes les sessions</option>
             @foreach ($sessions as $s)<option value="{{ $s->id }}" @selected($f['session'] === $s->id)>Session n°{{ $s->numero }}</option>@endforeach
           </select>
-          <select class="form-select" name="type" aria-label="Type d’appui">
+          <label class="visually-hidden" for="filtre-type">Type d’appui</label>
+          <select id="filtre-type" class="form-select" name="type">
             <option value="">Tous les appuis</option>
             <option value="{{ SessionParrainage::TYPE_SCOLAIRE }}" @selected($f['type'] === SessionParrainage::TYPE_SCOLAIRE)>Scolaire</option>
             <option value="{{ SessionParrainage::TYPE_FORMATION }}" @selected($f['type'] === SessionParrainage::TYPE_FORMATION)>Formation professionnelle</option>

@@ -63,19 +63,23 @@
       ])
       <div class="d-flex flex-wrap gap-2 mt-2">
         <input class="form-control form-control-sm" style="max-width: 20rem" type="search" name="q" value="{{ $search }}" placeholder="Rechercher une école ou une CEB" aria-label="Rechercher une école ou une CEB">
-        <select class="form-select form-select-sm" style="max-width: 14rem" name="nature" aria-label="Nature">
+        <label class="visually-hidden" for="filtre-nature">Nature</label>
+        <select id="filtre-nature" class="form-select form-select-sm" style="max-width: 14rem" name="nature">
           <option value="">Écoles et centres</option>
           @foreach (Ecole::NATURES as $cle => $libelle)<option value="{{ $cle }}" @selected(($filtres['nature'] ?? '') === $cle)>{{ $libelle }}</option>@endforeach
         </select>
-        <select class="form-select form-select-sm" style="max-width: 10rem" name="rib" aria-label="RIB">
+        <label class="visually-hidden" for="filtre-rib">RIB</label>
+        <select id="filtre-rib" class="form-select form-select-sm" style="max-width: 10rem" name="rib">
           <option value="">Tous les RIB</option>
           <option value="manquant" @selected(($filtres['rib'] ?? '') === 'manquant')>RIB manquant</option>
         </select>
-        <select class="form-select form-select-sm" style="max-width: 12rem" name="statut" aria-label="Statut">
+        <label class="visually-hidden" for="filtre-statut">Statut</label>
+        <select id="filtre-statut" class="form-select form-select-sm" style="max-width: 12rem" name="statut">
           <option value="">Tous les statuts</option>
           @foreach (Ecole::STATUTS as $cle => $libelle)<option value="{{ $cle }}" @selected(($filtres['statut'] ?? '') === $cle)>{{ $libelle }}</option>@endforeach
         </select>
-        <select class="form-select form-select-sm" style="max-width: 12rem" name="type" aria-label="Type">
+        <label class="visually-hidden" for="filtre-type">Type</label>
+        <select id="filtre-type" class="form-select form-select-sm" style="max-width: 12rem" name="type">
           <option value="">Tous les types</option>
           @foreach (Ecole::TYPES as $cle => $libelle)<option value="{{ $cle }}" @selected(($filtres['type'] ?? '') === $cle)>{{ $libelle }}</option>@endforeach
         </select>

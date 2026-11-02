@@ -242,35 +242,9 @@ class ExtractionsParrainage
             ->when(isset($f['age_max']), fn ($q) => $q->whereDate('date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)));
 
         if ($f['nature']) {
-            $requete->whereNotIn('id', AppuiPartenaire::where('annee', $f['annee'])->where('nature_appui_id', $f['nature']->id)->select('oev_id'));
-            // Nature financée par l'État : les bénéficiaires des sessions de l'année sont aussi exclus
-            if ($f['nature']->scolaire && $this->source->disponible()) {
-                $sessions = SessionParrainage::where('annee', $f['annee'])->get();
-                if ($this->source instanceof SourceSelectionEnBase) {
-                    // Listes dans la base : exclusion par « NOT EXISTS », sans charger les bénéficiaires
-                    $code = $f['nature']->code;
-                    $requete->whereNotExists(DB::query()->fromSub($this->source->requeteListeDefinitive($sessions), 'd')
-                        ->select(DB::raw(1))->whereColumn('d.oev_id', 'oevs.id')
-                        ->where(fn ($q) => $q->whereNull('d.type_appui')->orWhere('d.type_appui', $code)));
-                } else {
-                    $etat = $sessions->flatMap(fn ($s) => $this->source->listeDefinitive($s))
-                        ->filter(fn ($b) => ($b['type_appui'] ?? $f['nature']->code) === $f['nature']->code)
-                        ->pluck('oev_id')
-                        ->unique();
-                    foreach ($etat->chunk(self::PAQUET) as $paquet) {
-                        $requete->whereNotIn('id', $paquet->values()->all());
-                    }
-                }
-            }
+            $this->exclureDejaAppuyes($requete, $f['annee'], $f['nature']);
         }
-
-        // Priorité du cas (élevée d'abord), puis nom et prénom accolés, comparés octet par octet (comme strcmp)
-        $binaire = $requete->getConnection()->getDriverName() === 'pgsql' ? 'COLLATE "C"' : 'COLLATE BINARY';
-        $priorite = collect(self::ORDRE_PRIORITE)->map(fn ($rang, $code) => "WHEN '{$code}' THEN {$rang}")->implode(' ');
-        $ordonnee = (clone $requete)
-            ->orderByRaw("CASE niveau_priorite {$priorite} ELSE 3 END")
-            ->orderByRaw("(COALESCE(nom, '') || COALESCE(prenom, '')) {$binaire}")
-            ->orderBy('id');
+        $ordonnee = $this->ordonner(clone $requete);
 
         $besoin = fn (Oev $oev) => $oev->setAttribute('besoin_estime', $oev->frais_scolarite);
 
@@ -280,6 +254,46 @@ class ExtractionsParrainage
             // Aperçu : les premiers OEV seulement, lus directement dans l'ordre
             'apercu' => fn (int $nombre) => (clone $ordonnee)->with(['commune', 'province', 'region'])->limit($nombre)->get()->map($besoin)->all(),
         ];
+    }
+
+    /**
+     * Exclut les OEV qui ont déjà un appui partenaire de cette nature pour l'année ; pour une nature financée
+     * par l'État, aussi les bénéficiaires des sessions de l'année.
+     */
+    private function exclureDejaAppuyes(Builder $requete, string $annee, NatureAppui $nature): void
+    {
+        $requete->whereNotIn('id', AppuiPartenaire::where('annee', $annee)->where('nature_appui_id', $nature->id)->select('oev_id'));
+        if (! $nature->scolaire || ! $this->source->disponible()) {
+            return;
+        }
+
+        $sessions = SessionParrainage::where('annee', $annee)->get();
+        if ($this->source instanceof SourceSelectionEnBase) {
+            // Listes dans la base : exclusion par « NOT EXISTS », sans charger les bénéficiaires
+            $requete->whereNotExists(DB::query()->fromSub($this->source->requeteListeDefinitive($sessions), 'd')
+                ->select(DB::raw(1))->whereColumn('d.oev_id', 'oevs.id')
+                ->where(fn ($q) => $q->whereNull('d.type_appui')->orWhere('d.type_appui', $nature->code)));
+        } else {
+            $etat = $sessions->flatMap(fn ($s) => $this->source->listeDefinitive($s))
+                ->filter(fn ($b) => ($b['type_appui'] ?? $nature->code) === $nature->code)
+                ->pluck('oev_id')
+                ->unique();
+            foreach ($etat->chunk(self::PAQUET) as $paquet) {
+                $requete->whereNotIn('id', $paquet->values()->all());
+            }
+        }
+    }
+
+    /** Priorité du cas (élevée d'abord), puis nom et prénom accolés, comparés octet par octet (comme strcmp). */
+    private function ordonner(Builder $requete): Builder
+    {
+        $binaire = $requete->getConnection()->getDriverName() === 'pgsql' ? 'COLLATE "C"' : 'COLLATE BINARY';
+        $priorite = collect(self::ORDRE_PRIORITE)->map(fn ($rang, $code) => "WHEN '{$code}' THEN {$rang}")->implode(' ');
+
+        return $requete
+            ->orderByRaw("CASE niveau_priorite {$priorite} ELSE 3 END")
+            ->orderByRaw("(COALESCE(nom, '') || COALESCE(prenom, '')) {$binaire}")
+            ->orderBy('id');
     }
 
     /** Taille des listes d'identifiants envoyées à la base, et des paquets d'OEV lus pour un export. */
@@ -310,15 +324,23 @@ class ExtractionsParrainage
             'region' => ['Région', fn (Oev $o) => $o->region?->nom, false],
             'province' => ['Province', fn (Oev $o) => $o->province?->nom, false],
             'commune' => ['Commune', fn (Oev $o) => $o->commune?->nom, false],
-            'cycle' => ['Cycle ou filière', fn (Oev $o) => $o->formation_professionnelle
-                ? 'Formation professionnelle' . ($o->formation_filiere ? " ({$o->formation_filiere})" : '')
-                : (Oev::NIVEAUX_ETUDE[$o->niveau_etude] ?? 'Non scolarisé ou non précisé'), false],
+            'cycle' => ['Cycle ou filière', fn (Oev $o) => self::cycle($o), false],
             'classe' => ['Classe', fn (Oev $o) => Oev::toutesLesClasses()[$o->classe] ?? $o->classe, false],
             'besoin' => ['Besoin financier estimé (FCFA)', fn (Oev $o) => (int) $o->besoin_estime, false],
             'priorite' => ['Priorité', fn (Oev $o) => Oev::NIVEAUX[$o->niveau_priorite] ?? 'Non précisée', false],
             'tuteur' => ['Parent / tuteur', fn (Oev $o) => trim($o->nom_tuteur . ' ' . $o->prenom_tuteur), true],
             'telephone_tuteur' => ['Téléphone du tuteur', fn (Oev $o) => $o->contact_tuteur, true],
         ];
+    }
+
+    /** Formation professionnelle (avec sa filière) ou niveau d'étude. */
+    private static function cycle(Oev $o): string
+    {
+        if (! $o->formation_professionnelle) {
+            return Oev::NIVEAUX_ETUDE[$o->niveau_etude] ?? 'Non scolarisé ou non précisé';
+        }
+
+        return 'Formation professionnelle' . ($o->formation_filiere ? " ({$o->formation_filiere})" : '');
     }
 
     /** Liste anonymisée par défaut. */

@@ -10,8 +10,8 @@
  * Tableau récapitulatif trié par nombre de requêtes SQL ; résultats complets dans le fichier JSON.
  */
 
-require __DIR__ . '/_amorce.php';
-require __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
 
 $memoire = getenv('PERF_MEMORY_LIMIT') ?: '128M';   // valeur de php.ini pour le serveur web
 $duree = (int) (getenv('PERF_MAX_EXECUTION') ?: 30); // max_execution_time de php.ini

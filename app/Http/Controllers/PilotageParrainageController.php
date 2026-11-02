@@ -158,16 +158,10 @@ class PilotageParrainageController extends Controller
 
         $donnees = array_values(array_intersect(array_keys(ExtractionsParrainage::donneesListeParrain()),
             array_map('strval', (array) $request->input('donnees', ExtractionsParrainage::DONNEES_PARRAIN_PAR_DEFAUT))));
-        if (! $donnees) {
-            return back()->withInput()->withErrors(['donnees' => 'Cochez au moins une donnée à extraire.']);
+        if ($erreur = $this->erreurDonneesParrain($request, $donnees)) {
+            return back()->withInput()->withErrors($erreur);
         }
         $identiteComplete = ExtractionsParrainage::comporteIdentite($donnees);
-        if ($identiteComplete && $utilisateur->niveau() !== User::NIVEAU_CENTRAL) {
-            return back()->withInput()->withErrors(['donnees' => 'Les données d’identité des enfants (nom, code, date de naissance, tuteur) sont réservées au niveau central.']);
-        }
-        if ($identiteComplete && ! $request->boolean('confirmation_identite')) {
-            return back()->withInput()->withErrors(['confirmation_identite' => 'Confirmez l’extraction des données d’identité des enfants.']);
-        }
 
         $parrain = Parrain::with('engagements')->findOrFail($request->integer('parrain_id'));
         $f = $this->filtresListeParrain($request, $parrain);
@@ -207,6 +201,25 @@ class PilotageParrainageController extends Controller
     }
 
     /**
+     * Données cochées refusées : aucune donnée, données d'identité hors niveau central, ou sans confirmation.
+     *
+     * @return array<string, string>|null champ => message d'erreur
+     */
+    private function erreurDonneesParrain(Request $request, array $donnees): ?array
+    {
+        $identiteComplete = ExtractionsParrainage::comporteIdentite($donnees);
+
+        return match (true) {
+            ! $donnees => ['donnees' => 'Cochez au moins une donnée à extraire.'],
+            $identiteComplete && $request->user()->niveau() !== User::NIVEAU_CENTRAL
+                => ['donnees' => 'Les données d’identité des enfants (nom, code, date de naissance, tuteur) sont réservées au niveau central.'],
+            $identiteComplete && ! $request->boolean('confirmation_identite')
+                => ['confirmation_identite' => 'Confirmez l’extraction des données d’identité des enfants.'],
+            default => null,
+        };
+    }
+
+    /**
      * Filtres de la liste pour un parrain. Au premier affichage (pas de « filtre » dans la requête),
      * la liste est préfiltrée sur la première nature de ses engagements, dans toutes les régions.
      */
@@ -214,7 +227,7 @@ class PilotageParrainageController extends Controller
     {
         $naturesParrain = $this->extractions->naturesParrain($parrain);
         $premierAffichage = ! $request->has('filtre');
-        $natureId = $premierAffichage ? ($naturesParrain[0] ?? null) : ($request->integer('nature_id') ?: null);
+        $natureId = $premierAffichage ? ($naturesParrain[0] ?? null) : $request->integer('nature_id');
         $annee = (string) $request->input('annee', '');
         $plusieurs = fn (string $cle, array $liste) => array_values(array_unique(array_filter(
             array_map('strval', (array) $request->input($cle, [])),

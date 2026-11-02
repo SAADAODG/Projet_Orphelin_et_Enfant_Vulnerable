@@ -44,13 +44,15 @@
           <i class="bi bi-search" aria-hidden="true"></i>
           <input class="form-control" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Nom ou contact" aria-label="Rechercher un parrain">
         </div>
-        <select class="form-select" name="type" aria-label="Filtrer par type" onchange="this.form.submit()">
+        <label class="visually-hidden" for="filtre-type">Filtrer par type</label>
+        <select id="filtre-type" class="form-select" name="type" onchange="this.form.submit()">
           <option value="">Tous les types</option>
           @foreach (Parrain::TYPES as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['type'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
-        <select class="form-select" name="actif" aria-label="Filtrer par statut" onchange="this.form.submit()">
+        <label class="visually-hidden" for="filtre-actif">Filtrer par statut</label>
+        <select id="filtre-actif" class="form-select" name="actif" onchange="this.form.submit()">
           <option value="">Actifs et inactifs</option>
           <option value="1" @selected($filtres['actif'] === '1')>Actifs</option>
           <option value="0" @selected($filtres['actif'] === '0')>Inactifs</option>

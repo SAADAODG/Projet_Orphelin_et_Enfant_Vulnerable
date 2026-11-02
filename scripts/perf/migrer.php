@@ -6,7 +6,7 @@
  *   php scripts/perf/migrer.php
  */
 
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $app = perf_application();
 $debut = microtime(true);

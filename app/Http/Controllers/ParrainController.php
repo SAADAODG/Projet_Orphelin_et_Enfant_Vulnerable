@@ -9,6 +9,7 @@ use App\Models\JournalActivite;
 use App\Models\NatureAppui;
 use App\Models\Parrain;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -49,7 +50,7 @@ class ParrainController extends Controller
             'parrains' => $parrains,
             'filtres' => $filtres,
             // Fenêtre « Nouveau parrain »
-            'formulaire' => $request->user()->can('gérer parrains') ? $this->donneesFormulaire(new Parrain(['actif' => true])) : null,
+            'formulaire' => $request->user()->can(Permissions::GERER_PARRAINS) ? $this->donneesFormulaire(new Parrain(['actif' => true])) : null,
         ]);
     }
 
@@ -73,7 +74,7 @@ class ParrainController extends Controller
         return redirect()->route('parrainage.parrains.show', $parrain)->with('success', "Parrain « {$parrain->nom} » enregistré.");
     }
 
-    public function show(Request $request, Parrain $parrain): View
+    public function show(Parrain $parrain): View
     {
         $parrain->load('engagements');
         // Statistiques limitées aux OEV de la zone de l'utilisateur

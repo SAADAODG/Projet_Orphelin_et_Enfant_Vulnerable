@@ -85,9 +85,6 @@ trait CloisonneParZone
 
     private function utilisateurConnecte(): User
     {
-        /** @var User $utilisateur */
-        $utilisateur = auth()->user();
-
-        return $utilisateur;
+        return auth()->user();
     }
 }

@@ -77,7 +77,8 @@
       <input class="form-control" name="q" type="search" value="{{ $filtres['recherche'] }}" placeholder="N° de dossier, code OEV, nom, prénom, tuteur, localité…" aria-label="Rechercher un dossier">
     </div>
     @include('partials.filtre-localite', ['localites' => $localites, 'regionId' => $filtres['region_id'], 'provinceId' => $filtres['province_id']])
-    <select class="form-select" name="statut" aria-label="Filtrer par statut de l’enfant" onchange="this.form.submit()">
+    <label class="visually-hidden" for="filtre-statut">Filtrer par statut de l’enfant</label>
+    <select id="filtre-statut" class="form-select" name="statut" onchange="this.form.submit()">
       <option value="">Tous les statuts</option>
       @foreach (Oev::STATUTS as $cle => $label)
         <option value="{{ $cle }}" @selected($filtres['statut'] === $cle)>{{ $label }}</option>

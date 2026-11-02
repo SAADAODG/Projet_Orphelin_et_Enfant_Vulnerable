@@ -9,6 +9,7 @@ use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\User;
 use App\Support\Montant;
+use App\Support\Permissions;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -92,30 +93,10 @@ class ParrainageService
         }
 
         $positions = array_flip(array_keys(SessionParrainage::ETATS));
-        $retourArriere = $positions[$nouvelEtat] < $positions[$ancienEtat];
-
-        if ($retourArriere) {
-            if (! $utilisateur->supervise()) {
-                throw new TransitionSessionInvalide('Seul un administrateur peut ramener une session à un état antérieur.');
-            }
-            if ($motif === null) {
-                throw new TransitionSessionInvalide('Indiquez le motif du retour à un état antérieur.');
-            }
+        if ($positions[$nouvelEtat] < $positions[$ancienEtat]) {
+            $this->verifierRetourArriere($utilisateur, $motif);
         } else {
-            if (! $utilisateur->can('gérer sessions parrainage')) {
-                throw new TransitionSessionInvalide('Vous n’avez pas le droit de changer l’état d’une session.');
-            }
-            if ($nouvelEtat !== SessionParrainage::etatSuivant($ancienEtat)) {
-                throw new TransitionSessionInvalide(sprintf(
-                    'Une session « %s » ne peut pas passer directement à « %s ».',
-                    $session->libelleEtat(),
-                    SessionParrainage::ETATS[$nouvelEtat],
-                ));
-            }
-            // La validation arrête la liste définitive : elle doit compter au moins un bénéficiaire retenu
-            if ($nouvelEtat === SessionParrainage::ETAT_VALIDEE && ! $session->beneficiaires()->retenus()->exists()) {
-                throw new TransitionSessionInvalide('La session ne peut pas être validée : aucun OEV n’est retenu sur sa liste (onglet « Sélection »).');
-            }
+            $this->verifierAvancee($session, $nouvelEtat, $utilisateur);
         }
 
         DB::transaction(function () use ($session, $nouvelEtat, $ancienEtat, $utilisateur, $motif) {
@@ -135,6 +116,36 @@ class ParrainageService
         });
 
         return $session->refresh();
+    }
+
+    /** Retour à un état antérieur : administrateurs seulement, avec un motif. */
+    private function verifierRetourArriere(User $utilisateur, ?string $motif): void
+    {
+        if (! $utilisateur->supervise()) {
+            throw new TransitionSessionInvalide('Seul un administrateur peut ramener une session à un état antérieur.');
+        }
+        if ($motif === null) {
+            throw new TransitionSessionInvalide('Indiquez le motif du retour à un état antérieur.');
+        }
+    }
+
+    /** Passage à l'état suivant (une étape à la fois), par un gestionnaire des sessions. */
+    private function verifierAvancee(SessionParrainage $session, string $nouvelEtat, User $utilisateur): void
+    {
+        if (! $utilisateur->can(Permissions::GERER_SESSIONS_PARRAINAGE)) {
+            throw new TransitionSessionInvalide('Vous n’avez pas le droit de changer l’état d’une session.');
+        }
+        if ($nouvelEtat !== SessionParrainage::etatSuivant($session->etat)) {
+            throw new TransitionSessionInvalide(sprintf(
+                'Une session « %s » ne peut pas passer directement à « %s ».',
+                $session->libelleEtat(),
+                SessionParrainage::ETATS[$nouvelEtat],
+            ));
+        }
+        // La validation arrête la liste définitive : elle doit compter au moins un bénéficiaire retenu
+        if ($nouvelEtat === SessionParrainage::ETAT_VALIDEE && ! $session->beneficiaires()->retenus()->exists()) {
+            throw new TransitionSessionInvalide('La session ne peut pas être validée : aucun OEV n’est retenu sur sa liste (onglet « Sélection »).');
+        }
     }
 
     /**

@@ -29,14 +29,15 @@
         <p class="text-muted mb-0">{{ $provinces->total() }} province(s) enregistrée(s).</p>
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('localites.provinces.index') }}">
-        <select class="form-select form-select-sm" name="region_id" onchange="this.form.submit()" aria-label="Filtrer par région">
+        <label class="visually-hidden" for="filtre-region-id">Filtrer par région</label>
+        <select id="filtre-region-id" class="form-select form-select-sm" name="region_id" onchange="this.form.submit()">
           <option value="">Toutes les régions</option>
           @foreach ($regions as $r)
             <option value="{{ $r->id }}" @selected((string) $regionId === (string) $r->id)>{{ $r->nom }}</option>
           @endforeach
         </select>
         <input class="form-control form-control-sm" type="search" name="q" value="{{ $search }}" placeholder="Rechercher une province" aria-label="Rechercher une province">
-        <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-search" aria-hidden="true"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Rechercher"><i class="bi bi-search" aria-hidden="true"></i></button>
       </form>
     </div>
     <div class="table-responsive">
@@ -59,11 +60,11 @@
               <td><span class="badge text-bg-light">{{ $province->communes_count }}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
-                  <a class="btn btn-light btn-sm" href="{{ route('localites.provinces.edit', $province) }}"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                  <a class="btn btn-light btn-sm" href="{{ route('localites.provinces.edit', $province) }}" aria-label="Modifier"><i class="bi bi-pencil" aria-hidden="true"></i></a>
                   <form action="{{ route('localites.provinces.destroy', $province) }}" method="POST" data-confirm="Supprimer la province « {{ $province->nom }} » ?" data-confirm-danger>
                     @csrf
                     @method('DELETE')
-                    <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                    <button class="btn btn-outline-danger btn-sm" type="submit" aria-label="Supprimer"><i class="bi bi-trash" aria-hidden="true"></i></button>
                   </form>
                 </div>
               </td>

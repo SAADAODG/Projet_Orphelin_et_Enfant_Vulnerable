@@ -13,7 +13,7 @@
  */
 
 $t0 = microtime(true);
-require __DIR__ . '/_amorce.php';
+require_once __DIR__ . '/_amorce.php';
 
 $args = array_values(array_filter(array_slice($argv, 1), fn ($a) => $a !== '--json'));
 $json = in_array('--json', $argv, true);
