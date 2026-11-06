@@ -54,11 +54,34 @@ function perf_verifier_base(Illuminate\Foundation\Application $app): void
     }
 }
 
+/**
+ * Mot de passe PostgreSQL : variable PERF_DB_PASSWORD, sinon DB_PASSWORD de .env.perf, sinon de .env.
+ * Aucun mot de passe n'est écrit dans les scripts.
+ */
+function perf_mot_de_passe_bd(): string
+{
+    if (($motDePasse = getenv('PERF_DB_PASSWORD')) !== false) {
+        return $motDePasse;
+    }
+    $racine = dirname(__DIR__, 2);
+    require_once $racine . '/vendor/autoload.php';
+    foreach (['.env.perf', '.env'] as $fichier) {
+        if (is_file("{$racine}/{$fichier}")) {
+            $valeurs = Dotenv\Dotenv::parse((string) file_get_contents("{$racine}/{$fichier}"));
+            if (isset($valeurs['DB_PASSWORD'])) {
+                return $valeurs['DB_PASSWORD'];
+            }
+        }
+    }
+    fwrite(STDERR, "Mot de passe PostgreSQL introuvable : définissez PERF_DB_PASSWORD ou DB_PASSWORD dans .env.perf.\n");
+    exit(2);
+}
+
 /** Connexion PDO directe à la base _perf (générateur SQL), sans passer par Laravel. */
 function perf_pdo(?string $base = null): PDO
 {
     $base ??= perf_nom_base();
-    $pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname={$base}", 'postgres', getenv('PERF_DB_PASSWORD') ?: '1234', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname={$base}", 'postgres', perf_mot_de_passe_bd(), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $reelle = $pdo->query('select current_database()')->fetchColumn();
     if (! str_ends_with((string) $reelle, '_perf')) {
         fwrite(STDERR, "REFUS : base « {$reelle} ».\n");

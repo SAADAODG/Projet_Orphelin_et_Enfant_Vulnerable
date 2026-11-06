@@ -3,9 +3,12 @@
 .env
 .env.backup
 .env.production
+.env.perf
 .phpactor.json
 .phpunit.result.cache
 /coverage.xml
+/scripts/perf/k6/resultats/*
+!/scripts/perf/k6/resultats/.gitkeep
 /.scannerwork
 /.codex
 /.cursor/

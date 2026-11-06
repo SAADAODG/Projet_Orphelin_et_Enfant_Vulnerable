@@ -85,6 +85,10 @@ $pages = [
     'Pilotage : extractions' => "/admin/parrainage/pilotage/extractions?parrain_id={$parrain}",
     'Export paiement (Excel)' => "/admin/parrainage/pilotage/extractions/paiement?session_id={$session}&format=xlsx",
     'Export liste parrain (Excel)' => "/admin/parrainage/pilotage/extractions/parrain?parrain_id={$parrain}&format=xlsx&filtre=1&source=eligibles",
+    'Paiement de session' => "/admin/parrainage/sessions/{$session}/paiements",
+    'Export paiement de session (Excel)' => "/admin/parrainage/sessions/{$session}/paiements/export?format=xlsx&feuilles[]=etablissements&feuilles[]=regions&feuilles[]=nominatif",
+    'Âge des OEV' => '/admin/parametres/age-oev',
+    'Natures d’appui' => '/admin/parametres/natures-appui',
 ];
 if ($filtre) {
     $pages = array_filter($pages, fn ($u, $nom) => stripos($nom, $filtre) !== false, ARRAY_FILTER_USE_BOTH);

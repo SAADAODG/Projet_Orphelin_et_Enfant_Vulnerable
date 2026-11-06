@@ -146,5 +146,7 @@ $etape('plaintes', "insert into plaintes (reference, objet, description, region_
         'Description perf', o.region_id, o.province_id, o.commune_id, true, (array['nouvelle','en_cours','traitee'])[1 + o.id % 3], o.created_at, o.created_at
     from oevs o where {$plage} and o.id % 20 = 0");
 
-$etape('ANALYZE', 'analyze');
+// VACUUM en plus d'ANALYZE : sans carte de visibilité, les comptages par index (index-only scan) relisent la table,
+// ce que l'autovacuum évite en production (mesuré : tableau de bord 3,8 s sans VACUUM, 1,2 s avec)
+$etape('VACUUM ANALYZE', 'vacuum analyze');
 printf("Terminé en %.1f s. Dossiers OEV dans la base : %s\n", microtime(true) - $debutTotal, number_format((int) $pdo->query('select count(*) from oevs')->fetchColumn(), 0, ',', ' '));

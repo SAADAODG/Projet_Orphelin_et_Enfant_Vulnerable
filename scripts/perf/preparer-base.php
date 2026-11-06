@@ -12,7 +12,7 @@ require_once __DIR__ . '/_amorce.php';
 $base = perf_nom_base();
 
 // Création de la base si elle n'existe pas (connexion à « postgres », jamais à la base de développement)
-$admin = new PDO('pgsql:host=127.0.0.1;port=5432;dbname=postgres', 'postgres', getenv('PERF_DB_PASSWORD') ?: '1234', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$admin = new PDO('pgsql:host=127.0.0.1;port=5432;dbname=postgres', 'postgres', perf_mot_de_passe_bd(), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $requete = $admin->prepare('select 1 from pg_database where datname = ?');
 $requete->execute([$base]);
 if (! $requete->fetchColumn()) {
