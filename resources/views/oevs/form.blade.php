@@ -625,8 +625,9 @@
                                         ])
                                         <div class="form-check mt-1">
                                             <input type="hidden" name="date_naissance_estimee" value="0">
+                                            @php $dateEstimee = $vBool('date_naissance_estimee') === '1'; @endphp
                                             <input class="form-check-input" type="checkbox" id="date_naissance_estimee"
-                                                name="date_naissance_estimee" value="1" @checked($vBool('date_naissance_estimee') === '1')>
+                                                name="date_naissance_estimee" value="1" @checked($dateEstimee)>
                                             <label class="form-check-label small" for="date_naissance_estimee">Date estimée
                                                 (inscrire 01/01/année)</label>
                                         </div>
