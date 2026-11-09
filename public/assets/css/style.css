@@ -98,7 +98,7 @@ a {
   border-radius: 8px;
   overflow: hidden;
   background: #ffffff;
-  color: #ffffff;
+  color: var(--admin-primary);
   font-size: 1.1rem;
 }
 
@@ -1763,13 +1763,13 @@ html:not([data-theme="dark"]) {
 
 .sig-chip--success.active {
   border-color: #198754;
-  color: #198754;
+  color: #146c43;
   background: #e8f5ee;
 }
 
 .sig-chip--danger.active {
   border-color: #dc3545;
-  color: #dc3545;
+  color: #b02a37;
   background: #fdecee;
 }
 
@@ -2089,13 +2089,13 @@ html:not([data-theme="dark"]) {
 .sig-decision--oui input:checked + span {
   border-color: #198754;
   background: #e8f5ee;
-  color: #198754;
+  color: #146c43;
 }
 
 .sig-decision--non input:checked + span {
   border-color: #dc3545;
   background: #fdecee;
-  color: #dc3545;
+  color: #b02a37;
 }
 
 .sig-decision input:focus-visible + span {

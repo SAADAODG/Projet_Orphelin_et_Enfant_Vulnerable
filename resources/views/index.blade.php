@@ -140,7 +140,7 @@
         @foreach ($circuit as $etape)
           <div class="db-barre db-{{ $etape['couleur'] }}">
             <span class="db-barre-libelle" title="{{ $etape['libelle'] }}">{{ $etape['libelle'] }}</span>
-            <span class="db-piste" role="img" aria-label="{{ $etape['libelle'] }} : {{ $etape['total'] }}"><span style="--v: {{ round($etape['total'] / $maxCircuit * 100, 1) }}%" @if (! $etape['total']) data-zero @endif></span></span>
+            <span class="db-piste" aria-hidden="true"><span style="--v: {{ round($etape['total'] / $maxCircuit * 100, 1) }}%" @if (! $etape['total']) data-zero @endif></span></span>
             <span class="db-barre-valeur">{{ $etape['total'] }}</span>
           </div>
         @endforeach
@@ -191,7 +191,8 @@
             <span class="db-success"><i></i>OEV intégrés</span>
           </div>
         </div>
-        <div class="db-colonnes" role="img" aria-label="{{ $evolution->map(fn ($m) => $m['moisComplet'] . ' : ' . ($avecSignalements ? "{$m['signalements']} signalement(s), " : '') . "{$m['integres']} OEV intégré(s)")->implode(' ; ') }}">
+        <p class="visually-hidden">{{ $evolution->map(fn ($m) => $m['moisComplet'] . ' : ' . ($avecSignalements ? "{$m['signalements']} signalement(s), " : '') . "{$m['integres']} OEV intégré(s)")->implode(' ; ') }}</p>
+        <div class="db-colonnes" aria-hidden="true">
           @foreach ($evolution as $mois)
             <div class="db-mois" title="{{ $mois['moisComplet'] }}">
               <div class="db-mois-barres">
@@ -220,7 +221,7 @@
         @foreach ($oevIntegres['parSexe'] as $ligne)
           <div class="db-barre db-{{ $loop->first ? 'primary' : 'info' }}">
             <span class="db-barre-libelle">{{ $ligne['libelle'] }}</span>
-            <span class="db-piste" role="img" aria-label="{{ $ligne['libelle'] }} : {{ $ligne['total'] }}"><span style="--v: {{ round($ligne['total'] / $maxIntegres * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
+            <span class="db-piste" aria-hidden="true"><span style="--v: {{ round($ligne['total'] / $maxIntegres * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
             <span class="db-barre-valeur">{{ $ligne['total'] }}</span>
           </div>
         @endforeach
@@ -228,7 +229,7 @@
         @foreach ($oevIntegres['parStatut'] as $ligne)
           <div class="db-barre db-success">
             <span class="db-barre-libelle" title="{{ $ligne['libelle'] }}">{{ $ligne['libelle'] }}</span>
-            <span class="db-piste" role="img" aria-label="{{ $ligne['libelle'] }} : {{ $ligne['total'] }}"><span style="--v: {{ round($ligne['total'] / $maxIntegres * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
+            <span class="db-piste" aria-hidden="true"><span style="--v: {{ round($ligne['total'] / $maxIntegres * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
             <span class="db-barre-valeur">{{ $ligne['total'] }}</span>
           </div>
         @endforeach
@@ -294,7 +295,7 @@
         @foreach (Signalement::STATUTS as $statut => $libelle)
           <div class="db-barre db-{{ Signalement::STATUTS_COULEURS[$statut] }}">
             <span class="db-barre-libelle">{{ $libelle }}</span>
-            <span class="db-piste" role="img" aria-label="{{ $libelle }} : {{ $signalements[$statut] ?? 0 }}"><span style="--v: {{ round(($signalements[$statut] ?? 0) / max(1, $signalements->max()) * 100, 1) }}%" @if (! ($signalements[$statut] ?? 0)) data-zero @endif></span></span>
+            <span class="db-piste" aria-hidden="true"><span style="--v: {{ round(($signalements[$statut] ?? 0) / max(1, $signalements->max()) * 100, 1) }}%" @if (! ($signalements[$statut] ?? 0)) data-zero @endif></span></span>
             <span class="db-barre-valeur">{{ $signalements[$statut] ?? 0 }}</span>
           </div>
         @endforeach
@@ -311,7 +312,7 @@
         @foreach (Plainte::STATUTS as $statut => $libelle)
           <div class="db-barre db-{{ [Plainte::NOUVELLE => 'danger', Plainte::EN_COURS => 'warning', Plainte::TRAITEE => 'success'][$statut] }}">
             <span class="db-barre-libelle">{{ $libelle }}</span>
-            <span class="db-piste" role="img" aria-label="{{ $libelle }} : {{ $plaintes[$statut] ?? 0 }}"><span style="--v: {{ round(($plaintes[$statut] ?? 0) / max(1, $plaintes->max()) * 100, 1) }}%" @if (! ($plaintes[$statut] ?? 0)) data-zero @endif></span></span>
+            <span class="db-piste" aria-hidden="true"><span style="--v: {{ round(($plaintes[$statut] ?? 0) / max(1, $plaintes->max()) * 100, 1) }}%" @if (! ($plaintes[$statut] ?? 0)) data-zero @endif></span></span>
             <span class="db-barre-valeur">{{ $plaintes[$statut] ?? 0 }}</span>
           </div>
         @endforeach

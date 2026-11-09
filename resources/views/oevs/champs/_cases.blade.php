@@ -12,7 +12,7 @@
   $conditions = $conditions ?? [];
 @endphp
 <span class="form-label d-block" id="{{ $nom }}-label">{{ $label }} @if ($requis ?? false)<span class="text-danger">*</span>@endif</span>
-<div class="oev-cases" role="group" aria-labelledby="{{ $nom }}-label" @if ($requis ?? false) data-groupe-requis="{{ $nom }}[]" @endif>
+<fieldset class="oev-cases" aria-labelledby="{{ $nom }}-label" @if ($requis ?? false) data-groupe-requis="{{ $nom }}[]" @endif>
   @foreach ($options as $cle => $libelle)
     <span class="oev-case" @isset($conditions[$cle]) data-si="{{ $conditions[$cle] }}" @endisset>
       @if (isset($automatiques[$cle]))
@@ -25,7 +25,7 @@
       @endif
     </span>
   @endforeach
-</div>
+</fieldset>
 @if ($automatiques)
   <div class="form-text"><i class="bi bi-magic" aria-hidden="true"></i> Les situations marquées de cette icône sont cochées automatiquement d’après les réponses précédentes.</div>
 @endif

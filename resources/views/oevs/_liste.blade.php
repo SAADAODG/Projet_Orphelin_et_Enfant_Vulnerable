@@ -113,7 +113,7 @@
           @foreach ($oevs as $oev)
             <tr data-href="{{ route('oevs.show', $oev) }}">
               <td>
-                <a class="oev-code text-decoration-none {{ $oev->code ? '' : 'oev-code--dossier' }}" href="{{ route('oevs.show', $oev) }}" aria-label="Ouvrir le dossier de {{ $oev->nomComplet() }}">{{ $oev->reference() }}</a>
+                <a class="oev-code text-decoration-none {{ $oev->code ? '' : 'oev-code--dossier' }}" href="{{ route('oevs.show', $oev) }}">{{ $oev->reference() }}<span class="visually-hidden"> : ouvrir le dossier de {{ $oev->nomComplet() }}</span></a>
               </td>
               <td>
                 <div class="d-flex align-items-center gap-3">
