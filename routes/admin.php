@@ -1,0 +1,250 @@
+<?php
+
+use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
+use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
+use App\Http\Controllers\AgeOevController;
+use App\Http\Controllers\AppuiPartenaireController;
+use App\Http\Controllers\CommuneController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DesactivationOevController;
+use App\Http\Controllers\EcoleController;
+use App\Http\Controllers\ExtractionController;
+use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ListeReferenceController;
+use App\Http\Controllers\NatureAppuiController;
+use App\Http\Controllers\OevController;
+use App\Http\Controllers\PaiementSessionController;
+use App\Http\Controllers\ParametreController;
+use App\Http\Controllers\ParrainController;
+use App\Http\Controllers\PilotageParrainageController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProvinceController;
+use App\Http\Controllers\QuickLinkController;
+use App\Http\Controllers\RegionController;
+use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\SelectionParrainageController;
+use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SessionParrainageController;
+use App\Http\Controllers\SuiviParrainageController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\VillageController;
+use App\Models\ListeReference;
+use App\Support\Permissions;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Routes de l'administration (Espace Agent & DAPPN)
+|--------------------------------------------------------------------------
+| Chargées par routes/web.php dans le groupe « auth », préfixe /admin.
+*/
+
+Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+// Module « Signalements » : le DP traite ceux de sa province, le DR consulte ceux de sa région
+Route::middleware('can:' . Permissions::VOIR_SIGNALEMENTS)->group(function () {
+    Route::get('/signalements', [AdminSignalementController::class, 'index'])->name('admin.signalements.index');
+    Route::get('/signalements/non-lus', [AdminSignalementController::class, 'nonLus'])->name('admin.signalements.non-lus');
+    Route::get('/signalements/{signalement}', [AdminSignalementController::class, 'show'])->name('admin.signalements.show');
+});
+Route::middleware('can:' . Permissions::TRAITER_SIGNALEMENTS)->group(function () {
+    Route::patch('/signalements/{signalement}/valider', [AdminSignalementController::class, 'valider'])->name('admin.signalements.valider');
+    Route::patch('/signalements/{signalement}/rejeter', [AdminSignalementController::class, 'rejeter'])->name('admin.signalements.rejeter');
+    Route::patch('/signalements/{signalement}/cloturer', [AdminSignalementController::class, 'cloturer'])->name('admin.signalements.cloturer');
+});
+
+// Module « Gestion de plainte » : niveau central
+Route::middleware('can:' . Permissions::VOIR_PLAINTES)->group(function () {
+    Route::get('/plaintes', [AdminPlainteController::class, 'index'])->name('admin.plaintes.index');
+    Route::get('/plaintes/{plainte}', [AdminPlainteController::class, 'show'])->name('admin.plaintes.show');
+});
+Route::patch('/plaintes/{plainte}/statut', [AdminPlainteController::class, 'statut'])->middleware('can:' . Permissions::TRAITER_PLAINTES)->name('admin.plaintes.statut');
+
+// Gestion des utilisateurs
+Route::get('/users', [UserController::class, 'index'])->middleware('can:' . Permissions::VOIR_UTILISATEURS)->name('users.index');
+Route::post('/users', [UserController::class, 'store'])->middleware('can:' . Permissions::CREER_UTILISATEURS)->name('users.store');
+Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->middleware('can:' . Permissions::MODIFIER_UTILISATEURS)->name('users.update');
+Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('can:' . Permissions::SUPPRIMER_UTILISATEURS)->name('users.destroy');
+Route::middleware('role:superAdmin|administrateur')->group(function () {
+    Route::get('/roles-permissions', [RolePermissionController::class, 'index'])->name('roles-permissions.index');
+    Route::post('/roles-permissions', [RolePermissionController::class, 'store'])->name('roles-permissions.store');
+    Route::put('/roles-permissions/{role}', [RolePermissionController::class, 'update'])->name('roles-permissions.update');
+    Route::delete('/roles-permissions/{role}', [RolePermissionController::class, 'destroy'])->name('roles-permissions.destroy');
+});
+
+// --- Dossiers enfants / OEV : DP (constituer) → DR (valider) → niveau central (intégrer) ---
+Route::middleware('can:' . Permissions::CONSTITUER_DOSSIERS)->group(function () {
+    Route::get('/oevs', [OevController::class, 'index'])->name('oevs.index');
+    Route::get('/oevs/create', [OevController::class, 'create'])->name('oevs.create');
+    Route::post('/oevs', [OevController::class, 'store'])->name('oevs.store');
+});
+Route::get('/validation-dossiers', [OevController::class, 'validation'])->middleware('can:' . Permissions::VALIDER_DOSSIERS)->name('oevs.validation');
+Route::get('/integration-oev', [OevController::class, 'integration'])->middleware('can:' . Permissions::INTEGRER_OEV)->name('oevs.integration');
+Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
+    Route::get('/liste-oev', [OevController::class, 'liste'])->name('oevs.liste');
+    // OEV sortants : désactivés (décès, majorité…) et demandes de désactivation en attente
+    Route::get('/oevs-sortants', [DesactivationOevController::class, 'index'])->name('oevs.sortants');
+});
+// Un dossier : chaque action selon l'étape du circuit (déclarées après « /oevs/create »)
+Route::prefix('oevs/{oev}')->name('oevs.')->group(function () {
+    Route::middleware('can:' . Permissions::CONSTITUER_DOSSIERS)->group(function () {
+        Route::delete('/', [OevController::class, 'destroy'])->name('destroy');
+        Route::post('/soumettre', [OevController::class, 'soumettre'])->name('soumettre');
+    });
+    Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
+        Route::get('/', [OevController::class, 'show'])->name('show');
+        Route::get('/documents/{document}', [OevController::class, 'showDocument'])->name('documents.show');
+        // Modification : DP pendant la constitution, DR sur demande de complément (contrôlé dans le contrôleur)
+        Route::get('/edit', [OevController::class, 'edit'])->name('edit');
+        Route::put('/', [OevController::class, 'update'])->name('update');
+        Route::delete('/documents/{document}', [OevController::class, 'destroyDocument'])->name('documents.destroy');
+        // Rejet définitif : DR ou niveau central selon l'étape (contrôlé dans le contrôleur)
+        Route::post('/rejeter', [OevController::class, 'rejeter'])->name('rejeter');
+        // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
+        Route::post('/desactiver', [DesactivationOevController::class, 'desactiver'])->name('desactiver');
+        Route::post('/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('desactivation.decider');
+        Route::post('/reactiver', [DesactivationOevController::class, 'reactiver'])->name('reactiver');
+    });
+    Route::middleware('can:' . Permissions::VALIDER_DOSSIERS)->group(function () {
+        Route::post('/conforme', [OevController::class, 'conforme'])->name('conforme');
+        Route::post('/non-conforme', [OevController::class, 'nonConforme'])->name('non-conforme');
+    });
+    Route::middleware('can:' . Permissions::INTEGRER_OEV)->group(function () {
+        Route::post('/integrer', [OevController::class, 'integrer'])->name('integrer');
+        Route::post('/complement', [OevController::class, 'demanderComplement'])->name('complement');
+    });
+});
+// Filtrage multicritère des dossiers enfants / OEV et export CSV (limités à la zone de l'utilisateur)
+Route::middleware(['can:' . Permissions::VOIR_RAPPORTS, 'can:' . Permissions::VOIR_OEV])->group(function () {
+    Route::get('/filtrage-extraction', [ExtractionController::class, 'index'])->name('extraction.index');
+    Route::get('/filtrage-extraction/export', [ExtractionController::class, 'export'])->name('extraction.export');
+});
+
+// --- Parrainage : sessions ouvertes par le niveau central, consultées par les DR et DP ---
+Route::prefix('parrainage')->name('parrainage.')->group(function () {
+    Route::get('/sessions', [SessionParrainageController::class, 'index'])->middleware('can:' . Permissions::VOIR_PARRAINAGE)->name('sessions.index');
+    Route::middleware('can:' . Permissions::GERER_SESSIONS_PARRAINAGE)->group(function () {
+        Route::get('/sessions/create', [SessionParrainageController::class, 'create'])->name('sessions.create');
+        Route::post('/sessions', [SessionParrainageController::class, 'store'])->name('sessions.store');
+    });
+    Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
+        Route::middleware('can:' . Permissions::GERER_SESSIONS_PARRAINAGE)->group(function () {
+            Route::get('/edit', [SessionParrainageController::class, 'edit'])->name('edit');
+            Route::put('/', [SessionParrainageController::class, 'update'])->name('update');
+            Route::put('/quotas', [SessionParrainageController::class, 'updateQuotas'])->name('quotas');
+            Route::delete('/', [SessionParrainageController::class, 'destroy'])->name('destroy');
+            // Sélection des OEV de la session : ajout, frais, validation de la liste définitive ; réception des fonds
+            Route::post('/selection', [SelectionParrainageController::class, 'ajouter'])->name('selection.ajouter');
+            Route::put('/selection/estimations', [SelectionParrainageController::class, 'estimations'])->name('selection.estimations');
+            Route::patch('/selection/{ligne}', [SelectionParrainageController::class, 'modifier'])->name('selection.modifier');
+            Route::delete('/selection/{ligne}', [SelectionParrainageController::class, 'retirer'])->name('selection.retirer');
+            Route::post('/selection/valider', [SelectionParrainageController::class, 'valider'])->name('selection.valider');
+            Route::post('/paiements', [PaiementSessionController::class, 'store'])->name('paiements.store');
+            Route::delete('/paiements/{paiement}', [PaiementSessionController::class, 'destroy'])->name('paiements.destroy');
+        });
+        Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
+            Route::get('/', [SessionParrainageController::class, 'show'])->name('show');
+            Route::get('/selection', [SelectionParrainageController::class, 'index'])->name('selection');
+            // Paiement d'une session validée : établissements et régions (niveau central, DR pour leur région)
+            Route::get('/paiements', [PaiementSessionController::class, 'index'])->name('paiements');
+            Route::get('/paiements/export', [PaiementSessionController::class, 'export'])->name('paiements.export');
+            // Droits contrôlés par le service : avancer (gestionnaires), revenir en arrière (administrateurs)
+            Route::post('/etat', [SessionParrainageController::class, 'changerEtat'])->name('etat');
+        });
+    });
+    // Suivi de fin d'année des parrainés : le DP pour sa province, le niveau central pour tout le pays
+    Route::put('/suivis/{ligne}', [SuiviParrainageController::class, 'enregistrer'])
+        ->middleware('can:' . Permissions::SUIVRE_PARRAINAGES)->name('suivis.enregistrer');
+    // Répertoire des parrains : géré par le niveau central, consulté par tous
+    Route::get('/parrains', [ParrainController::class, 'index'])->middleware('can:' . Permissions::VOIR_PARRAINAGE)->name('parrains.index');
+    Route::middleware('can:' . Permissions::GERER_PARRAINS)->group(function () {
+        Route::get('/parrains/create', [ParrainController::class, 'create'])->name('parrains.create');
+        Route::post('/parrains', [ParrainController::class, 'store'])->name('parrains.store');
+    });
+    Route::prefix('parrains/{parrain}')->name('parrains.')->group(function () {
+        Route::middleware('can:' . Permissions::GERER_PARRAINS)->group(function () {
+            Route::get('/edit', [ParrainController::class, 'edit'])->name('edit');
+            Route::put('/', [ParrainController::class, 'update'])->name('update');
+            Route::delete('/', [ParrainController::class, 'destroy'])->name('destroy');
+            Route::post('/engagements', [ParrainController::class, 'storeEngagement'])->name('engagements.store');
+            Route::delete('/engagements/{engagement}', [ParrainController::class, 'destroyEngagement'])->name('engagements.destroy');
+        });
+        Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
+            Route::get('/', [ParrainController::class, 'show'])->name('show');
+            Route::get('/engagements/{engagement}/convention', [ParrainController::class, 'convention'])->name('engagements.convention');
+        });
+    });
+    // Appuis : le DP pour les OEV de sa province, le niveau central pour tout le pays
+    Route::middleware('can:' . Permissions::ENREGISTRER_APPUIS)->group(function () {
+        Route::get('/appuis/create', [AppuiPartenaireController::class, 'create'])->name('appuis.create');
+        Route::post('/appuis', [AppuiPartenaireController::class, 'store'])->name('appuis.store');
+        Route::get('/appuis/recherche-oev', [AppuiPartenaireController::class, 'rechercheOev'])->name('appuis.recherche-oev');
+        Route::get('/appuis/modele', [AppuiPartenaireController::class, 'modele'])->name('appuis.modele');
+        Route::get('/appuis/import', [AppuiPartenaireController::class, 'importForm'])->name('appuis.import');
+        Route::post('/appuis/import', [AppuiPartenaireController::class, 'import'])->name('appuis.import.store');
+        Route::get('/appuis/{appui}/edit', [AppuiPartenaireController::class, 'edit'])->name('appuis.edit');
+        Route::put('/appuis/{appui}', [AppuiPartenaireController::class, 'update'])->name('appuis.update');
+    });
+    Route::middleware('can:' . Permissions::VOIR_PARRAINAGE)->group(function () {
+        Route::get('/appuis', [AppuiPartenaireController::class, 'index'])->name('appuis.index');
+        // Pilotage : tableau de bord et extractions, dans la zone de l'utilisateur (droits fins contrôlés dans le contrôleur)
+        Route::get('/pilotage', [PilotageParrainageController::class, 'tableauDeBord'])->name('pilotage.index');
+        Route::get('/pilotage/extractions', [PilotageParrainageController::class, 'extractions'])->name('pilotage.extractions');
+        Route::get('/pilotage/extractions/paiement', [PilotageParrainageController::class, 'paiement'])->name('pilotage.paiement');
+        Route::get('/pilotage/extractions/parrain', [PilotageParrainageController::class, 'listeParrain'])->name('pilotage.liste-parrain');
+        Route::get('/suivis', [SuiviParrainageController::class, 'index'])->name('suivis.index');
+    });
+});
+
+// --- Paramétrage : localités (Régions > Provinces > Communes > Villages) et paramètres généraux du site ---
+Route::middleware('can:' . Permissions::GERER_PARAMETRES)->group(function () {
+    Route::prefix('localites')->name('localites.')->group(function () {
+        Route::resource('regions', RegionController::class)->except('show');
+        Route::resource('provinces', ProvinceController::class)->except('show');
+        Route::resource('communes', CommuneController::class)->except('show');
+        Route::resource('villages', VillageController::class)->except('show');
+    });
+
+    Route::get('/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
+    Route::put('/parametres', [ParametreController::class, 'update'])->name('parametres.update');
+    // Paramètres > Écoles : référentiel proposé dans le formulaire OEV (établissement fréquenté)
+    Route::prefix('parametres')->name('parametres.')->group(function () {
+        Route::post('/ecoles/import', [EcoleController::class, 'import'])->name('ecoles.import');
+        Route::resource('ecoles', EcoleController::class)->except('show');
+        // Listes de choix de la fiche OEV : groupes de population, qui s'occupe de l'enfant, conditions de vie, vulnérabilités
+        Route::prefix('listes/{liste}')->name('listes.')->whereIn('liste', array_keys(ListeReference::listes()))->group(function () {
+            Route::get('/', [ListeReferenceController::class, 'index'])->name('index');
+            Route::post('/', [ListeReferenceController::class, 'store'])->name('store');
+            Route::put('/{element}', [ListeReferenceController::class, 'update'])->name('update');
+            Route::delete('/{element}', [ListeReferenceController::class, 'destroy'])->name('destroy');
+        });
+        // Âge de sortie des OEV (cas général, enfant en situation de handicap)
+        Route::get('/age-oev', [AgeOevController::class, 'edit'])->name('age-oev.edit');
+        Route::put('/age-oev', [AgeOevController::class, 'update'])->name('age-oev.update');
+        // Natures d'appui du parrainage (appuis des partenaires, engagements, extractions)
+        Route::resource('natures-appui', NatureAppuiController::class)->only(['index', 'store', 'update', 'destroy'])
+            ->parameters(['natures-appui' => 'nature']);
+    });
+    Route::post('/quick-links', [QuickLinkController::class, 'store'])->name('quick-links.store');
+    Route::put('/quick-links/{quickLink}', [QuickLinkController::class, 'update'])->name('quick-links.update');
+    Route::delete('/quick-links/{quickLink}', [QuickLinkController::class, 'destroy'])->name('quick-links.destroy');
+    Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
+    Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
+    Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+});
+
+// Journal d'audit : consultation et export (administrateurs)
+Route::middleware('can:' . Permissions::VOIR_JOURNAL)->group(function () {
+    Route::get('/journal', [JournalController::class, 'index'])->name('journal.index');
+    Route::get('/journal/export', [JournalController::class, 'export'])->name('journal.export');
+});
+
+// Villages d'une commune, chargés à la demande par les listes de localités (tout agent connecté)
+Route::get('/localites/communes/{commune}/villages', [VillageController::class, 'parCommune'])->name('localites.villages-commune');
+// Écoles d'une commune, chargées à la demande par le formulaire OEV (tout agent connecté)
+Route::get('/localites/communes/{commune}/ecoles', [EcoleController::class, 'parCommune'])->name('localites.ecoles-commune');
+
+Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+Route::get('/settings', [ProfileController::class, 'settings'])->name('settings');
+Route::put('/settings/password', [ProfileController::class, 'updatePassword'])->name('settings.password.update');
