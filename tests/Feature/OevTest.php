@@ -839,6 +839,23 @@ class OevTest extends TestCase
     }
 
     /** Dossier validé par le DR, en attente d'intégration au central. */
+    /** Décisions du circuit : un DR ne valide ni ne rejette un dossier hors de sa région (contrôle de visibilité). */
+    public function test_les_decisions_du_circuit_sont_refusees_hors_de_la_zone(): void
+    {
+        $oev = $this->dossierComplet();
+        $this->post(route('oevs.soumettre', $oev));
+        $ailleurs = Commune::whereHas('province', fn ($q) => $q->where('region_id', '!=', $this->ouagadougou->province->region_id))->firstOrFail();
+        $drAilleurs = User::factory()->create(['region_id' => $ailleurs->province->region_id])->assignRole('DR');
+
+        $this->actingAs($drAilleurs)->post(route('oevs.conforme', $oev))->assertRedirect()->assertSessionHas('warning');
+        $this->actingAs($drAilleurs)->post(route('oevs.rejeter', $oev), ['motif_rejet' => 'Hors zone'])->assertRedirect()->assertSessionHas('warning');
+        $this->assertSame(Oev::ETAT_SOUMIS, $oev->refresh()->statut_dossier);
+
+        // Le DR de la région, lui, peut valider
+        $this->actingAs($this->dr)->post(route('oevs.conforme', $oev))->assertRedirect(route('oevs.validation'));
+        $this->assertSame(Oev::ETAT_VALIDE, $oev->refresh()->statut_dossier);
+    }
+
     private function dossierValide(): Oev
     {
         $oev = $this->dossierComplet();
