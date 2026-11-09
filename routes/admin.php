@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\PlainteController as AdminPlainteController;
 use App\Http\Controllers\Admin\SignalementController as AdminSignalementController;
 use App\Http\Controllers\AgeOevController;
 use App\Http\Controllers\AppuiPartenaireController;
+use App\Http\Controllers\CircuitOevController;
 use App\Http\Controllers\CommuneController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesactivationOevController;
@@ -89,7 +90,7 @@ Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
 Route::prefix('oevs/{oev}')->name('oevs.')->group(function () {
     Route::middleware('can:' . Permissions::CONSTITUER_DOSSIERS)->group(function () {
         Route::delete('/', [OevController::class, 'destroy'])->name('destroy');
-        Route::post('/soumettre', [OevController::class, 'soumettre'])->name('soumettre');
+        Route::post('/soumettre', [CircuitOevController::class, 'soumettre'])->name('soumettre');
     });
     Route::middleware('can:' . Permissions::VOIR_OEV)->group(function () {
         Route::get('/', [OevController::class, 'show'])->name('show');
@@ -99,19 +100,19 @@ Route::prefix('oevs/{oev}')->name('oevs.')->group(function () {
         Route::put('/', [OevController::class, 'update'])->name('update');
         Route::delete('/documents/{document}', [OevController::class, 'destroyDocument'])->name('documents.destroy');
         // Rejet définitif : DR ou niveau central selon l'étape (contrôlé dans le contrôleur)
-        Route::post('/rejeter', [OevController::class, 'rejeter'])->name('rejeter');
+        Route::post('/rejeter', [CircuitOevController::class, 'rejeter'])->name('rejeter');
         // Désactivation d'un OEV intégré : demandée par le DP, décidée par le niveau central (contrôlé dans le contrôleur)
         Route::post('/desactiver', [DesactivationOevController::class, 'desactiver'])->name('desactiver');
         Route::post('/desactivation/decision', [DesactivationOevController::class, 'decider'])->name('desactivation.decider');
         Route::post('/reactiver', [DesactivationOevController::class, 'reactiver'])->name('reactiver');
     });
     Route::middleware('can:' . Permissions::VALIDER_DOSSIERS)->group(function () {
-        Route::post('/conforme', [OevController::class, 'conforme'])->name('conforme');
-        Route::post('/non-conforme', [OevController::class, 'nonConforme'])->name('non-conforme');
+        Route::post('/conforme', [CircuitOevController::class, 'conforme'])->name('conforme');
+        Route::post('/non-conforme', [CircuitOevController::class, 'nonConforme'])->name('non-conforme');
     });
     Route::middleware('can:' . Permissions::INTEGRER_OEV)->group(function () {
-        Route::post('/integrer', [OevController::class, 'integrer'])->name('integrer');
-        Route::post('/complement', [OevController::class, 'demanderComplement'])->name('complement');
+        Route::post('/integrer', [CircuitOevController::class, 'integrer'])->name('integrer');
+        Route::post('/complement', [CircuitOevController::class, 'demanderComplement'])->name('complement');
     });
 });
 // Filtrage multicritère des dossiers enfants / OEV et export CSV (limités à la zone de l'utilisateur)
