@@ -4,7 +4,7 @@ namespace App\Support;
 
 /**
  * Noms des permissions de l'application (Spatie), en un seul endroit : contrôleurs, modèles, routes
- * (« 'can:' . Permissions::VOIR_OEV »). Le seeder des rôles (RolePermissionSeeder) et les vues Blade (@can)
+ * (« 'can:' . Permissions::VOIR_OEV ») et seeder des rôles (RolePermissionSeeder). Les vues Blade (@can)
  * gardent le nom en clair : un nom modifié ici doit l'être aussi là-bas.
  */
 final class Permissions

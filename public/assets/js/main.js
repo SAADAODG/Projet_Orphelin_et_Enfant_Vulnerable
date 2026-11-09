@@ -222,7 +222,7 @@
   // Interrupteurs (case à cocher role="switch") : aria-checked suit l'état de la case
   document.addEventListener("change", function (event) {
     var champ = event.target;
-    if (champ.matches && champ.matches('input[type="checkbox"][role="switch"]')) {
+    if (champ.matches?.('input[type="checkbox"][role="switch"]')) {
       champ.setAttribute("aria-checked", champ.checked ? "true" : "false");
     }
   });

@@ -185,7 +185,7 @@ class SessionParrainageController extends Controller
             $engage = $this->sourceSelection->montantEngage($session) ?? 0;
             $donnees = $request->validate([
                 'description' => ['required', 'string', 'max:255'],
-                'enveloppe' => ['nullable', 'integer', 'min:1', function (string $attribut, $valeur, \Closure $echec) use ($engage, $session) {
+                'enveloppe' => ['nullable', 'integer', 'min:1', function (string $attribut, $valeur, \Closure $echec) use ($engage, $session) { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
                     if ($valeur !== null && (int) $valeur < $engage) {
                         $echec('L’enveloppe ne peut pas être inférieure au montant déjà engagé (' . Montant::fcfa($engage) . ').');
                     }
@@ -325,7 +325,7 @@ class SessionParrainageController extends Controller
 
         $validated = $request->validate([
             'description' => ['required', 'string', 'max:255'],
-            'annee' => ['required', 'regex:/^\d{4}-\d{4}$/', function (string $attribut, $valeur, \Closure $echec) {
+            'annee' => ['required', 'regex:/^\d{4}-\d{4}$/', function (string $attribut, $valeur, \Closure $echec) { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
                 [$debut, $fin] = array_map('intval', explode('-', (string) $valeur) + [1 => 0]);
                 if ($fin !== $debut + 1) {
                     $echec('L’année scolaire doit couvrir deux années consécutives (ex : 2026-2027).');
@@ -333,7 +333,7 @@ class SessionParrainageController extends Controller
             }],
             'type_appui' => ['required', Rule::in(array_keys(SessionParrainage::TYPES_APPUI))],
             'enveloppe' => [Rule::requiredIf($request->boolean('quotas_actifs')), 'nullable', 'integer', 'min:1',
-                function (string $attribut, $valeur, \Closure $echec) use ($session, $request) {
+                function (string $attribut, $valeur, \Closure $echec) use ($session, $request) { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
                     if ($session && $request->boolean('quotas_actifs') && (int) $valeur < $session->quotas()->sum('montant')) {
                         $echec('L’enveloppe ne peut pas être inférieure au total des quotas déjà répartis (' . Montant::fcfa($session->quotas()->sum('montant')) . ').');
                     }

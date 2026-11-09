@@ -190,9 +190,9 @@ class SessionParrainageTest extends TestCase
         $session = $this->avecUnRetenu($this->nouvelleSession());
 
         $this->actingAs($this->central)->get(route('parrainage.sessions.show', $session))
-            ->assertOk()->assertSee('OEV retenus')->assertSee('ENFANT Test 0')->assertSee('Ajouter des OEV');
+            ->assertOk()->assertSee('OEV retenus')->assertSeeText('ENFANT Test 0')->assertSee('Ajouter des OEV');
         $this->actingAs($this->dp)->get(route('parrainage.sessions.show', $session))
-            ->assertOk()->assertSee('ENFANT Test 0')->assertDontSee('Ajouter des OEV');
+            ->assertOk()->assertSeeText('ENFANT Test 0')->assertDontSee('Ajouter des OEV');
     }
 
     public function test_une_session_peut_etre_supprimee_avec_sa_selection(): void

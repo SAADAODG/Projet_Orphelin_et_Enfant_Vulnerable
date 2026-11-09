@@ -202,8 +202,8 @@
             <div class="pil-chiffre"><i class="bi bi-universal-access" aria-hidden="true"></i><strong>{{ $part($avecHandicap) }} %</strong><span>{{ $avecHandicap }} en situation de handicap</span></div>
           </div>
 
-          {{-- Répartition filles / garçons sur une barre unique --}}
-          <div class="pil-sexes mt-3" role="img" aria-label="{{ $filles }} filles et {{ $garcons }} garçons">
+          {{-- Répartition filles / garçons sur une barre unique (décorative : chiffres donnés juste au-dessus) --}}
+          <div class="pil-sexes mt-3" aria-hidden="true">
             @if ($filles)<span class="pil-sexes-filles" style="width: {{ $part($filles) }}%">{{ $part($filles) >= 12 ? 'Filles ' . $part($filles) . ' %' : '' }}</span>@endif
             @if ($garcons)<span class="pil-sexes-garcons" style="width: {{ 100 - $part($filles) }}%">{{ (100 - $part($filles)) >= 12 ? 'Garçons ' . (100 - $part($filles)) . ' %' : '' }}</span>@endif
           </div>

@@ -14,7 +14,7 @@
   @foreach ($lignes as $ligne)
     <div @class(['db-barre', 'db-' . $couleur, 'db-barre--pourcent' => $base])>
       <span class="db-barre-libelle" title="{{ $ligne['libelle'] }}">{{ $ligne['libelle'] }}</span>
-      <span class="db-piste" role="img" aria-label="{{ $ligne['libelle'] }} : {{ $ligne['total'] }}"><span style="--v: {{ round($ligne['total'] / $max * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
+      <span class="db-piste" aria-hidden="true"><span style="--v: {{ round($ligne['total'] / $max * 100, 1) }}%" @if (! $ligne['total']) data-zero @endif></span></span>
       <span class="db-barre-valeur">
         {{ $ligne['total'] }}
         @if ($base)<small class="db-barre-pourcent">{{ round($ligne['total'] / max(1, $base) * 100) }} %</small>@endif

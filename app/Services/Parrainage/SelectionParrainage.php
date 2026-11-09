@@ -4,18 +4,15 @@ namespace App\Services\Parrainage;
 
 use App\Models\AppuiPartenaire;
 use App\Models\BeneficiaireSession;
-use App\Models\Ecole;
 use App\Models\JournalActivite;
 use App\Models\NatureAppui;
 use App\Models\Oev;
-use App\Models\Province;
 use App\Models\Region;
 use App\Models\SessionParrainage;
 use App\Models\SuiviParrainage;
 use App\Models\User;
 use App\Support\Montant;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -29,11 +26,10 @@ use Illuminate\Support\Facades\DB;
  * scolarisés, à inscrire (montant estimatif de la session). Formation : OEV en formation professionnelle
  * en cours (montant estimatif de la session).
  *
- * Fournit aussi aux modules Sessions, Parrains et Pilotage les données prévues par SourceSelection.
- * Les établissements (RIB) ne sont pas encore gérés : liste vide. Les résultats scolaires viennent du
- * module « Suivi des parrainés » (SuiviParrainage).
+ * Critères d'éligibilité (requêtes) : CriteresSelection. Données fournies aux modules Sessions, Parrains et
+ * Pilotage (contrat SourceSelection) : SourceSelectionParrainage.
  */
-class SelectionParrainage implements SourceSelectionEnBase
+class SelectionParrainage
 {
     /** Âge scolaire (années révolues) : un enfant non scolarisé de cet âge peut être inscrit grâce à l'appui scolaire. */
     public const AGE_SCOLAIRE_MIN = 6;
@@ -50,6 +46,10 @@ class SelectionParrainage implements SourceSelectionEnBase
         self::EN_FORMATION => 'En formation professionnelle',
     ];
 
+    public function __construct(private readonly CriteresSelection $criteres)
+    {
+    }
+
     /* ---------------------------------------------------------------- Éligibles */
 
     /**
@@ -60,7 +60,7 @@ class SelectionParrainage implements SourceSelectionEnBase
      */
     public function eligibles(SessionParrainage $session, array $f = []): Builder
     {
-        return $this->recherche($session, $f)->whereIn('oevs.id', $this->baseEligibles($session)->select('oevs.id'));
+        return $this->criteres->recherche($session, $f)->whereIn('oevs.id', $this->criteres->baseEligibles($session)->select('oevs.id'));
     }
 
     /**
@@ -69,11 +69,11 @@ class SelectionParrainage implements SourceSelectionEnBase
      */
     public function candidats(SessionParrainage $session, array $f = []): Builder
     {
-        $requete = $this->recherche($session, $f);
+        $requete = $this->criteres->recherche($session, $f);
 
         return match ($f['eligibilite'] ?? null) {
-            'oui' => $requete->whereIn('oevs.id', $this->baseEligibles($session)->select('oevs.id')),
-            'non' => $requete->whereNotIn('oevs.id', $this->baseEligibles($session)->select('oevs.id')),
+            'oui' => $requete->whereIn('oevs.id', $this->criteres->baseEligibles($session)->select('oevs.id')),
+            'non' => $requete->whereNotIn('oevs.id', $this->criteres->baseEligibles($session)->select('oevs.id')),
             default => $requete,
         };
     }
@@ -92,7 +92,7 @@ class SelectionParrainage implements SourceSelectionEnBase
         }
 
         $natures = $session->naturesCouvertes();
-        $eligibles = $this->baseEligibles($session)->whereIn('oevs.id', $ids)->pluck('oevs.id')->flip();
+        $eligibles = $this->criteres->baseEligibles($session)->whereIn('oevs.id', $ids)->pluck('oevs.id')->flip();
         $autresSessions = BeneficiaireSession::retenus()
             ->whereIn('oev_id', $ids)
             ->whereIn('type_appui', $natures)
@@ -129,102 +129,6 @@ class SelectionParrainage implements SourceSelectionEnBase
     }
 
     /**
-     * Bénéficiaires pas encore choisis pour la session, avec leur score, filtrés et triés par urgence.
-     *
-     * Chaque filtre accepte une valeur ou une liste de valeurs (« l'une ou l'autre ») : plusieurs régions,
-     * plusieurs vulnérabilités… Localité : « regions » (régions entières) et « provinces » (seulement ces
-     * provinces dans leur région) ; une région dont des provinces sont cochées est limitée à ces provinces.
-     */
-    private function recherche(SessionParrainage $session, array $f): Builder
-    {
-        $liste = fn (string ...$cles) => collect($cles)->flatMap(fn ($cle) => (array) ($f[$cle] ?? []))
-            ->filter(fn ($v) => $v !== null && $v !== '')->unique()->values()->all();
-        $handicap = $liste('handicap');
-
-        return Oev::beneficiaires()
-            ->whereNotIn('oevs.id', BeneficiaireSession::where('session_parrainage_id', $session->id)->select('oev_id'))
-            // Entièrement financés par une autre session de l'année : plus proposés (ni éligibles ni affichés)
-            ->whereNotIn('oevs.id', $this->entierementFinances($session))
-            ->select('oevs.*')
-            // Score d'urgence enregistré sur la fiche (ScoreBesoinObserver), indexé
-            ->selectRaw('oevs.score_besoin as score')
-            ->when($liste('type'), fn ($q, $types) => $this->concernesPar($q, $types))
-            ->tap(fn ($q) => $this->dansLesLocalites($q, $liste('regions', 'region_id'), $liste('provinces', 'province_id'), $liste('commune_id')))
-            ->when($liste('sexe'), fn ($q, $v) => $q->whereIn('oevs.sexe', $v))
-            ->when(isset($f['age_min']), fn ($q) => $q->whereDate('oevs.date_naissance', '<=', now()->subYears((int) $f['age_min'])))
-            ->when(isset($f['age_max']), fn ($q) => $q->whereDate('oevs.date_naissance', '>', now()->subYears((int) $f['age_max'] + 1)))
-            ->when($liste('statut'), fn ($q, $v) => $q->whereIn('oevs.statut', $v))
-            // Au moins une des vulnérabilités choisies (liste JSON lue comme texte : PostgreSQL et SQLite)
-            ->when($liste('vulnerabilite'), fn ($q, $codes) => $q->where(function ($q) use ($codes) {
-                foreach ($codes as $code) {
-                    $q->orWhereRaw('CAST(oevs.vulnerabilites AS TEXT) LIKE ?', ['%"' . $code . '"%']);
-                }
-            }))
-            // Oui et non cochés ensemble : aucun filtre
-            ->when(count($handicap) === 1, fn ($q) => $q->where('oevs.handicap', (bool) $handicap[0]))
-            ->when($liste('niveau_priorite'), fn ($q, $v) => $q->whereIn('oevs.niveau_priorite', $v))
-            ->when($liste('niveau_etude'), fn ($q, $v) => $q->whereIn('oevs.niveau_etude', $v))
-            ->when($liste('groupe_population'), fn ($q, $v) => $q->whereIn('oevs.groupe_population', $v))
-            ->when($liste('scolarite'), fn ($q, $situations) => $q->where(function ($q) use ($situations) {
-                foreach ($situations as $situation) {
-                    $q->orWhere(fn ($q) => match ($situation) {
-                        self::SCOLARISE => $this->scolarises($q),
-                        self::A_SCOLARISER => $this->aScolariser($q),
-                        self::EN_FORMATION => $this->enFormation($q),
-                        default => $q,
-                    });
-                }
-            }))
-            ->when($f['q'] ?? null, fn ($q, $terme) => $q->where(fn ($q) => $q
-                ->whereLike('oevs.code', "%{$terme}%")->orWhereLike('oevs.nom', "%{$terme}%")
-                ->orWhereLike('oevs.prenom', "%{$terme}%")->orWhereLike('oevs.etablissement_actuel', "%{$terme}%")))
-            // Jamais financés cette année d'abord, puis les compléments (frais qui dépassaient le plafond)
-            ->tap(function (Builder $q) use ($session) {
-                $complements = $this->financementsAnterieurs($session)->select('oev_id')->toBase();
-                $q->orderByRaw('case when oevs.id in (' . $complements->toSql() . ') then 1 else 0 end', $complements->getBindings());
-            })
-            ->orderByDesc('oevs.score_besoin')
-            ->orderBy('oevs.date_naissance')
-            ->orderBy('oevs.id');
-    }
-
-    /**
-     * Localités choisies : régions entières, ou seulement certaines provinces de ces régions.
-     * Une province cochée limite sa région à cette province ; sans choix, aucune restriction.
-     */
-    private function dansLesLocalites(Builder $requete, array $regions, array $provinces, array $communes = []): Builder
-    {
-        $provinces = Province::whereIn('id', $provinces)->get(['id', 'region_id']);
-        $regionsEntieres = array_diff(array_map('intval', $regions), $provinces->pluck('region_id')->all());
-
-        return $requete
-            ->when($regionsEntieres || $provinces->isNotEmpty(), fn ($q) => $q->where(fn ($q) => $q
-                ->whereIn('oevs.region_id', $regionsEntieres)
-                ->orWhereIn('oevs.province_id', $provinces->pluck('id'))))
-            ->when($communes, fn ($q) => $q->whereIn('oevs.commune_id', $communes));
-    }
-
-    /** Lignes retenues par les autres sessions de la même année, pour les natures de cette session. */
-    private function financementsAnterieurs(SessionParrainage $session): Builder
-    {
-        return BeneficiaireSession::retenus()
-            ->whereIn('type_appui', $session->naturesCouvertes())
-            ->whereHas('session', fn ($q) => $q->where('annee', $session->annee)->whereKeyNot($session->id));
-    }
-
-    /**
-     * OEV dont les frais sont entièrement couverts par l'État cette année (autres sessions) : le total versé
-     * atteint les frais, ou les frais n'étaient pas connus. Ils ne sont plus proposés.
-     */
-    private function entierementFinances(SessionParrainage $session): Builder
-    {
-        return $this->financementsAnterieurs($session)
-            ->select('oev_id')
-            ->groupBy('oev_id')
-            ->havingRaw('sum(montant_retenu) >= max(coalesce(frais_reels, 0)) or sum(case when frais_reels is null then 1 else 0 end) > 0');
-    }
-
-    /**
      * Montant déjà versé par l'État cette année (autres sessions, mêmes natures) aux OEV financés en partie.
      * Une session de rattrapage ne finance que le reste : frais − déjà versé, dans la limite de son plafond.
      *
@@ -233,7 +137,7 @@ class SelectionParrainage implements SourceSelectionEnBase
      */
     public function dejaFinance(SessionParrainage $session, ?array $oevIds = null): array
     {
-        return $this->financementsAnterieurs($session)
+        return $this->criteres->financementsAnterieurs($session)
             ->when($oevIds !== null, fn ($q) => $q->whereIn('oev_id', $oevIds))
             ->selectRaw('oev_id, sum(montant_retenu) as total')
             ->groupBy('oev_id')
@@ -246,62 +150,6 @@ class SelectionParrainage implements SourceSelectionEnBase
     public static function fraisRestants(?int $frais, int $dejaVerse): ?int
     {
         return $frais === null ? null : max(0, $frais - $dejaVerse);
-    }
-
-    /** Éligibles sans les filtres de recherche (aussi ceux déjà choisis pour la session). */
-    private function baseEligibles(SessionParrainage $session): Builder
-    {
-        $natures = $session->naturesCouvertes();
-
-        // Une autre session de l'année a déjà financé l'OEV pour la même nature : seul celui dont les frais
-        // dépassaient le plafond (financé en partie) reste éligible, pour le complément (pas de double financement)
-        $requete = $this->concernesPar(Oev::beneficiaires(), $natures)
-            ->whereNotIn('oevs.id', $this->entierementFinances($session));
-
-        // RG-07 : OEV déjà appuyés par un partenaire pour la même nature et la même année
-        if ($session->exclure_deja_appuyes) {
-            $requete->whereNotIn('oevs.id', AppuiPartenaire::where('annee', $session->annee)
-                ->whereIn('nature_appui_id', NatureAppui::whereIn('code', $natures)->select('id'))
-                ->select('oev_id'));
-        }
-
-        return $requete;
-    }
-
-    /**
-     * OEV concernés par au moins une des natures : scolarisés ou d'âge scolaire à inscrire (scolaire),
-     * en formation professionnelle en cours (formation).
-     */
-    private function concernesPar(Builder $requete, array $natures): Builder
-    {
-        return $requete->where(function ($q) use ($natures) {
-            if (in_array(SessionParrainage::TYPE_SCOLAIRE, $natures, true)) {
-                $q->orWhere(fn ($q) => $this->scolarises($q))->orWhere(fn ($q) => $this->aScolariser($q));
-            }
-            if (in_array(SessionParrainage::TYPE_FORMATION, $natures, true)) {
-                $q->orWhere(fn ($q) => $this->enFormation($q));
-            }
-        });
-    }
-
-    private function scolarises(Builder $q): Builder
-    {
-        return $q->where('oevs.situation_scolaire', 'scolarise');
-    }
-
-    private function enFormation(Builder $q): Builder
-    {
-        return $q->where('oevs.formation_professionnelle', true)->where('oevs.formation_etat', 'en_cours');
-    }
-
-    /** Non scolarisé (ou déscolarisé, foyer coranique…), pas en formation, et d'âge scolaire. */
-    private function aScolariser(Builder $q): Builder
-    {
-        return $q->where(fn ($q) => $q->whereNull('oevs.situation_scolaire')->orWhere('oevs.situation_scolaire', '!=', 'scolarise'))
-            ->where(fn ($q) => $q->whereNull('oevs.formation_professionnelle')->orWhere('oevs.formation_professionnelle', false)
-                ->orWhereNull('oevs.formation_etat')->orWhere('oevs.formation_etat', '!=', 'en_cours'))
-            ->whereDate('oevs.date_naissance', '<=', now()->subYears(self::AGE_SCOLAIRE_MIN))
-            ->whereDate('oevs.date_naissance', '>', now()->subYears(self::AGE_SCOLAIRE_MAX + 1));
     }
 
     /** Situation de l'OEV au regard de l'appui : scolarisé, à scolariser, en formation, ou null (aucune). */
@@ -380,7 +228,7 @@ class SelectionParrainage implements SourceSelectionEnBase
                 [...$liaisonsType, self::EN_FORMATION, self::SCOLARISE, self::A_SCOLARISER])
             ->selectRaw("CASE WHEN {$typeFormation} THEN COALESCE(oevs.frais_formation, ?) WHEN {$scolarise} THEN oevs.frais_scolarite ELSE ? END AS frais",
                 [...$liaisonsType, $session->estimation_formation, $session->estimation_scolarisation]);
-        $dejaVerse = $this->financementsAnterieurs($session)->toBase()
+        $dejaVerse = $this->criteres->financementsAnterieurs($session)->toBase()
             ->selectRaw('oev_id, SUM(montant_retenu) AS total')->groupBy('oev_id');
         // Frais restant à financer après ce que l'État a déjà versé (null si inconnus)
         $restants = DB::query()->fromSub($situations->toBase(), 'e')
@@ -606,113 +454,6 @@ class SelectionParrainage implements SourceSelectionEnBase
         return $session->quotas_actifs
             ? 'le quota de la région ' . ($ligne->region?->nom ?? '') . ' ne permet pas de retenir ' . Montant::fcfa($montant) . ' de plus.'
             : 'l’enveloppe de la session ne permet pas de retenir ' . Montant::fcfa($montant) . ' de plus.';
-    }
-
-    /* ---------------------------------------------------------------- SourceSelection */
-
-    public function disponible(): bool
-    {
-        return true;
-    }
-
-    public function eligiblesParRegion(SessionParrainage $session): array
-    {
-        return $this->baseEligibles($session)
-            ->whereNotNull('oevs.region_id')
-            ->selectRaw('oevs.region_id, count(*) as total')
-            ->groupBy('oevs.region_id')
-            ->pluck('total', 'region_id')
-            ->map(fn ($total) => (int) $total)
-            ->all();
-    }
-
-    /** La liste n'est définitive qu'une fois la session validée : avant, montant et liste sont « non disponibles ». */
-    private function listeArretee(SessionParrainage $session): bool
-    {
-        return $session->etat !== SessionParrainage::ETAT_EN_COURS;
-    }
-
-    public function montantEngage(SessionParrainage $session): ?int
-    {
-        return $this->listeArretee($session) ? (int) $session->beneficiaires()->retenus()->sum('montant_retenu') : null;
-    }
-
-    public function listeDefinitive(SessionParrainage $session): Collection
-    {
-        if (! $this->listeArretee($session)) {
-            return collect();
-        }
-
-        // Lignes brutes (pas de modèles) : la liste peut compter des dizaines de milliers de bénéficiaires
-        return $session->beneficiaires()->retenus()->orderByDesc('score')->orderBy('id')->toBase()
-            ->get(['oev_id', 'type_appui', 'etablissement_id', 'frais_reels', 'montant_retenu'])
-            ->map(fn ($b) => [
-                'oev_id' => (int) $b->oev_id,
-                'type_appui' => $b->type_appui,
-                'etablissement_id' => self::entier($b->etablissement_id),
-                'frais_reels' => self::entier($b->frais_reels ?? $b->montant_retenu),
-                'montant_retenu' => self::entier($b->montant_retenu),
-            ]);
-    }
-
-    /** Même conversion que le cast « integer » du modèle : null reste null. */
-    private static function entier(mixed $valeur): ?int
-    {
-        return $valeur === null ? null : (int) $valeur;
-    }
-
-    /** Établissements payés par au moins une session (écoles et centres de formation du référentiel). */
-    public function etablissements(): Collection
-    {
-        return Ecole::query()
-            ->whereIn('ecoles.id', BeneficiaireSession::whereNotNull('etablissement_id')->select('etablissement_id'))
-            ->join('communes as c', 'c.id', '=', 'ecoles.commune_id')
-            ->join('provinces as p', 'p.id', '=', 'c.province_id')
-            ->toBase()
-            ->get(['ecoles.id', 'ecoles.nom', 'ecoles.nature', 'ecoles.statut', 'p.region_id', 'c.province_id', 'ecoles.commune_id', 'ecoles.banque', 'ecoles.rib'])
-            ->mapWithKeys(fn ($e) => [(int) $e->id => [
-                'id' => (int) $e->id,
-                'nom' => $e->nom,
-                'type' => trim((Ecole::NATURES[$e->nature] ?? '') . ($e->statut ? ' · ' . (Ecole::STATUTS[$e->statut] ?? $e->statut) : '')),
-                'region_id' => (int) $e->region_id,
-                'province_id' => (int) $e->province_id,
-                'commune_id' => (int) $e->commune_id,
-                'banque' => $e->banque,
-                'rib' => $e->rib === '' ? null : $e->rib,
-            ]]);
-    }
-
-    public function naturesAppuiEtat(int $oevId, string $annee): array
-    {
-        return BeneficiaireSession::retenus()
-            ->where('oev_id', $oevId)
-            ->whereHas('session', fn ($q) => $q->where('annee', $annee)->where('etat', '!=', SessionParrainage::ETAT_EN_COURS))
-            ->distinct()
-            ->pluck('type_appui')
-            ->all();
-    }
-
-    public function requeteListeDefinitive(Collection $sessions): QueryBuilder
-    {
-        $arretees = $sessions->filter(fn (SessionParrainage $s) => $this->listeArretee($s))->pluck('id')->all();
-
-        return BeneficiaireSession::retenus()->whereIn('session_parrainage_id', $arretees)->toBase()
-            ->select(['oev_id', 'type_appui', 'montant_retenu']);
-    }
-
-    public function requeteResultatsScolaires(string $annee): QueryBuilder
-    {
-        return SuiviParrainage::where('annee', $annee)->where('type_appui', SessionParrainage::TYPE_SCOLAIRE)->toBase()->select(['oev_id', 'resultat']);
-    }
-
-    /** Résultats scolaires du module « Suivi des parrainés » (appui scolaire seulement). */
-    public function resultatsScolaires(string $annee): Collection
-    {
-        return SuiviParrainage::where('annee', $annee)
-            ->where('type_appui', SessionParrainage::TYPE_SCOLAIRE)
-            ->get(['oev_id', 'annee', 'resultat'])
-            ->map(fn (SuiviParrainage $s) => ['oev_id' => $s->oev_id, 'annee' => $s->annee, 'resultat' => $s->resultat])
-            ->values();
     }
 
     /**

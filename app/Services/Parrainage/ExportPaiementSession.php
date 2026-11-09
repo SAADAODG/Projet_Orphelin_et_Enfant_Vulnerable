@@ -62,6 +62,9 @@ class ExportPaiementSession
 
     private const MONTANTS = ['montant', 'montant_paye', 'reste', 'frais_reels', 'montant_retenu'];
 
+    /** Libellé des bénéficiaires sans établissement (exclus du nombre d'établissements par région). */
+    private const SANS_ETABLISSEMENT = 'Établissement non renseigné';
+
     public function __construct(private readonly PaiementsParrainage $paiements)
     {
     }
@@ -126,7 +129,7 @@ class ExportPaiementSession
             'region' => $regions[$e->region_id] ?? 'Région non renseignée',
             'province' => $provinces[$e->province_id] ?? '',
             'commune' => $e->commune,
-            'etablissement' => $e->etablissement_id ? $e->nom : 'Établissement non renseigné',
+            'etablissement' => $e->etablissement_id ? $e->nom : self::SANS_ETABLISSEMENT,
             'nature' => $e->etablissement_id ? (Ecole::NATURES[$e->nature] ?? '') : '',
             'banque' => $e->banque,
             'rib' => $e->etablissement_id ? ($rib ?? 'RIB manquant') : '',
@@ -169,7 +172,7 @@ class ExportPaiementSession
             'niveau' => $niveau,
             'libelle' => $libelle,
             'region' => $libelle,
-            'nombre_etablissements' => $e->where('etablissement', '!=', 'Établissement non renseigné')->count(),
+            'nombre_etablissements' => $e->where('etablissement', '!=', self::SANS_ETABLISSEMENT)->count(),
             'etablissements_payes' => $e->where('paye', true)->count(),
             'nombre_oev' => $e->sum('nombre_oev'),
             'montant' => $e->sum('montant'),
@@ -216,7 +219,7 @@ class ExportPaiementSession
             'niveau' => null,
             'region' => $regions[$b->region_id] ?? 'Région non renseignée',
             'province' => $provinces[$e->province_id] ?? '',
-            'etablissement' => $b->etablissement_id ? $e->nom : 'Établissement non renseigné',
+            'etablissement' => $b->etablissement_id ? $e->nom : self::SANS_ETABLISSEMENT,
             'banque' => $e->banque,
             'rib' => $b->etablissement_id ? ($rib ?? 'RIB manquant') : '',
             'code' => $b->code,

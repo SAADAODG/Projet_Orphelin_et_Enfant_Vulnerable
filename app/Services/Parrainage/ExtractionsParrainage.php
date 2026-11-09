@@ -28,12 +28,14 @@ class ExtractionsParrainage
     /** Ordre de tri des priorités : les cas les plus urgents d'abord. */
     private const ORDRE_PRIORITE = ['eleve' => 0, 'moyen' => 1, 'faible' => 2];
 
+    private const REGION = 'Région';
+
     /**
      * Liste pour paiement, feuille « Par établissement » : colonnes au choix. Le nombre d'OEV et le montant
      * sont toujours extraits (ils portent les totaux).
      */
     public const COLONNES_ETABLISSEMENT = [
-        'region' => 'Région', 'province' => 'Province', 'etablissement' => 'Établissement', 'type' => 'Type d’établissement',
+        'region' => self::REGION, 'province' => 'Province', 'etablissement' => 'Établissement', 'type' => 'Type d’établissement',
         'banque' => 'Banque', 'rib' => 'RIB', 'nombre_oev' => 'Nombre d’OEV', 'montant' => 'Montant total (FCFA)',
     ];
 
@@ -42,7 +44,7 @@ class ExtractionsParrainage
     /** Feuille « Nominatif » : colonnes au choix ; le montant retenu est toujours extrait. */
     public const COLONNES_NOMINATIF = [
         'etablissement' => 'Établissement', 'code' => 'Code OEV', 'nom' => 'Nom', 'prenom' => 'Prénom', 'sexe' => 'Sexe',
-        'date_naissance' => 'Date de naissance', 'region' => 'Région', 'province' => 'Province', 'commune' => 'Commune',
+        'date_naissance' => 'Date de naissance', 'region' => self::REGION, 'province' => 'Province', 'commune' => 'Commune',
         'type_appui' => 'Type d’appui', 'classe' => 'Classe ou filière', 'tuteur' => 'Parent / tuteur', 'telephone_tuteur' => 'Téléphone du tuteur',
         'frais_reels' => 'Frais réels (FCFA)', 'montant_retenu' => 'Montant retenu (FCFA)',
     ];
@@ -220,7 +222,7 @@ class ExtractionsParrainage
      *                    sexe, statut, vulnerabilite, niveau_priorite, niveau_etude, handicap, age_min, age_max
      * @return array{nombre: int, oevs: LazyCollection<int, Oev>, apercu: callable(int): array<int, Oev>}
      */
-    public function listeParrain(Parrain $parrain, User $utilisateur, array $f): array
+    public function listeParrain(User $utilisateur, array $f): array
     {
         $liste = fn (string $cle) => array_values(array_filter((array) ($f[$cle] ?? []), fn ($v) => $v !== null && $v !== ''));
         $handicap = $liste('handicap');
@@ -321,7 +323,7 @@ class ExtractionsParrainage
             'statut' => ['Statut OEV', fn (Oev $o) => Oev::STATUTS[$o->statut] ?? $o->statut, false],
             'vulnerabilites' => ['Vulnérabilités', fn (Oev $o) => implode(', ', $o->libelles('vulnerabilites', Oev::vulnerabilites())), false],
             'handicap' => ['Handicap', fn (Oev $o) => $o->handicap ? 'Oui' : 'Non', false],
-            'region' => ['Région', fn (Oev $o) => $o->region?->nom, false],
+            'region' => [self::REGION, fn (Oev $o) => $o->region?->nom, false],
             'province' => ['Province', fn (Oev $o) => $o->province?->nom, false],
             'commune' => ['Commune', fn (Oev $o) => $o->commune?->nom, false],
             'cycle' => ['Cycle ou filière', fn (Oev $o) => self::cycle($o), false],

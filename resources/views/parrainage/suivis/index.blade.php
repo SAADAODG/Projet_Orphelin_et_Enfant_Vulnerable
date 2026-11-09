@@ -209,13 +209,13 @@
                         <div class="row g-3 align-items-end">
                           <div class="col-12 col-xl-auto">
                             <span class="form-label d-block">Résultat de l’année <span class="text-danger">*</span></span>
-                            <div class="btn-group flex-wrap" role="group" aria-label="Résultat">
+                            <fieldset class="btn-group flex-wrap" aria-label="Résultat">
                               @foreach (SuiviParrainage::resultatsPour($ligne->type_appui) as $code => $libelle)
                                 <input type="radio" class="btn-check" name="resultat" id="r-{{ $ligne->id }}-{{ $code }}" value="{{ $code }}" autocomplete="off"
                                        @checked($valeur('resultat', $suivi?->resultat) === $code) required>
                                 <label class="btn btn-outline-{{ SuiviParrainage::COULEURS[$code] ?? 'secondary' }}" for="r-{{ $ligne->id }}-{{ $code }}">{{ $libelle }}</label>
                               @endforeach
-                            </div>
+                            </fieldset>
                           </div>
                           @if ($formation)
                             <div class="col-sm-6 col-xl-3" data-insertion @if ($valeur('resultat', $suivi?->resultat) !== 'achevee') hidden @endif>
@@ -248,13 +248,13 @@
                             {{-- L'année prochaine : indépendante du résultat (un admis peut partir en formation professionnelle) --}}
                             <div class="col-12 col-xl-auto">
                               <span class="form-label d-block">L’année prochaine <span class="text-danger">*</span></span>
-                              <div class="btn-group flex-wrap" role="group" aria-label="L’année prochaine">
+                              <fieldset class="btn-group flex-wrap" aria-label="L’année prochaine">
                                 @foreach (SuiviParrainage::ORIENTATIONS as $code => $libelle)
                                   <input type="radio" class="btn-check" name="orientation" id="or-{{ $ligne->id }}-{{ $code }}" value="{{ $code }}" autocomplete="off"
                                          @checked($orientation === $code) required data-orientation>
                                   <label class="btn btn-outline-secondary" for="or-{{ $ligne->id }}-{{ $code }}">{{ $libelle }}</label>
                                 @endforeach
-                              </div>
+                              </fieldset>
                               {{-- Classe calculée : supérieure si admis, la même sinon --}}
                               <span class="d-block small text-primary fw-semibold mt-1" data-classe-auto @if ($orientation !== SuiviParrainage::ECOLE || ! $classeConnue) hidden @endif></span>
                             </div>
@@ -324,7 +324,7 @@
                           @endif
                           <div class="col-12 col-xl-auto">
                             <span class="form-label d-block">Nouveau parrainage ? <span class="text-danger">*</span></span>
-                            <div class="btn-group" role="group" aria-label="Recommandé pour un nouveau parrainage">
+                            <fieldset class="btn-group" aria-label="Recommandé pour un nouveau parrainage">
                               @php
                                 $reconduire = $valeur('a_reconduire', $suivi === null ? null : ($suivi->a_reconduire ? '1' : '0'));
                               @endphp
@@ -332,7 +332,7 @@
                               <label class="btn btn-outline-success" for="a-{{ $ligne->id }}-1">Recommandé</label>
                               <input type="radio" class="btn-check" name="a_reconduire" id="a-{{ $ligne->id }}-0" value="0" autocomplete="off" @checked((string) $reconduire === '0') data-reconduire>
                               <label class="btn btn-outline-secondary" for="a-{{ $ligne->id }}-0">Non</label>
-                            </div>
+                            </fieldset>
                           </div>
                           <div class="col-12 col-md">
                             <label class="form-label" for="o-{{ $ligne->id }}">Observation <span class="fw-normal">(facultatif)</span></label>

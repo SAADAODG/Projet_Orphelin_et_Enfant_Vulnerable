@@ -142,10 +142,11 @@
       </div>
 
       <div class="d-flex align-items-center gap-3">
-        <div class="oev-anneau {{ $pieces >= $totalPieces ? 'is-complet' : '' }}" style="--p: {{ $pourcentage }}" role="img" aria-label="Dossier : {{ $pieces }} pièce(s) sur {{ $totalPieces }}">
+        <div class="oev-anneau {{ $pieces >= $totalPieces ? 'is-complet' : '' }}" style="--p: {{ $pourcentage }}" aria-hidden="true">
           <span>{{ $pieces }}/{{ $totalPieces }}</span>
         </div>
         <div class="small">
+          <span class="visually-hidden">Dossier : {{ $pieces }} pièce(s) sur {{ $totalPieces }}.</span>
           <div class="fw-bold">{{ $pieces >= $totalPieces ? 'Dossier complet' : ($pieces ? 'Dossier incomplet' : 'Aucune pièce') }}</div>
           <div class="text-muted">pièces fournies</div>
         </div>

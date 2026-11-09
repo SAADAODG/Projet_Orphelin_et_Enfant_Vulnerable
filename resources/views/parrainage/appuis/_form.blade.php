@@ -34,7 +34,8 @@
            placeholder="Tapez le code, le nom ou le prénom de l’enfant" value="{{ $oevChoisi ? $oevChoisi->reference() . ' — ' . $oevChoisi->nomComplet() : '' }}"
            data-oev-saisie @disabled($appui->exists)>
     @error('oev_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-    <div class="list-group mt-1" data-oev-resultats role="listbox" aria-label="OEV trouvés"></div>
+    {{-- Résultats : boutons ordinaires (pas de role="listbox", réservé à des éléments role="option") --}}
+    <div class="list-group mt-1" data-oev-resultats></div>
   </div>
 
   <div class="col-sm-6">

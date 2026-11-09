@@ -298,7 +298,7 @@ class ExtractionController extends Controller
             'Nom' => fn (Oev $o) => $o->nom,
             'Prénom(s)' => fn (Oev $o) => $o->prenom,
             'Sexe' => $lib('sexe', Oev::SEXES),
-            'Date de naissance' => self::dateDeNaissance(...),
+            'Date de naissance' => fn (Oev $o) => self::dateDeNaissance($o),
             'Âge' => fn (Oev $o) => $o->age(),
             'Lieu de naissance' => fn (Oev $o) => $o->lieuDeNaissance() ?? '',
             'Nationalité' => fn (Oev $o) => $o->nationalite ?? '',

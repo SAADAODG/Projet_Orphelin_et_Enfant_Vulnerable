@@ -2,21 +2,20 @@
 
 namespace App\Services\Oev;
 
-use App\Models\Commune;
 use App\Models\Ecole;
 use App\Models\Oev;
 use App\Models\ParametreOev;
 use App\Models\User;
 use App\Support\Perimetre;
-use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
  * Validation du formulaire OEV (création et modification) :
  *  - saisie nettoyée (téléphones, école précédente choisie dans la liste) ;
- *  - règles par partie du formulaire, avec les mêmes conditions que son affichage, et cohérence entre les réponses ;
- *  - données mises en forme pour l'enregistrement (champs masqués effacés, écoles, tuteur, vulnérabilités).
+ *  - règles par partie du formulaire, avec les mêmes conditions que son affichage, et cohérence entre les réponses
+ *    (ReglesCoherenceOev) ;
+ *  - données mises en forme pour l'enregistrement : champs masqués effacés, écoles, tuteur, vulnérabilités (MiseEnFormeOev).
  */
 class ValidationOev
 {
@@ -124,18 +123,6 @@ class ValidationOev
         'centre_formation_id' => 'centre de formation',
     ];
 
-    /** Parent désigné comme tuteur alors qu'il est décédé, ou qu'on ne sait pas s'il est vivant. */
-    private const TUTEUR_PARENT_REFUSE = [
-        'mere' => [
-            'decede' => 'La mère est déclarée décédée : elle ne peut pas être la tutrice de l’enfant.',
-            'inconnu' => 'On ne sait pas si la mère est vivante : elle ne peut pas être indiquée comme tutrice.',
-        ],
-        'pere' => [
-            'decede' => 'Le père est déclaré décédé : il ne peut pas être le tuteur de l’enfant.',
-            'inconnu' => 'On ne sait pas si le père est vivant : il ne peut pas être indiqué comme tuteur.',
-        ],
-    ];
-
     private const OBLIGATOIRE_SCOLARISE = 'Le champ « :attribute » est obligatoire pour un enfant scolarisé.';
 
     /** Données validées et mises en forme, prêtes à enregistrer (sans les pièces jointes). */
@@ -163,12 +150,7 @@ class ValidationOev
             Oev::DOCUMENTS + self::ATTRIBUTS,
         );
 
-        $validated = $this->mettreEnForme($validated);
-        $validated = $this->effacerChampsMasques($validated, $c['sansActivite']);
-        $validated = $this->completerEcoles($validated);
-        $validated = $this->completerLieux($validated);
-        $validated = $this->completerTuteur($validated);
-        $validated = $this->completerVulnerabilites($validated);
+        $validated = MiseEnFormeOev::appliquer($validated, $c['sansActivite']);
 
         return collect($validated)->except(array_keys(Oev::DOCUMENTS))->all();
     }
@@ -251,7 +233,7 @@ class ValidationOev
             // Village facultatif, mais forcément dans la commune choisie
             'village_id' => ['nullable', 'integer', Rule::exists('villages', 'id')->where('commune_id', $request->input('commune_id'))],
             'quartier' => ['nullable', 'string', 'max:150'],
-            'lieu_provenance_commune_id' => ['nullable', $this->regleCommuneDeProvenance()],
+            'lieu_provenance_commune_id' => ['nullable', ReglesCoherenceOev::communeDeProvenance()],
             'lieu_provenance' => ['nullable', Rule::requiredIf($groupeMobile && $request->input('lieu_provenance_commune_id') === 'autre'), 'string', 'max:150'],
         ];
     }
@@ -272,7 +254,7 @@ class ValidationOev
             'pere_nom' => ['nullable', Rule::requiredIf($pereTuteur), 'string', 'max:100'],
             'pere_prenoms' => ['nullable', Rule::requiredIf($pereTuteur), 'string', 'max:150'],
             'pere_vivant' => ['required', Rule::in(array_keys(Oev::PARENT_VIVANT))],
-            'pere_date_deces' => ['nullable', 'date', 'before_or_equal:today', $this->regleDecesPereCoherent($request)],
+            'pere_date_deces' => ['nullable', 'date', 'before_or_equal:today', ReglesCoherenceOev::decesPereCoherent($request)],
             'pere_deces_confirme' => ['nullable', 'boolean'],
         ];
     }
@@ -283,7 +265,7 @@ class ValidationOev
         $saisi = Rule::requiredIf(! $c['tuteurEstParent']);
 
         return [
-            'tuteur_lien' => ['required', Rule::in(array_keys(Oev::liensTuteur(true))), $this->regleTuteurVivant($request)],
+            'tuteur_lien' => ['required', Rule::in(array_keys(Oev::liensTuteur(true))), ReglesCoherenceOev::tuteurVivant($request)],
             'tuteur_lien_precision' => ['nullable', 'required_if:tuteur_lien,autre_parent', 'string', 'max:100'],
             'nom_tuteur' => ['nullable', $saisi, 'string', 'max:100'],
             'prenom_tuteur' => ['nullable', $saisi, 'string', 'max:150'],
@@ -323,7 +305,7 @@ class ValidationOev
     {
         return [
             // Ménage
-            'source_revenu' => [...self::choix(Oev::SOURCES_REVENU), $this->regleSourceRevenuCoherente($c['deuxParentsDecedes'])],
+            'source_revenu' => [...self::choix(Oev::SOURCES_REVENU), ReglesCoherenceOev::sourceRevenuCoherente($c['deuxParentsDecedes'])],
             'niveau_revenu' => self::choix(Oev::NIVEAUX),
             'logement' => self::choix(Oev::LOGEMENTS),
 
@@ -352,21 +334,21 @@ class ValidationOev
             'niveau_etude' => ['nullable', Rule::requiredIf($c['aEteScolarise']), Rule::in(array_keys(Oev::NIVEAUX_ETUDE))],
             'raison_non_scolarisation' => ['nullable', Rule::requiredIf($c['nonScolarise']), Rule::in(array_keys(Oev::RAISONS_NON_SCOLARISATION))],
             'raison_non_scolarisation_precision' => ['nullable', Rule::requiredIf($c['nonScolarise'] && $request->input('raison_non_scolarisation') === 'autre'), 'string', 'max:255'],
-            'ecole_precedente_id' => ['nullable', $this->regleEcoleDeLaCommune($request, $c['ecolePrecedenteDemandee'])],
+            'ecole_precedente_id' => ['nullable', ReglesCoherenceOev::ecoleDeLaCommune($request, $c['ecolePrecedenteDemandee'])],
             'etablissement_precedent' => ['nullable', Rule::requiredIf($c['ecolePrecedenteDemandee'] && $request->input('ecole_precedente_id') === 'autre'), 'string', 'max:255'],
             // La classe de l'année précédente fixe le barème de la moyenne (/10 ou /20)
             'classe_precedente' => ['nullable', Rule::requiredIf(filled($request->input('moyenne_annuelle'))), Rule::in(array_keys(Oev::toutesLesClasses()))],
-            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', $this->regleMoyenneDansLeBareme($request)],
-            'appreciation' => [...self::choix(Oev::APPRECIATIONS), $this->regleAppreciationCoherente($request, $estScolarise)],
+            'moyenne_annuelle' => ['nullable', 'numeric', 'min:0', ReglesCoherenceOev::moyenneDansLeBareme($request)],
+            'appreciation' => [...self::choix(Oev::APPRECIATIONS), ReglesCoherenceOev::appreciationCoherente($request, $estScolarise)],
             'performance_scolaire' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::PERFORMANCES_SCOLAIRES))],
             'performance_difficultes' => ['nullable', Rule::requiredIf($estScolarise && $request->input('performance_scolaire') === 'difficultes'), 'string', 'max:255'],
             'systeme_educatif' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::SYSTEMES_EDUCATIFS))],
-            'ecole_id' => ['nullable', $this->regleEcoleDeLaCommune($request, $estScolarise)],
+            'ecole_id' => ['nullable', ReglesCoherenceOev::ecoleDeLaCommune($request, $estScolarise)],
             'etablissement_actuel' => ['nullable', Rule::requiredIf($estScolarise && ! $ecoleDeLaListe), 'string', 'max:255'],
             'type_etablissement' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::TYPES_ETABLISSEMENT))],
             'rib_etablissement' => ['nullable', 'string', 'max:60'],
             // La classe doit appartenir au niveau d'étude choisi (ex. pas de « 6e » en primaire)
-            'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($request->input('niveau_etude')))), $this->regleClasseActuelleCoherente($request)],
+            'classe' => ['nullable', $scolariseRequis, Rule::in(array_keys(Oev::classesDuNiveau($request->input('niveau_etude')))), ReglesCoherenceOev::classeActuelleCoherente($request)],
             'frais_scolarite' => ['nullable', 'integer', 'min:0'],
         ];
     }
@@ -383,7 +365,7 @@ class ValidationOev
             'formation_duree_mois' => ['nullable', 'required_if:formation_professionnelle,1', 'integer', 'min:1', 'max:120'],
             // Formation achevée : la durée reçue est la durée totale (non demandée)
             'formation_duree_recue_mois' => ['nullable', Rule::requiredIf($request->input('formation_professionnelle') === '1' && $request->input('formation_etat') === 'en_cours'),
-                'integer', 'min:0', $this->regleDureeRecueCoherente($request)],
+                'integer', 'min:0', ReglesCoherenceOev::dureeRecueCoherente($request)],
             // Ni scolarisé ni en formation : son souhait (école, formation…) oriente un futur parrainage
             'souhait_avenir' => ['nullable', Rule::requiredIf($c['sansActivite']), Rule::in(array_keys(Oev::SOUHAITS_AVENIR)),
                 Rule::when($c['exclu'], [Rule::notIn(['ecole'])])],
@@ -497,240 +479,5 @@ class ValidationOev
             'gestionnaire_contact.regex' => 'Le téléphone du gestionnaire du cas doit comporter 8 chiffres (ex : 70 12 34 56).',
             'lieu_provenance.required' => 'Précisez le lieu de provenance (ville, pays) s’il n’est pas dans la liste.',
         ];
-    }
-
-    /* ---------- Cohérence entre les réponses (règles de validation Laravel : attribut, valeur, échec) ---------- */
-
-    /** École choisie parmi celles de la commune de l'enfant, ou « autre ». */
-    private function regleEcoleDeLaCommune(Request $request, bool $demandee): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request, $demandee): void {
-            if ($demandee && $valeur !== 'autre' && ! Ecole::whereKey($valeur)->where('commune_id', $request->input('commune_id'))->exists()) {
-                $echec('Choisissez l’établissement dans la liste des écoles de la commune de l’enfant.');
-            }
-        };
-    }
-
-    /** Un parent tuteur doit être déclaré vivant. */
-    private function regleTuteurVivant(Request $request): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
-            foreach (Oev::parentsTuteurs($valeur) as $parent) {
-                $etat = $request->input($parent === 'mere' ? 'mere_vivante' : 'pere_vivant');
-                if ($etat !== 'oui') {
-                    $echec(self::TUTEUR_PARENT_REFUSE[$parent][$etat === 'non' ? 'decede' : 'inconnu']);
-                }
-            }
-        };
-    }
-
-    private function regleCommuneDeProvenance(): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec): void {
-            if ($valeur !== 'autre' && ! Commune::whereKey($valeur)->exists()) {
-                $echec('Choisissez le lieu de provenance dans la liste.');
-            }
-        };
-    }
-
-    /** Moyenne : sur 10 au préscolaire et au primaire, sur 20 ensuite (selon la classe de l'année précédente). */
-    private function regleMoyenneDansLeBareme(Request $request): Closure
-    {
-        $bareme = Oev::baremeMoyenne($request->input('classe_precedente'));
-
-        return function (string $attribut, $valeur, Closure $echec) use ($bareme, $request): void {
-            if (is_numeric($valeur) && $valeur > $bareme) {
-                $classe = Oev::toutesLesClasses()[$request->input('classe_precedente')] ?? null;
-                $echec("La moyenne doit être comprise entre 0 et {$bareme}" . ($classe ? " (notation sur {$bareme} en {$classe})." : '.'));
-            }
-        };
-    }
-
-    /** Appréciation cohérente avec la classe actuelle : un redoublant reste dans la même classe, un admis en change. */
-    private function regleAppreciationCoherente(Request $request, bool $estScolarise): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request, $estScolarise): void {
-            $actuelle = $request->input('classe');
-            $precedente = $request->input('classe_precedente');
-            if (! $estScolarise || ! $actuelle || ! $precedente) {
-                return;
-            }
-            // Une classe plus avancée l'an dernier qu'aujourd'hui est signalée sur la classe précédente
-            $rangActuel = Oev::rangClasse($actuelle);
-            $rangPrecedent = Oev::rangClasse($precedente);
-            if ($rangActuel !== null && $rangPrecedent !== null && $rangPrecedent > $rangActuel) {
-                return;
-            }
-            if ($valeur === 'redouble' && $actuelle !== $precedente) {
-                $echec('L’enfant a redoublé : sa classe actuelle devrait être la même que l’année précédente.');
-            }
-            if ($valeur === 'admis' && $actuelle === $precedente) {
-                $echec('L’enfant a été admis : sa classe actuelle ne peut pas être la même que l’année précédente.');
-            }
-        };
-    }
-
-    /** Formation : la durée déjà reçue ne peut pas dépasser la durée prévue. */
-    private function regleDureeRecueCoherente(Request $request): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
-            $totale = $request->input('formation_duree_mois');
-            if (is_numeric($valeur) && is_numeric($totale) && (int) $valeur > (int) $totale) {
-                $echec('La durée déjà reçue ne peut pas dépasser la durée de la formation.');
-            }
-        };
-    }
-
-    /** Le père peut être décédé pendant la grossesse (jusqu'à 9 mois avant la naissance), pas avant. */
-    private function regleDecesPereCoherent(Request $request): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
-            $naissance = strtotime((string) $request->input('date_naissance'));
-            if ($naissance && strtotime((string) $valeur) < strtotime('-9 months', $naissance)) {
-                $echec('Le père ne peut pas être décédé plus de 9 mois avant la naissance de l’enfant.');
-            }
-        };
-    }
-
-    /** La classe en cours ne peut pas être en dessous de celle de l'année précédente (ex. 5e puis 6e). */
-    private function regleClasseActuelleCoherente(Request $request): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
-            $rangActuel = Oev::rangClasse($valeur);
-            $rangPrecedent = filled($request->input('etablissement_precedent')) ? Oev::rangClasse($request->input('classe_precedente')) : null;
-            if ($rangActuel !== null && $rangPrecedent !== null && $rangActuel < $rangPrecedent) {
-                $echec('La classe de l’année en cours ne peut pas être inférieure à celle de l’année précédente.');
-            }
-        };
-    }
-
-    /** Fonds propres de la famille : impossible quand les deux parents sont décédés. */
-    private function regleSourceRevenuCoherente(bool $deuxParentsDecedes): Closure
-    {
-        return function (string $attribut, $valeur, Closure $echec) use ($deuxParentsDecedes): void {
-            if ($deuxParentsDecedes && in_array($valeur, Oev::SOURCES_REVENU_PARENTS_VIVANTS, true)) {
-                $echec('Les deux parents sont décédés : la source de revenu ne peut pas être « ' . Oev::SOURCES_REVENU[$valeur] . ' ».');
-            }
-        };
-    }
-
-    /* ---------- Mise en forme des données validées ---------- */
-
-    private function mettreEnForme(array $validated): array
-    {
-        $validated['contact_tuteur'] = Oev::formaterTelephone($validated['contact_tuteur']);
-        $validated['gestionnaire_contact'] = filled($validated['gestionnaire_contact'] ?? null) ? Oev::formaterTelephone($validated['gestionnaire_contact']) : null;
-        $validated['date_naissance_estimee'] = (bool) ($validated['date_naissance_estimee'] ?? false);
-        // Liste des villages vide ou désactivée : non envoyée, l'ancien village ne doit pas rester
-        $validated['village_id'] ??= null;
-        $validated['statut'] = Oev::calculerStatut($validated['mere_vivante'], $validated['pere_vivant']);
-
-        return $validated;
-    }
-
-    /** Vide les champs quand la condition est remplie. */
-    private static function effacer(array &$validated, bool $condition, array $champs): void
-    {
-        if ($condition) {
-            foreach ($champs as $champ) {
-                $validated[$champ] = null;
-            }
-        }
-    }
-
-    /** Les informations masquées par une réponse ne sont pas conservées (ex. date de décès d'une mère vivante). */
-    private function effacerChampsMasques(array $v, bool $sansActivite): array
-    {
-        self::effacer($v, $v['mere_vivante'] !== 'non', ['mere_date_deces', 'mere_deces_confirme']);
-        self::effacer($v, $v['pere_vivant'] !== 'non', ['pere_date_deces', 'pere_deces_confirme']);
-        self::effacer($v, ($v['lieu_de_vie'] ?? null) !== 'autre', ['lieu_de_vie_precision']);
-        self::effacer($v, ! $v['handicap'], ['types_handicap', 'nature_handicap']);
-        self::effacer($v, ! in_array($v['groupe_population'] ?? null, Oev::GROUPES_MOBILES, true), ['lieu_provenance', 'lieu_provenance_commune_id']);
-        self::effacer($v, ! $v['tuteur_a_cnib'], ['tuteur_cnib']);
-        self::effacer($v, $v['tuteur_lien'] !== 'autre_parent', ['tuteur_lien_precision']);
-        self::effacer($v, (bool) $v['tuteur_pret_continuer'], ['tuteur_raison_arret']);
-        self::effacer($v, ! $v['a_acte_naissance'], ['numero_acte_naissance']);
-        self::effacer($v, ! ($v['maladie_chronique'] ?? false), ['maladie_nom', 'suivi_clinique']);
-        self::effacer($v, $v['situation_scolaire'] !== 'scolarise', ['systeme_educatif', 'etablissement_actuel', 'rib_etablissement', 'type_etablissement', 'classe', 'frais_scolarite', 'performance_scolaire', 'performance_difficultes']);
-        self::effacer($v, ($v['performance_scolaire'] ?? null) !== 'difficultes', ['performance_difficultes']);
-        self::effacer($v, ! in_array($v['situation_scolaire'], ['scolarise', 'descolarise'], true), ['niveau_etude']);
-        self::effacer($v, $v['situation_scolaire'] === 'non_scolarise', ['etablissement_precedent', 'classe_precedente', 'moyenne_annuelle', 'appreciation']);
-        self::effacer($v, blank($v['etablissement_precedent'] ?? null), ['classe_precedente', 'moyenne_annuelle', 'appreciation']);
-        self::effacer($v, ! in_array($v['situation_scolaire'], ['non_scolarise', 'descolarise'], true), ['raison_non_scolarisation', 'raison_non_scolarisation_precision']);
-        self::effacer($v, ($v['raison_non_scolarisation'] ?? null) !== 'autre', ['raison_non_scolarisation_precision']);
-        self::effacer($v, ! ($v['formation_professionnelle'] ?? false), ['formation_etat', 'formation_filiere', 'formation_type_centre', 'centre_formation_id', 'formation_duree_mois', 'formation_duree_recue_mois']);
-        // Souhait seulement pour un enfant ni scolarisé ni en formation ; la formation souhaitée seulement s'il choisit la formation
-        self::effacer($v, ! $sansActivite, ['souhait_avenir', 'souhait_avenir_precision']);
-        self::effacer($v, ($v['souhait_avenir'] ?? null) !== 'formation', ['souhait_avenir_precision']);
-        // Formation achevée : toute la durée a été reçue
-        if (($v['formation_etat'] ?? null) === 'achevee') {
-            $v['formation_duree_recue_mois'] = $v['formation_duree_mois'];
-        }
-
-        return $v;
-    }
-
-    private function completerEcoles(array $v): array
-    {
-        // École de la liste : son nom est repris comme établissement fréquenté ; sinon établissement saisi, sans école rattachée
-        if ($v['situation_scolaire'] === 'scolarise' && filled($v['ecole_id'] ?? null) && $v['ecole_id'] !== 'autre') {
-            $v['etablissement_actuel'] = Ecole::findOrFail($v['ecole_id'])->nom;
-        } else {
-            $v['ecole_id'] = null;
-        }
-        // École précédente de la liste (son nom a été repris avant la validation) ; sinon établissement saisi ou aucun
-        if (filled($v['etablissement_precedent'] ?? null) && filled($v['ecole_precedente_id'] ?? null) && $v['ecole_precedente_id'] !== 'autre') {
-            $v['ecole_precedente_id'] = (int) $v['ecole_precedente_id'];
-        } else {
-            $v['ecole_precedente_id'] = null;
-        }
-
-        return $v;
-    }
-
-    private function completerLieux(array $v): array
-    {
-        // Lieu de naissance saisi librement : l'ancien rattachement à une commune est abandonné
-        $v['lieu_naissance_commune_id'] = null;
-        // Lieu de provenance : commune du référentiel, ou lieu saisi quand il n'y figure pas
-        if (($v['lieu_provenance_commune_id'] ?? null) === 'autre') {
-            $v['lieu_provenance_commune_id'] = null;
-        } else {
-            $v['lieu_provenance'] = null;
-        }
-
-        return $v;
-    }
-
-    /** Tuteur = parent(s) : nom et prénoms repris de la partie « Parents », sexe déduit. */
-    private function completerTuteur(array $v): array
-    {
-        $parents = Oev::parentsTuteurs($v['tuteur_lien']);
-        if ($parents !== []) {
-            $v['nom_tuteur'] = collect($parents)->map(fn ($p) => $v["{$p}_nom"])->unique()->implode(' / ');
-            $v['prenom_tuteur'] = collect($parents)->map(fn ($p) => $v["{$p}_prenoms"])->implode(' et ');
-        }
-        $v['tuteur_sexe'] = match ($v['tuteur_lien']) {
-            'mere' => 'F',
-            'pere' => 'M',
-            'parents' => null,
-            default => $v['tuteur_sexe'] ?? null,
-        };
-
-        return $v;
-    }
-
-    /** Vulnérabilités : celles déduites des réponses sont ajoutées d'office ; « grossesse » ne concerne que les filles. */
-    private function completerVulnerabilites(array $v): array
-    {
-        $vulnerabilites = array_diff((array) ($v['vulnerabilites'] ?? []), ['orphelin', 'handicap', 'sans_acte_naissance']);
-        if ($v['sexe'] !== 'F') {
-            $vulnerabilites = array_diff($vulnerabilites, ['grossesse']);
-        }
-        $vulnerabilites = array_values(array_unique(array_merge(Oev::vulnerabilitesAutomatiques($v), $vulnerabilites)));
-        $v['vulnerabilites'] = $vulnerabilites ?: null;
-        self::effacer($v, ! in_array('autre', $vulnerabilites, true), ['vulnerabilite_precision']);
-
-        return $v;
     }
 }

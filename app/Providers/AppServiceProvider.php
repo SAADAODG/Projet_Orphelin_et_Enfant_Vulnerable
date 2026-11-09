@@ -8,7 +8,7 @@ use App\Models\QuickLink;
 use App\Models\Service;
 use App\Models\Signalement;
 use App\Models\SiteSetting;
-use App\Services\Parrainage\SelectionParrainage;
+use App\Services\Parrainage\SourceSelectionParrainage;
 use App\Services\Parrainage\SourceSelection;
 use App\Listeners\JournalAudit;
 use App\Observers\AuditObserver;
@@ -37,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Données du module Sélection (listes des sessions) ; établissements, paiement et suivi scolaire pas encore gérés
-        $this->app->bind(SourceSelection::class, SelectionParrainage::class);
+        $this->app->bind(SourceSelection::class, SourceSelectionParrainage::class);
     }
 
     /**
