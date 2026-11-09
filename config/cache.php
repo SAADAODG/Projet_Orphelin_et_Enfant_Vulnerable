@@ -2,6 +2,9 @@
 
 use Illuminate\Support\Str;
 
+// Variable locale (pas de const : ce fichier peut être chargé plusieurs fois)
+$cheminCache = 'framework/cache/data';
+
 return [
 
     /*
@@ -49,14 +52,14 @@ return [
 
         'file' => [
             'driver' => 'file',
-            'path' => storage_path('framework/cache/data'),
-            'lock_path' => storage_path('framework/cache/data'),
+            'path' => storage_path($cheminCache),
+            'lock_path' => storage_path($cheminCache),
         ],
 
         'storage' => [
             'driver' => 'storage',
             'disk' => env('CACHE_STORAGE_DISK'),
-            'path' => env('CACHE_STORAGE_PATH', 'framework/cache/data'),
+            'path' => env('CACHE_STORAGE_PATH', $cheminCache),
         ],
 
         'memcached' => [

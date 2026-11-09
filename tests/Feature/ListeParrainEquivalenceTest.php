@@ -92,7 +92,7 @@ class ListeParrainEquivalenceTest extends TestCase
                                         'niveau_priorite' => $priorite, 'niveau_etude' => [], 'handicap' => $handicap, 'age_min' => null, 'age_max' => null,
                                     ];
                                     $attendu = $ancien->listeParrain($parrain, $utilisateur, $f)->map(fn (Oev $o) => [$o->id, $o->besoin_estime])->all();
-                                    $liste = $nouveau->listeParrain($parrain, $utilisateur, $f);
+                                    $liste = $nouveau->listeParrain($utilisateur, $f);
                                     $obtenu = $liste['oevs']->map(fn (Oev $o) => [$o->id, $o->besoin_estime])->values()->all();
                                     $contexte = "{$origine}, nature " . ($nature?->code ?? 'aucune') . ', zone ' . ($regions ? 'région' : 'toutes')
                                         . ', sexe ' . implode('+', $sexe) . ', handicap ' . implode('+', $handicap) . ', priorité ' . implode('+', $priorite) . ", {$niveau}";
@@ -112,6 +112,6 @@ class ListeParrainEquivalenceTest extends TestCase
         // Le jeu de données exerce bien la liste (pas une égalité entre listes vides)
         $base = ['session' => $session, 'annee' => '2026-2027', 'nature' => null, 'zone_parrain' => false, 'regions' => [], 'provinces' => [],
             'sexe' => [], 'statut' => [], 'vulnerabilite' => [], 'niveau_priorite' => [], 'niveau_etude' => [], 'handicap' => [], 'age_min' => null, 'age_max' => null];
-        $this->assertGreaterThan(30, $nouveau->listeParrain($parrain, $central, ['source' => 'eligibles'] + $base)['nombre']);
+        $this->assertGreaterThan(30, $nouveau->listeParrain($central,['source' => 'eligibles'] + $base)['nombre']);
     }
 }

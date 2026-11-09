@@ -504,7 +504,7 @@ class ValidationOev
     /** École choisie parmi celles de la commune de l'enfant, ou « autre ». */
     private function regleEcoleDeLaCommune(Request $request, bool $demandee): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request, $demandee): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request, $demandee): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             if ($demandee && $valeur !== 'autre' && ! Ecole::whereKey($valeur)->where('commune_id', $request->input('commune_id'))->exists()) {
                 $echec('Choisissez l’établissement dans la liste des écoles de la commune de l’enfant.');
             }
@@ -514,7 +514,7 @@ class ValidationOev
     /** Un parent tuteur doit être déclaré vivant. */
     private function regleTuteurVivant(Request $request): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             foreach (Oev::parentsTuteurs($valeur) as $parent) {
                 $etat = $request->input($parent === 'mere' ? 'mere_vivante' : 'pere_vivant');
                 if ($etat !== 'oui') {
@@ -526,7 +526,7 @@ class ValidationOev
 
     private function regleCommuneDeProvenance(): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec): void {
+        return function (string $attribut, $valeur, Closure $echec): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             if ($valeur !== 'autre' && ! Commune::whereKey($valeur)->exists()) {
                 $echec('Choisissez le lieu de provenance dans la liste.');
             }
@@ -538,7 +538,7 @@ class ValidationOev
     {
         $bareme = Oev::baremeMoyenne($request->input('classe_precedente'));
 
-        return function (string $attribut, $valeur, Closure $echec) use ($bareme, $request): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($bareme, $request): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             if (is_numeric($valeur) && $valeur > $bareme) {
                 $classe = Oev::toutesLesClasses()[$request->input('classe_precedente')] ?? null;
                 $echec("La moyenne doit être comprise entre 0 et {$bareme}" . ($classe ? " (notation sur {$bareme} en {$classe})." : '.'));
@@ -549,7 +549,7 @@ class ValidationOev
     /** Appréciation cohérente avec la classe actuelle : un redoublant reste dans la même classe, un admis en change. */
     private function regleAppreciationCoherente(Request $request, bool $estScolarise): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request, $estScolarise): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request, $estScolarise): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             $actuelle = $request->input('classe');
             $precedente = $request->input('classe_precedente');
             if (! $estScolarise || ! $actuelle || ! $precedente) {
@@ -573,7 +573,7 @@ class ValidationOev
     /** Formation : la durée déjà reçue ne peut pas dépasser la durée prévue. */
     private function regleDureeRecueCoherente(Request $request): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             $totale = $request->input('formation_duree_mois');
             if (is_numeric($valeur) && is_numeric($totale) && (int) $valeur > (int) $totale) {
                 $echec('La durée déjà reçue ne peut pas dépasser la durée de la formation.');
@@ -584,7 +584,7 @@ class ValidationOev
     /** Le père peut être décédé pendant la grossesse (jusqu'à 9 mois avant la naissance), pas avant. */
     private function regleDecesPereCoherent(Request $request): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             $naissance = strtotime((string) $request->input('date_naissance'));
             if ($naissance && strtotime((string) $valeur) < strtotime('-9 months', $naissance)) {
                 $echec('Le père ne peut pas être décédé plus de 9 mois avant la naissance de l’enfant.');
@@ -595,7 +595,7 @@ class ValidationOev
     /** La classe en cours ne peut pas être en dessous de celle de l'année précédente (ex. 5e puis 6e). */
     private function regleClasseActuelleCoherente(Request $request): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($request): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($request): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             $rangActuel = Oev::rangClasse($valeur);
             $rangPrecedent = filled($request->input('etablissement_precedent')) ? Oev::rangClasse($request->input('classe_precedente')) : null;
             if ($rangActuel !== null && $rangPrecedent !== null && $rangActuel < $rangPrecedent) {
@@ -607,7 +607,7 @@ class ValidationOev
     /** Fonds propres de la famille : impossible quand les deux parents sont décédés. */
     private function regleSourceRevenuCoherente(bool $deuxParentsDecedes): Closure
     {
-        return function (string $attribut, $valeur, Closure $echec) use ($deuxParentsDecedes): void {
+        return function (string $attribut, $valeur, Closure $echec) use ($deuxParentsDecedes): void { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
             if ($deuxParentsDecedes && in_array($valeur, Oev::SOURCES_REVENU_PARENTS_VIVANTS, true)) {
                 $echec('Les deux parents sont décédés : la source de revenu ne peut pas être « ' . Oev::SOURCES_REVENU[$valeur] . ' ».');
             }

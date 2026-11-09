@@ -93,7 +93,7 @@ class AppuiPartenaireController extends Controller
 
     private function nouvelAppui(Request $request): AppuiPartenaire
     {
-        $oev = $request->integer('oev') ? $this->oevsSaisissables($request->user())->find($request->integer('oev')) : null;
+        $oev = $request->integer('oev') ? $this->oevsSaisissables()->find($request->integer('oev')) : null;
 
         return (new AppuiPartenaire([
             'annee' => SessionParrainageController::anneeScolaireCourante(),
@@ -119,16 +119,16 @@ class AppuiPartenaireController extends Controller
             ->with('success', "Appui enregistré pour {$appui->oev->nomComplet()} ({$appui->oev->reference()}).");
     }
 
-    public function edit(Request $request, AppuiPartenaire $appui): View
+    public function edit(AppuiPartenaire $appui): View
     {
-        $this->verifierAcces($request->user(), $appui);
+        $this->verifierAcces($appui);
 
         return view('parrainage.appuis.edit', $this->donneesFormulaire($appui->load('oev')));
     }
 
     public function update(Request $request, AppuiPartenaire $appui): RedirectResponse
     {
-        $this->verifierAcces($request->user(), $appui);
+        $this->verifierAcces($appui);
         $donnees = $this->valider($request, $appui);
         if ($donnees instanceof RedirectResponse) {
             return $donnees;
@@ -153,7 +153,7 @@ class AppuiPartenaireController extends Controller
         }
 
         // Chaque mot doit se retrouver dans le code, le nom ou le prénom (« ouedraogo awa »)
-        $requete = $this->oevsSaisissables($request->user())->with('commune');
+        $requete = $this->oevsSaisissables()->with('commune');
         foreach (preg_split('/\s+/', $terme) as $mot) {
             $requete->where(fn ($q) => $q
                 ->whereLike('code', "%{$mot}%")
@@ -260,7 +260,7 @@ class AppuiPartenaireController extends Controller
     /** @return true|array<int, string> true si la ligne est enregistrée, sinon les motifs de rejet */
     private function importerLigne(User $utilisateur, array $ligne): true|array
     {
-        $oev = $ligne['code_oev'] ? $this->oevsSaisissables($utilisateur)->where('code', $ligne['code_oev'])->first() : null;
+        $oev = $ligne['code_oev'] ? $this->oevsSaisissables()->where('code', $ligne['code_oev'])->first() : null;
         $nature = $ligne['nature'] ? NatureAppui::where('code', $ligne['nature'])->where('actif', true)->first() : null;
 
         $donnees = [
@@ -315,7 +315,7 @@ class AppuiPartenaireController extends Controller
 
         $regles = $this->regles($appui);
         // L'OEV choisi doit être intégré et dans la zone de l'utilisateur
-        $regles['oev_id'][] = Rule::in($this->oevsSaisissables($request->user())->whereKey($request->integer('oev_id'))->pluck('id'));
+        $regles['oev_id'][] = Rule::in($this->oevsSaisissables()->whereKey($request->integer('oev_id'))->pluck('id'));
         $regles['motif_doublon'] = ['nullable', 'string', 'max:2000'];
 
         $donnees = $request->validate($regles, $this->messages());
@@ -342,7 +342,7 @@ class AppuiPartenaireController extends Controller
             'parrain_id' => ['required', 'integer', Rule::exists('parrains', 'id')->where(fn ($q) => $q
                 ->where('actif', true)
                 ->when($appui, fn ($q) => $q->orWhere('id', $appui->parrain_id)))],
-            'annee' => ['required', 'regex:/^\d{4}-\d{4}$/', function (string $attribut, $valeur, \Closure $echec) {
+            'annee' => ['required', 'regex:/^\d{4}-\d{4}$/', function (string $attribut, $valeur, \Closure $echec) { // NOSONAR : $attribut imposé par Laravel (règle de validation appelée avec ses 3 paramètres par position)
                 [$debut, $fin] = array_map('intval', explode('-', (string) $valeur) + [1 => 0]);
                 if ($fin !== $debut + 1) {
                     $echec('L’année scolaire doit couvrir deux années consécutives (ex : 2026-2027).');
@@ -370,13 +370,13 @@ class AppuiPartenaireController extends Controller
         ];
     }
 
-    /** OEV pour lesquels l'utilisateur peut enregistrer un appui : intégrés, non désactivés, dans sa zone. */
-    private function oevsSaisissables(User $utilisateur)
+    /** OEV pour lesquels l'utilisateur connecté peut enregistrer un appui : intégrés, non désactivés, dans sa zone. */
+    private function oevsSaisissables()
     {
         return $this->cloisonner(Oev::beneficiaires());
     }
 
-    private function verifierAcces(User $utilisateur, AppuiPartenaire $appui): void
+    private function verifierAcces(AppuiPartenaire $appui): void
     {
         $this->verifierZone($appui, 'oev', 'Cet appui concerne un OEV hors de votre zone.');
     }

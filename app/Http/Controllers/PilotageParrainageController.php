@@ -62,7 +62,7 @@ class PilotageParrainageController extends Controller
         $parrain = Parrain::with('engagements')->find($request->integer('parrain_id'));
         $filtresParrain = $parrain ? $this->filtresListeParrain($request, $parrain) : null;
         // Liste comptée par la base ; seuls les 10 premiers OEV sont lus pour l'aperçu
-        $liste = $parrain ? $this->extractions->listeParrain($parrain, $utilisateur, $filtresParrain) : ['nombre' => 0, 'apercu' => fn () => []];
+        $liste = $parrain ? $this->extractions->listeParrain($utilisateur, $filtresParrain) : ['nombre' => 0, 'apercu' => fn () => []];
 
         return view('parrainage.pilotage.extractions', [
             'central' => $utilisateur->niveau() === User::NIVEAU_CENTRAL,
@@ -165,7 +165,7 @@ class PilotageParrainageController extends Controller
 
         $parrain = Parrain::with('engagements')->findOrFail($request->integer('parrain_id'));
         $f = $this->filtresListeParrain($request, $parrain);
-        $liste = $this->extractions->listeParrain($parrain, $utilisateur, $f);
+        $liste = $this->extractions->listeParrain($utilisateur, $f);
         $format = $request->input('format');
         $colonnes = ExtractionsParrainage::colonnesListeParrain($donnees);
         if ($refus = $this->refuserSiTropGrand($liste['nombre'], count($colonnes), $format)) {

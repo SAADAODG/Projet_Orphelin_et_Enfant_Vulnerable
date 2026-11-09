@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Permissions as P;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -16,35 +17,36 @@ class RolePermissionSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        // Noms des permissions : App\Support\Permissions (un seul endroit pour toute l'application)
         $permissions = [
-            'voir utilisateurs',
-            'créer utilisateurs',
-            'modifier utilisateurs',
-            'supprimer utilisateurs',
-            'voir rapports',
-            'gérer paramètres',
-            'gérer rôles',
+            P::VOIR_UTILISATEURS,
+            P::CREER_UTILISATEURS,
+            P::MODIFIER_UTILISATEURS,
+            P::SUPPRIMER_UTILISATEURS,
+            P::VOIR_RAPPORTS,
+            P::GERER_PARAMETRES,
+            P::GERER_ROLES,
             // Signalements reçus du public : traités par le DP de la province, consultés par le DR de la région
-            'voir signalements',
-            'traiter signalements',
+            P::VOIR_SIGNALEMENTS,
+            P::TRAITER_SIGNALEMENTS,
             // Circuit du dossier enfant : DP (constituer) → DR (valider) → niveau central (intégrer)
-            'voir OEV',
-            'constituer dossiers',
-            'valider dossiers',
-            'intégrer OEV',
+            P::VOIR_OEV,
+            P::CONSTITUER_DOSSIERS,
+            P::VALIDER_DOSSIERS,
+            P::INTEGRER_OEV,
             // Plaintes et avis des usagers : niveau central
-            'voir plaintes',
-            'traiter plaintes',
+            P::VOIR_PLAINTES,
+            P::TRAITER_PLAINTES,
             // Parrainage : sessions et répertoire des parrains gérés par le niveau central, consultés par tous ;
             // appuis des partenaires enregistrés par le DP (sa province) et le niveau central
-            'voir parrainage',
-            'gérer sessions parrainage',
-            'gérer parrains',
-            'enregistrer appuis',
+            P::VOIR_PARRAINAGE,
+            P::GERER_SESSIONS_PARRAINAGE,
+            P::GERER_PARRAINS,
+            P::ENREGISTRER_APPUIS,
             // Suivi de fin d'année des parrainés : le DP (sa province) et le niveau central
-            'suivre parrainages',
+            P::SUIVRE_PARRAINAGES,
             // Journal d'audit : administrateurs (superAdmin et administrateur reçoivent toutes les permissions)
-            'voir journal',
+            P::VOIR_JOURNAL,
         ];
 
         foreach ($permissions as $permission) {
@@ -58,46 +60,46 @@ class RolePermissionSeeder extends Seeder
             'superAdmin' => $permissions,
             'administrateur' => $permissions,
             'responsable DGFE' => [
-                'voir utilisateurs',
-                'voir rapports',
-                'voir OEV',
-                'intégrer OEV',
-                'voir plaintes',
-                'traiter plaintes',
-                'voir parrainage',
-                'gérer sessions parrainage',
-                'gérer parrains',
-                'enregistrer appuis',
-                'suivre parrainages',
+                P::VOIR_UTILISATEURS,
+                P::VOIR_RAPPORTS,
+                P::VOIR_OEV,
+                P::INTEGRER_OEV,
+                P::VOIR_PLAINTES,
+                P::TRAITER_PLAINTES,
+                P::VOIR_PARRAINAGE,
+                P::GERER_SESSIONS_PARRAINAGE,
+                P::GERER_PARRAINS,
+                P::ENREGISTRER_APPUIS,
+                P::SUIVRE_PARRAINAGES,
             ],
             'agent DGFE' => [
-                'voir rapports',
-                'voir OEV',
-                'intégrer OEV',
-                'voir plaintes',
-                'traiter plaintes',
-                'voir parrainage',
-                'gérer sessions parrainage',
-                'gérer parrains',
-                'enregistrer appuis',
-                'suivre parrainages',
+                P::VOIR_RAPPORTS,
+                P::VOIR_OEV,
+                P::INTEGRER_OEV,
+                P::VOIR_PLAINTES,
+                P::TRAITER_PLAINTES,
+                P::VOIR_PARRAINAGE,
+                P::GERER_SESSIONS_PARRAINAGE,
+                P::GERER_PARRAINS,
+                P::ENREGISTRER_APPUIS,
+                P::SUIVRE_PARRAINAGES,
             ],
             'DR' => [
-                'voir rapports',
-                'voir signalements',
-                'voir OEV',
-                'valider dossiers',
-                'voir parrainage',
+                P::VOIR_RAPPORTS,
+                P::VOIR_SIGNALEMENTS,
+                P::VOIR_OEV,
+                P::VALIDER_DOSSIERS,
+                P::VOIR_PARRAINAGE,
             ],
             'DP' => [
-                'voir rapports',
-                'voir signalements',
-                'traiter signalements',
-                'voir OEV',
-                'constituer dossiers',
-                'voir parrainage',
-                'enregistrer appuis',
-                'suivre parrainages',
+                P::VOIR_RAPPORTS,
+                P::VOIR_SIGNALEMENTS,
+                P::TRAITER_SIGNALEMENTS,
+                P::VOIR_OEV,
+                P::CONSTITUER_DOSSIERS,
+                P::VOIR_PARRAINAGE,
+                P::ENREGISTRER_APPUIS,
+                P::SUIVRE_PARRAINAGES,
             ],
         ];
 
