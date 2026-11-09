@@ -10,9 +10,9 @@ use App\Models\Oev;
 use App\Models\Parrain;
 use App\Models\User;
 use App\Services\Parrainage\ParrainageService;
+use App\Support\CelluleExcel;
 use App\Support\Montant;
 use App\Support\Permissions;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,7 +21,6 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date as DateExcel;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -269,8 +268,8 @@ class AppuiPartenaireController extends Controller
             'annee' => (string) $ligne['annee'],
             'nature_appui_id' => $nature?->id,
             'montant' => Montant::normaliserSaisie(is_numeric($ligne['montant']) ? (string) (int) $ligne['montant'] : $ligne['montant']),
-            'date_debut' => self::dateExcel($ligne['date_debut']),
-            'date_fin' => self::dateExcel($ligne['date_fin']),
+            'date_debut' => CelluleExcel::date($ligne['date_debut']),
+            'date_fin' => CelluleExcel::date($ligne['date_fin']),
             'observations' => $ligne['observations'] ?: null,
         ];
 
@@ -408,25 +407,5 @@ class AppuiPartenaireController extends Controller
             $appui->oev->reference(),
             $appui->annee,
         ), $details + array_filter(['motif_doublon' => $appui->motif_doublon]), $utilisateur);
-    }
-
-    /** Date d'une cellule Excel : nombre de série Excel ou texte jj/mm/aaaa ; invalide → renvoyée telle quelle (rejetée). */
-    private static function dateExcel(mixed $valeur): mixed
-    {
-        return match (true) {
-            $valeur === null || $valeur === '' => null,
-            is_numeric($valeur) => Carbon::instance(DateExcel::excelToDateTimeObject((float) $valeur))->toDateString(),
-            default => self::dateDepuisTexte((string) $valeur) ?? $valeur,
-        };
-    }
-
-    /** Texte jj/mm/aaaa → AAAA-MM-JJ ; null s'il n'est pas une date lisible. */
-    private static function dateDepuisTexte(string $texte): ?string
-    {
-        try {
-            return Carbon::createFromFormat('!d/m/Y', $texte)->toDateString();
-        } catch (\Throwable) {
-            return null;
-        }
     }
 }

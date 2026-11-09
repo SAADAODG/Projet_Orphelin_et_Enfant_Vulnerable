@@ -153,14 +153,6 @@ class SessionParrainage extends Model
         return $position === false ? null : ($etats[$position + 1] ?? null);
     }
 
-    public static function etatPrecedent(string $etat): ?string
-    {
-        $etats = array_keys(self::ETATS);
-        $position = array_search($etat, $etats, true);
-
-        return $position ? $etats[$position - 1] : null;
-    }
-
     /** Une session clôturée est en lecture seule. */
     public function estModifiable(): bool
     {
