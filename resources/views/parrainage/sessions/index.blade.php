@@ -33,21 +33,21 @@
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('parrainage.sessions.index') }}">
         <label class="visually-hidden" for="filtre-annee">Filtrer par année</label>
-        <select id="filtre-annee" class="form-select form-select-sm w-auto" name="annee" onchange="this.form.submit()">
+        <select id="filtre-annee" class="form-select form-select-sm w-auto" name="annee" data-auto-submit>
           <option value="">Toutes les années</option>
           @foreach ($annees as $annee)
             <option value="{{ $annee }}" @selected($filtres['annee'] === $annee)>{{ $annee }}</option>
           @endforeach
         </select>
         <label class="visually-hidden" for="filtre-type-appui">Filtrer par type d’appui</label>
-        <select id="filtre-type-appui" class="form-select form-select-sm w-auto" name="type_appui" onchange="this.form.submit()">
+        <select id="filtre-type-appui" class="form-select form-select-sm w-auto" name="type_appui" data-auto-submit>
           <option value="">Tous les types</option>
           @foreach (SessionParrainage::TYPES_APPUI as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['type_appui'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
         <label class="visually-hidden" for="filtre-etat">Filtrer par état</label>
-        <select id="filtre-etat" class="form-select form-select-sm w-auto" name="etat" onchange="this.form.submit()">
+        <select id="filtre-etat" class="form-select form-select-sm w-auto" name="etat" data-auto-submit>
           <option value="">Tous les états</option>
           @foreach (SessionParrainage::ETATS as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['etat'] === $cle)>{{ $libelle }}</option>
@@ -130,7 +130,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Toute la ligne ouvre la session (les boutons gardent leur action)
   document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
     ligne.addEventListener('click', function (e) {

@@ -90,7 +90,7 @@
 </div>
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     // Recherche d'un OEV : propositions sous le champ, le choix remplit oev_id
     var bloc = document.querySelector('[data-recherche-oev]');

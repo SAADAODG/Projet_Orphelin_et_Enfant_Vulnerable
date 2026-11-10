@@ -445,7 +445,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     // Cases à cocher des éligibles : tout cocher, compteur du bouton d'ajout
     var formulaire = document.getElementById('formAjout');

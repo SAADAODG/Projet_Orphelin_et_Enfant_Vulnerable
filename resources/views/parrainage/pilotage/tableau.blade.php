@@ -64,23 +64,23 @@
 
   <form class="pil-filtres panel mt-3" method="GET" action="{{ route('parrainage.pilotage.index') }}" aria-label="Filtrer le tableau de bord">
     <label class="visually-hidden" for="filtre-annee">Année</label>
-    <input class="form-control form-control-sm w-auto" id="filtre-annee" name="annee" value="{{ $f['annee'] }}" pattern="\d{4}-\d{4}" size="9" title="Année scolaire, ex : 2026-2027" onchange="this.form.session_id.value = ''; this.form.submit()">
+    <input class="form-control form-control-sm w-auto" id="filtre-annee" name="annee" value="{{ $f['annee'] }}" pattern="\d{4}-\d{4}" size="9" title="Année scolaire, ex : 2026-2027" data-auto-submit data-vider="session_id">
     <label class="visually-hidden" for="filtre-session">Session</label>
-    <select class="form-select form-select-sm" id="filtre-session" name="session_id" onchange="this.form.submit()">
+    <select class="form-select form-select-sm" id="filtre-session" name="session_id" data-auto-submit>
       <option value="">Toutes les sessions de l’année</option>
       @foreach ($f['sessions'] as $session)
         <option value="{{ $session->id }}" @selected($f['session']?->id === $session->id)>Session n°{{ $session->numero }} — {{ $session->description }}</option>
       @endforeach
     </select>
     <label class="visually-hidden" for="filtre-type">Type d’appui</label>
-    <select class="form-select form-select-sm" id="filtre-type" name="type_appui" onchange="this.form.submit()">
+    <select class="form-select form-select-sm" id="filtre-type" name="type_appui" data-auto-submit>
       <option value="">Tous les types d’appui</option>
       @foreach (SessionParrainage::TYPES_APPUI as $cle => $libelle)
         <option value="{{ $cle }}" @selected($f['type_appui'] === $cle)>{{ $libelle }}</option>
       @endforeach
     </select>
     <label class="visually-hidden" for="filtre-sexe">Sexe</label>
-    <select class="form-select form-select-sm" id="filtre-sexe" name="sexe" onchange="this.form.submit()">
+    <select class="form-select form-select-sm" id="filtre-sexe" name="sexe" data-auto-submit>
       <option value="">Les deux sexes</option>
       @foreach (Oev::SEXES as $cle => $libelle)
         <option value="{{ $cle }}" @selected($f['sexe'] === $cle)>{{ $libelle }}</option>
@@ -88,7 +88,7 @@
     </select>
     @if ($f['perimetre']->niveau === User::NIVEAU_CENTRAL)
       <label class="visually-hidden" for="filtre-region">Région</label>
-      <select class="form-select form-select-sm" id="filtre-region" name="region_id" onchange="this.form.province_id && (this.form.province_id.value = ''); this.form.submit()">
+      <select class="form-select form-select-sm" id="filtre-region" name="region_id" data-auto-submit data-vider="province_id">
         <option value="">Toutes les régions</option>
         @foreach ($regions as $region)
           <option value="{{ $region->id }}" @selected($f['perimetre']->region?->id === $region->id)>{{ $region->nom }}</option>
@@ -96,7 +96,7 @@
       </select>
       @if ($f['perimetre']->region)
         <label class="visually-hidden" for="filtre-province">Province</label>
-        <select class="form-select form-select-sm" id="filtre-province" name="province_id" onchange="this.form.submit()">
+        <select class="form-select form-select-sm" id="filtre-province" name="province_id" data-auto-submit>
           <option value="">Toutes les provinces</option>
           @foreach ($regions->firstWhere('id', $f['perimetre']->region->id)?->provinces ?? [] as $province)
             <option value="{{ $province->id }}" @selected($f['perimetre']->province?->id === $province->id)>{{ $province->nom }}</option>

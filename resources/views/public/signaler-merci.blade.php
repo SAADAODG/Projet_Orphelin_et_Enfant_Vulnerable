@@ -36,7 +36,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Téléchargement automatique du récépissé PDF à l'arrivée sur la page
   window.addEventListener('load', function () {
     setTimeout(function () {

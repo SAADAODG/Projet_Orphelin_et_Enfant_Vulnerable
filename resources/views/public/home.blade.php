@@ -217,7 +217,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Apparition des sections « Mission nationale » et « Parcours simple » au défilement
   (function () {
     const elements = document.querySelectorAll('.reveal-up');

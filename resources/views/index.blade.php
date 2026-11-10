@@ -70,7 +70,7 @@
     @if ($niveau === User::NIVEAU_CENTRAL)
       <form class="db-filtre" method="GET" action="{{ route('dashboard') }}" aria-label="Filtrer le tableau de bord par localité">
         <label class="visually-hidden" for="filtre-region">Région</label>
-        <select class="form-select form-select-sm" id="filtre-region" name="region_id" onchange="this.form.province_id && (this.form.province_id.value = ''); this.form.submit()">
+        <select class="form-select form-select-sm" id="filtre-region" name="region_id" data-auto-submit data-vider="province_id">
           <option value="">Toutes les régions</option>
           @foreach ($regions as $region)
             <option value="{{ $region->id }}" @selected($perimetre->region?->id === $region->id)>{{ $region->nom }}</option>
@@ -78,7 +78,7 @@
         </select>
         @if ($perimetre->region)
           <label class="visually-hidden" for="filtre-province">Province</label>
-          <select class="form-select form-select-sm" id="filtre-province" name="province_id" onchange="this.form.submit()">
+          <select class="form-select form-select-sm" id="filtre-province" name="province_id" data-auto-submit>
             <option value="">Toutes les provinces</option>
             @foreach ($regions->firstWhere('id', $perimetre->region->id)->provinces as $province)
               <option value="{{ $province->id }}" @selected($perimetre->province?->id === $province->id)>{{ $province->nom }}</option>

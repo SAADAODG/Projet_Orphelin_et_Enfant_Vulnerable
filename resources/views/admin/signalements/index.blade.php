@@ -139,7 +139,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.querySelectorAll('.sig-row[data-href]').forEach(function (ligne) {
     ligne.addEventListener('click', function (e) {
       if (e.target.closest('a, button, form')) { return; }

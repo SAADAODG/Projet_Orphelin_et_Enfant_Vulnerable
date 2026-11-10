@@ -46,21 +46,21 @@
           <input class="form-control" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Code, nom ou prénom de l’OEV" aria-label="Rechercher un OEV">
         </div>
         <label class="visually-hidden" for="filtre-annee">Filtrer par année</label>
-        <select id="filtre-annee" class="form-select" name="annee" onchange="this.form.submit()">
+        <select id="filtre-annee" class="form-select" name="annee" data-auto-submit>
           <option value="">Toutes les années</option>
           @foreach ($annees as $annee)
             <option value="{{ $annee }}" @selected($filtres['annee'] === $annee)>{{ $annee }}</option>
           @endforeach
         </select>
         <label class="visually-hidden" for="filtre-nature">Filtrer par nature</label>
-        <select id="filtre-nature" class="form-select" name="nature" onchange="this.form.submit()">
+        <select id="filtre-nature" class="form-select" name="nature" data-auto-submit>
           <option value="">Toutes les natures</option>
           @foreach ($natures as $nature)
             <option value="{{ $nature->id }}" @selected($filtres['nature'] === $nature->id)>{{ $nature->libelle }}</option>
           @endforeach
         </select>
         <label class="visually-hidden" for="filtre-parrain">Filtrer par parrain</label>
-        <select id="filtre-parrain" class="form-select" name="parrain" onchange="this.form.submit()">
+        <select id="filtre-parrain" class="form-select" name="parrain" data-auto-submit>
           <option value="">Tous les parrains</option>
           @foreach ($parrains as $id => $nom)
             <option value="{{ $id }}" @selected($filtres['parrain'] === $id)>{{ $nom }}</option>

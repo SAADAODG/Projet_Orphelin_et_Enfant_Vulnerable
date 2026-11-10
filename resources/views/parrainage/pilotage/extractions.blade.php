@@ -59,7 +59,7 @@
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label" for="parrain_id">Parrain <span class="text-danger">*</span></label>
-          <select class="form-select" id="parrain_id" name="parrain_id" required onchange="this.form.filtre.disabled = true; this.form.submit()">
+          <select class="form-select" id="parrain_id" name="parrain_id" required data-auto-submit data-desactiver="filtre">
             <option value="">Choisir un parrain…</option>
             @foreach ($parrains as $p)
               <option value="{{ $p->id }}" @selected($parrain?->id === $p->id)>{{ $p->nom }}</option>
@@ -184,7 +184,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     var formulaire = document.getElementById('formParrain');
     if (!formulaire) return;

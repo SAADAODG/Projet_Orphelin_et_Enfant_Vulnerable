@@ -34,7 +34,7 @@
 
 @if ($ouvrir)
   @push('scripts')
-  <script>
+  <script nonce="{{ $cspNonce }}">
     document.addEventListener('DOMContentLoaded', function () {
       bootstrap.Modal.getOrCreateInstance(document.getElementById(@json($id))).show();
     });

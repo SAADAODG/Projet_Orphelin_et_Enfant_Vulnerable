@@ -18,7 +18,7 @@
       @else
         <a class="btn btn-primary" href="{{ route('public.home') }}"><i class="bi bi-house" aria-hidden="true"></i> Retour à l’accueil</a>
       @endauth
-      <a class="btn btn-outline-secondary" href="javascript:history.back()">Page précédente</a>
+      <a class="btn btn-outline-secondary" href="{{ url()->previous() }}" data-page-precedente>Page précédente</a>
     </div>
   </section>
 </div>

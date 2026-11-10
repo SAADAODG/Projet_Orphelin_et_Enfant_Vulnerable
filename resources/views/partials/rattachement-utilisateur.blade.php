@@ -48,7 +48,7 @@
 
 @once
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Affiche le champ de rattachement correspondant au rôle choisi (région pour un DR, province pour un DP).
   document.querySelectorAll('[data-rattachement]').forEach(function (bloc) {
     var niveaux = JSON.parse(bloc.dataset.niveaux);

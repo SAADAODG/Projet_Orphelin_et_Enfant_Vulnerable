@@ -321,7 +321,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Total des quotas et reste à répartir, recalculés pendant la saisie
   document.addEventListener('DOMContentLoaded', function () {
     var formulaire = document.querySelector('[data-quotas]');

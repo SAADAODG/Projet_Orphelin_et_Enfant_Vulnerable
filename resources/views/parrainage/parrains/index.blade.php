@@ -45,14 +45,14 @@
           <input class="form-control" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Nom ou contact" aria-label="Rechercher un parrain">
         </div>
         <label class="visually-hidden" for="filtre-type">Filtrer par type</label>
-        <select id="filtre-type" class="form-select" name="type" onchange="this.form.submit()">
+        <select id="filtre-type" class="form-select" name="type" data-auto-submit>
           <option value="">Tous les types</option>
           @foreach (Parrain::TYPES as $cle => $libelle)
             <option value="{{ $cle }}" @selected($filtres['type'] === $cle)>{{ $libelle }}</option>
           @endforeach
         </select>
         <label class="visually-hidden" for="filtre-actif">Filtrer par statut</label>
-        <select id="filtre-actif" class="form-select" name="actif" onchange="this.form.submit()">
+        <select id="filtre-actif" class="form-select" name="actif" data-auto-submit>
           <option value="">Actifs et inactifs</option>
           <option value="1" @selected($filtres['actif'] === '1')>Actifs</option>
           <option value="0" @selected($filtres['actif'] === '0')>Inactifs</option>
@@ -130,7 +130,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Toute la ligne ouvre la fiche du parrain (les boutons gardent leur action)
   document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
     ligne.addEventListener('click', function (e) {

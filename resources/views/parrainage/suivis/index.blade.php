@@ -368,7 +368,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     // Filtres appliqués automatiquement (listes : tout de suite ; recherche : après une pause de frappe)
     var filtres = document.getElementById('formFiltresSuivi');

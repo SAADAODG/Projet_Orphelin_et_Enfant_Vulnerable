@@ -127,7 +127,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   (function () {
     // Anonyme : on masque et on vide toutes les coordonnées
     const anonyme = document.getElementById('anonyme');

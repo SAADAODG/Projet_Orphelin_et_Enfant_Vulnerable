@@ -127,4 +127,18 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | CSP des scripts en mode « observation » (voir EnTetesSecurite)
+    |--------------------------------------------------------------------------
+    |
+    | false (défaut) : seuls les scripts portant le nonce de la page s'exécutent.
+    | true : l'ancienne règle ('unsafe-inline') reste appliquée et la règle stricte
+    | est seulement observée (Content-Security-Policy-Report-Only) : le navigateur
+    | signale dans sa console ce qu'elle bloquerait, sans rien bloquer.
+    |
+    */
+
+    'csp_scripts_observation' => (bool) env('CSP_SCRIPTS_OBSERVATION', false),
+
 ];

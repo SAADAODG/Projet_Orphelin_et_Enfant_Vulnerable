@@ -47,7 +47,7 @@
 
 @once
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.querySelectorAll('[data-localites]').forEach(function (bloc) {
     var regions = JSON.parse(bloc.dataset.localites);
     var region = bloc.querySelector('[data-localite="region_id"]');

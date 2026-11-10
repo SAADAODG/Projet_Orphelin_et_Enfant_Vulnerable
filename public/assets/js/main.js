@@ -226,4 +226,35 @@
       champ.setAttribute("aria-checked", champ.checked ? "true" : "false");
     }
   });
+
+  // Filtres envoyés dès qu'ils changent (remplace les attributs onchange, interdits par la CSP).
+  // data-vider="champ" : vide ce champ avant l'envoi (ex. la province quand la région change) ;
+  // data-desactiver="champ" : le retire de l'envoi.
+  document.addEventListener("change", function (event) {
+    var champ = event.target.closest?.("[data-auto-submit]");
+    var form = champ?.form;
+    if (!form) {
+      return;
+    }
+
+    var aVider = champ.dataset.vider && form.elements.namedItem(champ.dataset.vider);
+    if (aVider) {
+      aVider.value = "";
+    }
+
+    var aDesactiver = champ.dataset.desactiver && form.elements.namedItem(champ.dataset.desactiver);
+    if (aDesactiver) {
+      aDesactiver.disabled = true;
+    }
+
+    form.submit();
+  });
+
+  // Lien « Page précédente » (remplace href="javascript:…", interdit par la CSP)
+  document.addEventListener("click", function (event) {
+    if (event.target.closest?.("[data-page-precedente]")) {
+      event.preventDefault();
+      window.history.back();
+    }
+  });
 })();

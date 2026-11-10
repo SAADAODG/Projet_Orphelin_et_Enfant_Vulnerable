@@ -80,7 +80,7 @@
     <div class="row g-2 align-items-end">
       <div class="col-sm-6 col-lg-2">
         <label class="form-label small fw-semibold" for="par">Afficher par</label>
-        <select class="form-select form-select-sm" id="par" name="par" onchange="this.form.submit()">
+        <select class="form-select form-select-sm" id="par" name="par" data-auto-submit>
           @foreach (PaiementSessionController::AFFICHAGES as $cle => $libelle)
             <option value="{{ $cle }}" @selected($affichage === $cle)>{{ $libelle }}</option>
           @endforeach
@@ -376,7 +376,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     // Fenêtre d'export : colonnes d'une feuille décochée inactives ; au moins une feuille
     var exportForm = document.getElementById('formExportPaiement');

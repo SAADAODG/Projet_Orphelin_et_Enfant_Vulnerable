@@ -53,7 +53,7 @@
 
 @once
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // « Toutes les régions » : décoche les régions choisies ; cocher une région la décoche
   document.addEventListener('change', function (e) {
     var menu = e.target.closest('[data-multi]');

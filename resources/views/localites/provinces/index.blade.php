@@ -30,7 +30,7 @@
       </div>
       <form class="d-flex flex-wrap gap-2" method="GET" action="{{ route('localites.provinces.index') }}">
         <label class="visually-hidden" for="filtre-region-id">Filtrer par région</label>
-        <select id="filtre-region-id" class="form-select form-select-sm" name="region_id" onchange="this.form.submit()">
+        <select id="filtre-region-id" class="form-select form-select-sm" name="region_id" data-auto-submit>
           <option value="">Toutes les régions</option>
           @foreach ($regions as $r)
             <option value="{{ $r->id }}" @selected((string) $regionId === (string) $r->id)>{{ $r->nom }}</option>

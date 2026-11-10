@@ -149,7 +149,7 @@
 @endif
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.addEventListener('DOMContentLoaded', function () {
     // Icône œil : affiche / masque le mot de passe du champ associé
     document.querySelectorAll('[data-afficher-mdp]').forEach(function (bouton) {

@@ -36,7 +36,7 @@
       @if ($vue === 'demandes')<input type="hidden" name="vue" value="demandes">@endif
       <input class="form-control form-control-sm w-auto" type="search" name="q" value="{{ $filtres['q'] }}" placeholder="Code OEV, nom ou prénom" aria-label="Rechercher un OEV">
       <label class="visually-hidden" for="filtre-motif">Filtrer par motif</label>
-      <select id="filtre-motif" class="form-select form-select-sm w-auto" name="motif" onchange="this.form.submit()">
+      <select id="filtre-motif" class="form-select form-select-sm w-auto" name="motif" data-auto-submit>
         <option value="">Tous les motifs</option>
         @foreach (Oev::MOTIFS_DESACTIVATION as $cle => $libelle)
           <option value="{{ $cle }}" @selected($filtres['motif'] === $cle)>{{ $libelle }}</option>
@@ -147,7 +147,7 @@
 
 @if ($central)
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Fenêtre de motif : réactivation (motif_reactivation) ou refus d'une demande (motif_refus)
   document.addEventListener('DOMContentLoaded', function () {
     var modale = document.getElementById('motifModal');

@@ -1917,7 +1917,7 @@
 @endsection
 
 @push('scripts')
-    <script>
+    <script nonce="{{ $cspNonce }}">
         document.addEventListener('DOMContentLoaded', function() {
             var form = document.getElementById('oevWizard');
             var total = {{ count($etapes) }};

@@ -78,7 +78,7 @@
     </div>
     @include('partials.filtre-localite', ['localites' => $localites, 'regionId' => $filtres['region_id'], 'provinceId' => $filtres['province_id']])
     <label class="visually-hidden" for="filtre-statut">Filtrer par statut de l’enfant</label>
-    <select id="filtre-statut" class="form-select" name="statut" onchange="this.form.submit()">
+    <select id="filtre-statut" class="form-select" name="statut" data-auto-submit>
       <option value="">Tous les statuts</option>
       @foreach (Oev::STATUTS as $cle => $label)
         <option value="{{ $cle }}" @selected($filtres['statut'] === $cle)>{{ $label }}</option>
@@ -155,7 +155,7 @@
 </section>
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   // Toute la ligne ouvre la fiche (la référence reste un vrai lien pour le clavier et le clic molette)
   document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
     ligne.addEventListener('click', function (e) {

@@ -275,7 +275,7 @@
 
   <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ asset('assets/js/main.js') }}"></script>
-  <script>
+  <script nonce="{{ $cspNonce }}">
     // Rafraîchit la pastille rouge des nouveaux signalements toutes les 30 secondes
     (function () {
       const pastille = document.querySelector('[data-notif-signalements]');

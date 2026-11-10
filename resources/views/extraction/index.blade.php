@@ -306,7 +306,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   document.querySelectorAll('.oev-liste tr[data-href]').forEach(function (ligne) {
     ligne.addEventListener('click', function (e) {
       if (e.target.closest('a')) { return; }

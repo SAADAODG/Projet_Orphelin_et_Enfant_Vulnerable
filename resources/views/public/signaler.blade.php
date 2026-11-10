@@ -208,7 +208,7 @@
 @endsection
 
 @push('scripts')
-<script>
+<script nonce="{{ $cspNonce }}">
   (function () {
     // Affiche le champ « Précisez » quand « Autre » est choisi
     document.querySelectorAll('[data-toggle-precision]').forEach(function (champ) {
