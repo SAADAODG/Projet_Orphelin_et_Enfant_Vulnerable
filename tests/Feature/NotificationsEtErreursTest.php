@@ -119,4 +119,18 @@ class NotificationsEtErreursTest extends TestCase
             ->assertStatus(500)
             ->assertSee('Un problème est survenu');
     }
+
+    public function test_la_maintenance_affiche_la_page_de_maintenance(): void
+    {
+        // Mode maintenance gardé en mémoire : le test ne crée pas storage/framework/down
+        config(['app.debug' => false, 'app.maintenance.driver' => 'cache', 'app.maintenance.store' => 'array']);
+        $this->app->maintenanceMode()->activate([]);
+
+        $this->get(route('public.home'))
+            ->assertStatus(503)
+            ->assertSee('Plateforme en maintenance')
+            ->assertSee('assets/css/style.css', false);
+        $this->actingAs($this->admin)->get(route('dashboard'))->assertStatus(503)->assertSee('Plateforme en maintenance');
+        $this->assertFileDoesNotExist(storage_path('framework/down'));
+    }
 }
