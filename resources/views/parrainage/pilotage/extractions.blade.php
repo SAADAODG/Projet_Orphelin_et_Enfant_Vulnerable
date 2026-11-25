@@ -9,7 +9,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .ext-donnees { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; }
   .ext-donnees fieldset { border: 1px solid var(--admin-border); border-radius: 12px; padding: .75rem .9rem; background: var(--admin-surface-soft); }
   .ext-donnees legend { float: none; width: auto; font-size: .85rem; font-weight: 700; margin: 0 0 .35rem; padding: 0; }

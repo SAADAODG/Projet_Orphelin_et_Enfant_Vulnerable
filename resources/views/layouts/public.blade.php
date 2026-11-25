@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="{{ asset('assets/css/public.css') }}">
   {{-- {!! !!} : la valeur vient de la liste fermée config/fonts.php, jamais d'une saisie libre.
        Doit venir après public.css, qui définit la valeur par défaut de --public-font. --}}
-  <style>:root { --public-font: {!! $siteSetting->police_public_config['family'] !!}; }</style>
+  <style nonce="{{ $cspNonce }}">:root { --public-font: {!! $siteSetting->police_public_config['family'] !!}; }</style>
   @stack('styles')
 </head>
 

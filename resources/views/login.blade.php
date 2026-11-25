@@ -14,7 +14,7 @@
 @endphp
 
 @push('styles')
-<style>
+<style nonce="{{ $cspNonce }}">
   .mdp-champ .btn { border-color: var(--bs-border-color); color: var(--admin-muted, #6b7280); }
   .mdp-champ .btn:hover, .mdp-champ .btn:focus-visible { color: var(--admin-primary, #2563eb); }
 

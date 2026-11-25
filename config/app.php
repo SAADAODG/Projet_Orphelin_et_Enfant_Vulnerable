@@ -129,16 +129,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | CSP des scripts en mode « observation » (voir EnTetesSecurite)
+    | Sécurité derrière le reverse proxy ANPTIC (rapport ANSSI du 17/11/2026)
     |--------------------------------------------------------------------------
     |
-    | false (défaut) : seuls les scripts portant le nonce de la page s'exécutent.
-    | true : l'ancienne règle ('unsafe-inline') reste appliquée et la règle stricte
-    | est seulement observée (Content-Security-Policy-Report-Only) : le navigateur
-    | signale dans sa console ce qu'elle bloquerait, sans rien bloquer.
+    | trusted_hosts : hôtes acceptés EN PLUS de celui d'APP_URL (Vul-002), noms ou
+    | IP séparés par des virgules. Vide = l'hôte d'APP_URL seulement ; tout autre
+    | en-tête Host reçoit une 400.
+    |
+    | entetes_poses_par_le_proxy : le proxy ANPTIC pose déjà X-Frame-Options,
+    | X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP et CORP ;
+    | l'application ne les pose pas derrière lui (sinon en double). Absent ou vide
+    | = vrai dès que TRUSTED_PROXIES est renseigné.
+    |
+    | L'ancien mode « observation » de la CSP (CSP_SCRIPTS_OBSERVATION, qui
+    | rétablissait 'unsafe-inline', Vul-005) est supprimé : la CSP est toujours stricte.
     |
     */
 
-    'csp_scripts_observation' => (bool) env('CSP_SCRIPTS_OBSERVATION', false),
+    'trusted_hosts' => env('TRUSTED_HOSTS', ''),
+
+    'entetes_poses_par_le_proxy' => in_array(env('SECURITY_HEADERS_BY_PROXY'), [null, ''], true)
+        ? (string) env('TRUSTED_PROXIES', '') !== ''
+        : filter_var(env('SECURITY_HEADERS_BY_PROXY'), FILTER_VALIDATE_BOOL),
 
 ];

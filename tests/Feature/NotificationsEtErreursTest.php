@@ -42,7 +42,7 @@ class NotificationsEtErreursTest extends TestCase
     {
         $this->actingAs($this->admin)->withSession(['success' => 'Enregistré.', 'error' => 'Échec.'])
             ->get(route('dashboard'))->assertOk()
-            ->assertSee('assets/vendors/sweetalert2/sweetalert2.all.min.js', false)
+            ->assertSee('assets/vendors/sweetalert2/sweetalert2.min.js', false)
             ->assertSee('assets/js/alertes.js', false)
             // L'erreur est affichée avant le succès
             ->assertSeeInOrder(['"type":"error"', '"type":"success"'], false);

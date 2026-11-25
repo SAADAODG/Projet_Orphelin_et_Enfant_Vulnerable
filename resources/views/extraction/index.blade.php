@@ -8,7 +8,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .ext-groupe { border: 1px solid var(--admin-border); border-radius: 14px; padding: 1rem; background: var(--admin-surface-soft); height: 100%; }
   .ext-groupe-titre { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem; margin-bottom: .75rem; }
   .ext-groupe-titre i { color: var(--admin-primary); }

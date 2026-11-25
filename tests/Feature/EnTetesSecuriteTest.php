@@ -70,16 +70,6 @@ class EnTetesSecuriteTest extends TestCase
         $this->assertSame([], $fautifs, 'Scripts bloqués par la CSP (ajouter nonce="{{ $cspNonce }}" ou passer par addEventListener).');
     }
 
-    public function test_mode_observation_garde_l_ancienne_regle_et_observe_la_nouvelle(): void
-    {
-        config(['app.csp_scripts_observation' => true]);
-
-        $reponse = $this->get(route('login'))->assertOk();
-
-        $this->assertStringContainsString("script-src 'self' 'unsafe-inline'", $reponse->headers->get('Content-Security-Policy'));
-        $this->assertStringContainsString("script-src 'self' 'nonce-", $reponse->headers->get('Content-Security-Policy-Report-Only'));
-    }
-
     public function test_la_csp_est_reservee_aux_pages_html(): void
     {
         $this->getJson('/page-inexistante')
@@ -88,10 +78,11 @@ class EnTetesSecuriteTest extends TestCase
             ->assertHeaderMissing('Content-Security-Policy');
     }
 
-    public function test_hsts_uniquement_en_https(): void
+    /** Rapport ANSSI du 17/11/2026, Vul-004 : HSTS n'est posé que par le proxy ANPTIC. */
+    public function test_jamais_de_hsts_meme_en_https(): void
     {
         $this->get(str_replace('http://', 'https://', route('login')))
             ->assertOk()
-            ->assertHeader('Strict-Transport-Security', 'max-age=31536000');
+            ->assertHeaderMissing('Strict-Transport-Security');
     }
 }

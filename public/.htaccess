@@ -13,10 +13,10 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
-    # Redirect Trailing Slashes If Not A Folder...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
+    # Pas de règle « Redirect Trailing Slashes » (rapport ANSSI du 17/11/2026, Vul-003
+    # « Chaîne de redirection non sécurisée ») : derrière le reverse proxy HTTPS de l'ANPTIC,
+    # Apache ne voit que du HTTP et construisait « Location: http://…/accounts », une étape en
+    # clair. Laravel sert déjà /chemin/ comme /chemin : la redirection est inutile.
 
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
@@ -24,9 +24,19 @@
     RewriteRule ^ index.php [L]
 </IfModule>
 
-# En-têtes de sécurité pour les fichiers servis directement par Apache (CSS, JS, images) ;
-# les pages de l'application les reçoivent du middleware EnTetesSecurite
+# Aucun en-tête de sécurité posé ici : le reverse proxy ANPTIC pose déjà X-Frame-Options,
+# X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP et HSTS sur toutes
+# les réponses (sinon en double). Seule la version de PHP est masquée.
 <IfModule mod_headers.c>
     Header unset X-Powered-By
-    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Rapport ANSSI du 17/11/2026, Vul-001 : erreurs PHP jamais affichées, toujours journalisées.
+# Pris en compte si PHP tourne en module Apache ; en PHP-FPM, c'est public/.user.ini. Le
+# php.ini du serveur doit dire la même chose (display_startup_errors, expose_php).
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+    php_flag html_errors Off
+    php_flag log_errors On
 </IfModule>
