@@ -8,7 +8,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .pai-rib { font-family: var(--bs-font-monospace); font-size: .8rem; }
   .pai-reception { position: sticky; bottom: 0; z-index: 5; border: 1px solid var(--admin-border); border-radius: 12px; background: var(--admin-surface); box-shadow: 0 -4px 16px rgba(0, 0, 0, .06); padding: .6rem 1rem; }
 </style>

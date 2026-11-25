@@ -185,7 +185,7 @@
 
 @push('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-    <style>
+    <style nonce="{{ $cspNonce }}">
         .oev-stepper {
             display: flex;
             list-style: none;

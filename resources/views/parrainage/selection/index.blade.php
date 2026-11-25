@@ -9,7 +9,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .sel-filtres { border: 1px solid var(--admin-border); border-radius: 14px; padding: 1rem; background: var(--admin-surface-soft); }
   .sel-multi-menu { min-width: 100%; max-height: 18rem; overflow-y: auto; }
   .sel-multi-menu--large { min-width: 22rem; max-height: 24rem; }

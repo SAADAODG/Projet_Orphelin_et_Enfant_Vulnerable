@@ -26,6 +26,7 @@ use Spatie\Permission\Events\RoleAttachedEvent;
 use Spatie\Permission\Events\RoleDetachedEvent;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -45,6 +46,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Rapport ANSSI du 17/11/2026, Vul-002 : liens, redirections et courriels construits sur
+        // APP_URL, jamais sur l'en-tête Host de la requête. Pas en local (localhost, 127.0.0.1).
+        // Le schéma reste celui de la requête (X-Forwarded-Proto du proxy de confiance).
+        if (! $this->app->environment('local')) {
+            URL::forceRootUrl(config('app.url'));
+        }
+
         Paginator::useBootstrapFive();
 
         // Dates relatives en français (« il y a 2 heures »)

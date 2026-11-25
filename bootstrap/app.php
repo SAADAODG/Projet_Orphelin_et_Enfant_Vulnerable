@@ -2,6 +2,8 @@
 
 use App\Exceptions\RetourApresErreur;
 use App\Http\Middleware\EnTetesSecurite;
+use App\Http\Middleware\RefuserRequeteTronquee;
+use App\Support\HotesAutorises;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,6 +22,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->append(EnTetesSecurite::class);
+
+        // Rapport ANSSI du 17/11/2026, Vul-001 : requête tronquée par PHP (max_input_vars) refusée.
+        $middleware->prepend(RefuserRequeteTronquee::class);
+
+        // Vul-002 et Vul-003 : derrière le reverse proxy HTTPS de l'ANPTIC, son IP (TRUSTED_PROXIES)
+        // est de confiance pour l'IP du client, le schéma (https) et le port ; JAMAIS pour
+        // X-Forwarded-Host, que le proxy relaie tel que le client l'a envoyé.
+        if ($proxies = env('TRUSTED_PROXIES')) {
+            $middleware->trustProxies(
+                at: $proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)),
+                headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO,
+            );
+        }
+
+        // Vul-002 : en-tête Host hors de la liste (hôte d'APP_URL + TRUSTED_HOSTS) → 400.
+        // Laravel ne l'applique ni en local ni pendant les tests.
+        $middleware->trustHosts(at: fn () => HotesAutorises::motifs(), subdomains: false);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

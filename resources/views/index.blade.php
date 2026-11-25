@@ -30,7 +30,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/barres.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .db-colonnes { display: grid; grid-template-columns: repeat({{ $evolution->count() }}, minmax(2.5rem, 1fr)); gap: 1rem; height: 15rem; align-items: end; padding-top: 1.25rem; }
   .db-mois { height: 100%; display: grid; grid-template-rows: 1fr auto; gap: .5rem; text-align: center; color: var(--admin-muted); font-size: .82rem; font-weight: 700; }
   .db-mois-barres { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }

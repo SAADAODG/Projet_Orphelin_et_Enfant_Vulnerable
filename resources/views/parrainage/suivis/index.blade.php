@@ -10,7 +10,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .suivi-filtres { display: flex; flex-wrap: wrap; gap: .5rem; }
   .suivi-filtres .form-select { width: auto; min-width: 9rem; }
   .suivi-form { background: var(--admin-surface-soft); border: 1px solid var(--admin-border); border-radius: 14px; padding: 1rem 1.1rem; }

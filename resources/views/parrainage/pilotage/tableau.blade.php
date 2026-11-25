@@ -9,7 +9,7 @@
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/oev.css') }}">
 <link rel="stylesheet" href="{{ asset('assets/css/barres.css') }}">
-<style>
+<style nonce="{{ $cspNonce }}">
   .pil-filtres { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
   .pil-filtres .form-select { width: auto; min-width: 9rem; }
   .pil-nd { color: var(--admin-muted); font-size: .95rem; font-weight: 600; }

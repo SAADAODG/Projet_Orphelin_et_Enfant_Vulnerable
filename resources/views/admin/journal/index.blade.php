@@ -5,7 +5,7 @@
 @section('title', 'Journal d’audit | ' . $siteSetting->structure_nom)
 
 @push('styles')
-<style>
+<style nonce="{{ $cspNonce }}">
   .journal-module { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
     background: var(--admin-surface-soft); border: 1px solid var(--admin-border); white-space: nowrap; }
   .journal-module--auth { color: var(--admin-primary); }

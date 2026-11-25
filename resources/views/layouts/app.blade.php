@@ -16,7 +16,7 @@
   @if ($siteSetting->police_admin_config['stylesheet'])
     <link rel="stylesheet" href="{{ asset($siteSetting->police_admin_config['stylesheet']) }}">
   @endif
-  <style>:root { --admin-font: {!! $siteSetting->police_admin_config['family'] !!}; }</style>
+  <style nonce="{{ $cspNonce }}">:root { --admin-font: {!! $siteSetting->police_admin_config['family'] !!}; }</style>
   @stack('styles')
 </head>
 

@@ -20,6 +20,7 @@
     }
   }
 @endphp
-<script src="{{ asset('assets/vendors/sweetalert2/sweetalert2.all.min.js') }}"></script>
+<link rel="stylesheet" href="{{ asset('assets/vendors/sweetalert2/sweetalert2.min.css') }}">
+<script src="{{ asset('assets/vendors/sweetalert2/sweetalert2.min.js') }}"></script>
 <script src="{{ asset('assets/js/alertes.js') }}"></script>
 <script type="application/json" id="alertes-flash">@json($alertesFlash)</script>

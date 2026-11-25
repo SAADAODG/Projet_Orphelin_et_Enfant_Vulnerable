@@ -6,6 +6,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Exception\SuspiciousOperationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
@@ -40,10 +41,15 @@ final class RetourApresErreur
     /**
      * Laissé au traitement standard de Laravel : appels AJAX / JSON, connexion requise et erreurs de formulaire ;
      * erreur serveur en mode debug ou sur une simple page.
+     *
+     * Requête refusée (400) aussi : hôte forgé (rapport ANSSI Vul-002) ou formulaire tronqué par
+     * max_input_vars (Vul-001). Une redirection vers « la page précédente » répondrait 302 à une
+     * requête qui doit être rejetée.
      */
     private static function traitementStandard(Throwable $e, Request $request, int $statut): bool
     {
         return $request->expectsJson() || $e instanceof AuthenticationException || $e instanceof ValidationException
+            || $e instanceof SuspiciousOperationException || $statut === 400
             || ($statut >= 500 && (config('app.debug') || $request->isMethod('GET')));
     }
 
