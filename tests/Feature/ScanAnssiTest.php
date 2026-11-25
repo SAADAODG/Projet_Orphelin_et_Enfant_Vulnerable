@@ -224,6 +224,27 @@ class ScanAnssiTest extends TestCase
         }
     }
 
+    // ── Cookies (pré-scan ANSSI, scan ZAP) ─────────────────────────────────
+
+    public function test_aucun_cookie_lisible_par_javascript(): void
+    {
+        $reponse = $this->get(route('login'))->assertOk();
+
+        $this->assertNull($reponse->getCookie('XSRF-TOKEN', false), 'XSRF-TOKEN n\'est pas HttpOnly');
+        foreach ($reponse->headers->getCookies() as $cookie) {
+            $this->assertTrue($cookie->isHttpOnly(), $cookie->getName().' sans HttpOnly');
+        }
+    }
+
+    public function test_la_protection_csrf_reste_active_sans_le_cookie(): void
+    {
+        $web = $this->app->make(\Illuminate\Contracts\Http\Kernel::class)->getMiddlewareGroups()['web'];
+
+        $this->assertContains(\App\Http\Middleware\JetonCsrfSansCookie::class, $web);
+        $this->assertNotContains(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class, $web);
+        $this->assertTrue(is_subclass_of(\App\Http\Middleware\JetonCsrfSansCookie::class, \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class));
+    }
+
     public function test_vul005_aucune_bibliotheque_n_injecte_de_style_sans_nonce(): void
     {
         $this->assertFileDoesNotExist(public_path('assets/vendors/sweetalert2/sweetalert2.all.min.js'), 'SweetAlert2 « .all » injecte un <style> sans nonce');
